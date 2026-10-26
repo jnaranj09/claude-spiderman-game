@@ -17,6 +17,9 @@ import {
   abs,
   fract,
   max,
+  min,
+  atan,
+  length,
   clamp,
   mix,
   step,
@@ -751,6 +754,17 @@ const qrot = (q, v) => v.add(cross(q.xyz, cross(q.xyz, v).add(v.mul(q.w))).mul(2
  */
 function createPersonMaterial(pose) {
   const mat = new THREE.MeshStandardNodeMaterial({ metalness: 0 });
+  const info = applySkinning(mat, pose);
+  const vInfo = varying(info, 'vPersonInfo');
+  const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
+  const lane = (salt) => fract(sin(vInfo.x.add(salt).mul(12.9898)).mul(43758.5453));
+  const partOf = () => attribute('skin', 'vec4').w;
+  return dressPerson(mat, vInfo, isPart, lane, partOf);
+}
+
+// Vertex stage shared by every outfit: bind-pose morphs, then two-bone skinning from the pose buffer. Returns the
+// person's info vec4 (seed, female, girth, hair)
+function applySkinning(mat, pose) {
   const base = int(instanceIndex).mul(STRIDE);
   const info = pose.element(base.add(STRIDE - 1)); // seed, female, girth, hair
 
@@ -774,12 +788,10 @@ function createPersonMaterial(pose) {
     normalLocal.assign(normalize(mix(qrot(qa, n), qrot(qb, n), w)));
     return mix(qrot(qa, p).mul(ta.w).add(ta.xyz), qrot(qb, p).mul(tb.w).add(tb.xyz), w);
   })();
+  return info;
+}
 
-  const vInfo = varying(info, 'vPersonInfo');
-  const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
-  const lane = (salt) => fract(sin(vInfo.x.add(salt).mul(12.9898)).mul(43758.5453));
-  const partOf = () => attribute('skin', 'vec4').w;
-
+function dressPerson(mat, vInfo, isPart, lane, partOf) {
   mat.colorNode = Fn(() => {
     const partId = partOf();
     const female = vInfo.y;
@@ -888,6 +900,77 @@ function createPersonMaterial(pose) {
   return mat;
 }
 
+/**
+ * Spider-Man's suit on the same body: red with raised black webbing over the head, chest, shoulders, gloves &
+ * boots; blue flanks, upper arms & legs; big white lenses rimmed in black; a black spider on the chest. Painted
+ * from the bind-pose position, so the pattern stays on the body whatever pose the bones take. With a crowd's
+ * `pose` buffer it skins itself like the crowds do; without one it's for an ordinary THREE.SkinnedMesh (which
+ * also draws on the WebGL 2 fallback, where the storage-buffer crowds can't).
+ */
+function createSpiderSuitMaterial(pose = null) {
+  const mat = new THREE.MeshStandardNodeMaterial({ metalness: 0 });
+  if (pose) applySkinning(mat, pose);
+  const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
+  const red = color(0xb0121d);
+  const blue = color(0x1c3a9c);
+  const ink = color(0x1a0406);
+
+  mat.colorNode = Fn(() => {
+    const partId = attribute('skin', 'vec4').w;
+    const along = attribute('extra', 'vec3').z;
+    const q = attribute('position', 'vec3').toVar();
+    const side = step(0.0, q.x).mul(2.0).sub(1.0);
+    const head = max(isPart(partId, PART.HEAD), step(PART.HAIR - 0.5, partId));
+    const arm = max(isPart(partId, PART.ARM), isPart(partId, PART.HAND));
+    const leg = max(isPart(partId, PART.LEG), isPart(partId, PART.SHOE));
+
+    // Red or blue: a red front & back panel that widens from the waist to the shoulders, red head, shoulder caps,
+    // forearms & gloves, boots from just below the knee
+    const panel = step(abs(q.x), float(0.07).add(max(q.y.sub(1.0), 0.0).mul(0.6)));
+    const torsoRed = max(panel, step(1.47, q.y));
+    const armRed = max(max(step(0.5, along), step(1.385, q.y)), isPart(partId, PART.HAND));
+    const legRed = step(q.y, 0.47);
+    const isRed = max(max(head, arm.mul(armRed)), max(leg.mul(legRed), float(1.0).sub(max(arm, leg)).mul(float(1.0).sub(head)).mul(torsoRed)));
+
+    // Webbing over the red: strands running round each limb's (or the body's) axis, scalloped rings between them
+    const axisX = mix(mix(float(0.0), side.mul(HIP_X), leg), side.mul(float(0.2).add(float(1.43).sub(q.y).mul(0.14))), arm);
+    const angle = atan(q.x.sub(axisX), q.z.add(0.01));
+    const strands = smoothstep(0.44, 0.485, abs(fract(angle.mul(mix(float(14 / 6.2832), float(7 / 6.2832), max(arm, leg)))).sub(0.5)));
+    const rings = smoothstep(0.43, 0.48, abs(fract(q.y.mul(16.0).add(abs(sin(angle.mul(7.0))).mul(0.35))).sub(0.5)));
+    const webbing = max(strands, rings).mul(isRed);
+
+    // Lenses: big tilted teardrops, white with a thick black rim
+    const front = smoothstep(0.035, 0.07, q.z).mul(head);
+    const ex = abs(q.x).sub(0.037);
+    const ey = q.y.sub(1.634);
+    const eu = ex.mul(0.9).add(ey.mul(0.44));
+    const ev = ey.mul(0.9).sub(ex.mul(0.44));
+    const e = eu.div(0.029).mul(eu.div(0.029)).add(ev.div(0.017).mul(ev.div(0.017)));
+    const lens = smoothstep(1.0, 0.8, e).mul(front);
+    const rim = smoothstep(1.9, 1.6, e).mul(front);
+
+    // Chest spider: an oval body, a small head and four legs a side
+    const torsoFront = step(0.03, q.z).mul(float(1.0).sub(max(max(arm, leg), head)));
+    const u = abs(q.x);
+    const w = q.y.sub(1.3);
+    const bodyOval = step(length(vec2(u.div(0.017), w.div(0.042))), 1.0);
+    const headDot = step(length(vec2(u, w.sub(0.05))), 0.013);
+    const legBand = (slope, off) => smoothstep(0.0045, 0.002, abs(w.sub(u.mul(slope)).sub(off)));
+    const legs = max(max(legBand(0.75, 0.012), legBand(0.2, 0.004)), max(legBand(-0.25, -0.004), legBand(-0.8, -0.014)))
+      .mul(step(0.012, u)).mul(step(u, 0.07));
+    const emblem = max(max(bodyOval, headDot), legs).mul(torsoFront);
+
+    const sole = isPart(partId, PART.SHOE).mul(smoothstep(0.024, 0.016, q.y));
+    const suit = mix(blue.mul(float(1.0).sub(smoothstep(0.43, 0.48, abs(fract(q.y.mul(16.0)).sub(0.5))).mul(0.18))),
+      mix(red, ink, webbing.mul(0.85)), isRed);
+    const dark = max(max(emblem, rim), sole);
+    return mix(mix(suit, color(0x0a0a0c), dark), color(0xf2f4f8), lens);
+  })();
+
+  mat.roughnessNode = Fn(() => float(0.5))();
+  return mat;
+}
+
 // ============================================================================
 // 4. CROWD: ONE INSTANCED, SKINNED DRAW PER LEVEL OF DETAIL
 // ============================================================================
@@ -896,11 +979,11 @@ class PersonCrowd {
    * @param {number} maxCount - most people drawn at once
    * @param {{ farDistance?: number, castShadow?: boolean }} options - beyond farDistance (m) people use the far LOD
    */
-  constructor(maxCount, { farDistance = 34, castShadow = true } = {}) {
+  constructor(maxCount, { farDistance = 34, castShadow = true, createMaterial = createPersonMaterial } = {}) {
     this.farDistance = farDistance;
     this.lods = [1, 0].map((detail) => {
       const pose = attributeArray(maxCount * STRIDE, 'vec4').toReadOnly();
-      const mesh = new THREE.Mesh(buildPersonGeometry(detail), createPersonMaterial(pose));
+      const mesh = new THREE.Mesh(buildPersonGeometry(detail), createMaterial(pose));
       mesh.name = detail ? 'PeopleNear' : 'PeopleFar';
       mesh.count = 1; // one (degenerate) person until the first frame, so the pipelines compile up front
       mesh.frustumCulled = false;
@@ -1002,6 +1085,7 @@ const _by = new THREE.Vector3();
 const _bz = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _rootPos = new THREE.Vector3();
+const _euler = new THREE.Euler();
 const AX = new THREE.Vector3(1, 0, 0);
 const AY = new THREE.Vector3(0, 1, 0);
 const AZ = new THREE.Vector3(0, 0, 1);
@@ -1535,6 +1619,57 @@ class PersonRig {
   }
 
   /**
+   * Poses the body by forward kinematics, for animation that isn't walking (Spider-Man): `root` is the pelvis's
+   * world rotation, `pelvis` its world position, and `j` joint rotations as {x, y, z} Euler angles (radians, XYZ
+   * order) in their parent's frame, from a T-less rest pose with the arms and legs hanging straight down:
+   * spine, neck, shL/shR, elL/elR (x only), hipL/hipR, knL/knR (x only), ftL/ftR (x only). The figure faces +Z with
+   * its left on +X: negative x swings a limb forward, positive z raises the left arm (negative the right). Returns
+   * the hand positions in `hands` ([left, right] Vector3s) when given.
+   */
+  poseFK(root, pelvis, j, hands = null) {
+    const s = this.s;
+    const b = this.bind;
+    const euler = (out, e) => out.setFromEuler(_euler.set(e.x, e.y, e.z));
+    this.writeBone(BONE.PELVIS, root, pelvis);
+    this.pelvisY = pelvis.y;
+    _qChest.copy(root).multiply(euler(_q, j.spine));
+    _chest.copy(b[BONE.CHEST]).sub(b[BONE.PELVIS]).multiplyScalar(s).applyQuaternion(root).add(pelvis);
+    this.writeBone(BONE.CHEST, _qChest, _chest);
+    _qa.copy(_qChest).multiply(euler(_q, j.neck));
+    _v.copy(b[BONE.HEAD]).sub(b[BONE.CHEST]).multiplyScalar(s).applyQuaternion(_qChest).add(_chest);
+    this.writeBone(BONE.HEAD, _qa, _v);
+    const arms = [[j.shL, j.elL], [j.shR, j.elR]];
+    const legs = [[j.hipL, j.knL, j.ftL], [j.hipR, j.knR, j.ftR]];
+    for (let i = 0; i < 2; i++) {
+      const side = SIDES[i];
+      const [sh, el] = arms[i];
+      // The arm's own frame (hanging straight down), then the bind pose's small abduction undone for the bones
+      const qArm = _qUpper.copy(_qChest).multiply(euler(_q, sh));
+      _shoulder.copy(b[LIMB.upperArm[i]]).sub(b[BONE.CHEST]).multiplyScalar(s).applyQuaternion(_qChest).add(_chest);
+      _q2.copy(qArm).multiply(qZ(_q, -side * ARM_BIND_ABDUCTION));
+      this.writeBone(LIMB.upperArm[i], _q2, _shoulder);
+      _knee.set(0, -UPPER_ARM * s, 0).applyQuaternion(qArm).add(_shoulder);
+      qArm.multiply(qX(_q, el.x));
+      _q2.copy(qArm).multiply(qZ(_q, -side * ARM_BIND_ABDUCTION));
+      this.writeBone(LIMB.forearm[i], _q2, _knee);
+      if (hands) hands[i].set(0, -(FOREARM + 0.075) * s, 0).applyQuaternion(qArm).add(_knee);
+
+      const [hip, kn, ft] = legs[i];
+      _hip.copy(b[LIMB.thigh[i]]).sub(b[BONE.PELVIS]).multiplyScalar(s).applyQuaternion(root).add(pelvis);
+      const qLeg = _qa.copy(root).multiply(euler(_q, hip));
+      this.writeBone(LIMB.thigh[i], qLeg, _hip);
+      _knee.copy(b[LIMB.shin[i]]).sub(b[LIMB.thigh[i]]).multiplyScalar(s).applyQuaternion(qLeg).add(_hip);
+      qLeg.multiply(qX(_q, kn.x));
+      this.writeBone(LIMB.shin[i], qLeg, _knee);
+      _ankle.copy(b[LIMB.foot[i]]).sub(b[LIMB.shin[i]]).multiplyScalar(s).applyQuaternion(qLeg).add(_knee);
+      qLeg.multiply(qX(_q, ft ? ft.x : 0));
+      this.writeBone(LIMB.foot[i], qLeg, _ankle);
+      _v.copy(b[LIMB.toe[i]]).sub(b[LIMB.foot[i]]).multiplyScalar(s).applyQuaternion(qLeg).add(_ankle);
+      this.writeBone(LIMB.toe[i], qLeg, _v);
+    }
+  }
+
+  /**
    * Riding a bicycle: `root` (Object3D) is the bike frame (pose in its parent's space, e.g. the scene), `crank` the
    * pedal crank angle. Seat, bars and bottom bracket in the frame's space (metres, +Z forward).
    */
@@ -1608,4 +1743,4 @@ class PersonRig {
   }
 }
 
-export { BONE as PERSON_BONES, buildPersonGeometry, createPersonMaterial, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+export { BONE as PERSON_BONES, buildPersonGeometry, createPersonMaterial, createSpiderSuitMaterial, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };

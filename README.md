@@ -12,12 +12,20 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | | Touch | Keyboard | Gamepad |
 |---|---|---|---|
 | Swing (hold) / let go (release) | big red **WEB** button | Space | A or RT |
+| Zip forward (quick tap) | tap **WEB** | tap Space | tap A |
 | Steer, pump the swing, run | left stick | W A S D / arrows | left stick |
 | Look around | drag the screen | drag | right stick |
 
 Hold **WEB** and Spider-Man jumps, fires a web at the nearest building and keeps chaining swings on his own. Steer
-with the stick. Let go to fly, and press again to catch the next building. If you fly into a wall he sticks to it:
-let go to climb, and he vaults onto the roof at the top. Hold WEB on a wall to kick off it and swing on.
+with the stick. Let go to fly, and press again to catch the next building. **Tap** WEB to zip a web straight
+ahead and yank yourself forward. It works even with no buildings around, so a few taps carry you across a park
+with your momentum.
+
+Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding WEB kicks
+off and swings on; running up to the top launches him over the roof. Touching a wall slowly makes him **cling**.
+Then the stick crawls him: up climbs head-first with long alternating reaches, down goes head-first down the
+wall, slower and splayed, and the sides crawl sideways. Let go of the stick and he holds still. Climbing to the
+top vaults onto the roof, crawling down to the street stands him up, and pressing WEB kicks off.
 
 The other vehicles (taxi, bike, helicopter) are still in the mode bar, and the time-of-day, teleport and map
 controls work as in the original.
@@ -49,8 +57,13 @@ there's still speed to carry), adds a small forward and upward fling, and fires 
 fades out above ~55 m so chains stay among the buildings instead of climbing over them. With no steering input,
 momentum within 25° of an avenue eases onto it (the city's axes follow Manhattan's grid).
 
-There's also wall clinging and climbing, rooftop landings, release flips, a camera that won't pass through
-buildings, a speed-based field-of-view kick, and a synthesized *thwip*.
+**5. The body is the city's pedestrian, in a suit.** Spider-Man is the same skinned, lofted person the sidewalks
+are full of (`js/pedestrians.js`). He wears a costume shader painted from the bind-pose position: red and blue
+panels, raised webbing, lenses and a chest spider. His 15 bones are posed by forward kinematics from joint
+angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
+
+There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
+through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.
 
 Add `?debug` to the URL to expose the simulation as `window.spiderDebug` (the play tests use it).
 
@@ -61,7 +74,8 @@ node --test tests/*.cjs tests/*.mjs
 ```
 
 `tests/spiderman.test.cjs` covers the ray casts, anchor choice, the rope constraint, chained swinging down a
-synthetic avenue, landing, wall climbing, rooftop spawning and camera clipping.
+synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, rooftop spawning and camera
+clipping.
 
 ## Credits and license
 

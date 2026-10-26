@@ -1,8 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial } from './pedestrians.js';
 
 // js/spiderman.js
-// Spider-Man: a procedurally sculpted, articulated hero and an arcade web-swinging controller.
+// Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
+// arcade web-swinging controller.
 //
 // The swing is a real pendulum (gravity + an inextensible rope, solved as a distance constraint), with two
 // tricks layered on top to keep it readable and easy to play:
@@ -12,6 +14,8 @@ import { ISLAND_BOUNDS, streetZ } from './city-config.js';
 //     street instead of slamming sideways into the wall the web hit.
 //  2. Holding the web button chains swings: each swing lets go on its own on the way up and fires the next web,
 //     so one thumb is enough to cross Midtown. The stick (or W/A/S/D) only steers and pumps.
+// A quick tap of the button zips a web straight ahead and yanks him forward (it works over open ground too); flying
+// into a wall at speed runs along it (or up it) instead of stopping dead, and a slow touch sticks to it to crawl.
 
 const GRAVITY = 22;              // m/s². Stronger than real gravity: a 40 m swing takes ~3 s instead of ~6 s
 const MAX_SPEED = 48;            // m/s
@@ -23,7 +27,14 @@ const WEB_RANGE = 115;           // m
 const PIVOT_PULL = 0.95;         // share of the anchor's sideways offset the pendulum pivot moves back over the path
 const RELEASE_BOOST_UP = 5.5;
 const RELEASE_BOOST_FWD = 5.0;
-const WALL_CLIMB_SPEED = 10;
+const CRAWL_UP_SPEED = 4.2;      // m/s on a wall, only while the stick is held
+const CRAWL_DOWN_SPEED = 3.2;
+const CRAWL_SIDE_SPEED = 3.6;
+const WALL_RUN_MIN_SPEED = 9;    // hitting a wall faster than this runs along / up it
+const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
+const ZIP_PUSH = 10;             // m/s forward per zip
+const ZIP_MAX_SPEED = 38;
+const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -31,36 +42,6 @@ const UP = new THREE.Vector3(0, 1, 0);
 // ---------------------------------------------------------------------------------------------------------------
 // Textures
 // ---------------------------------------------------------------------------------------------------------------
-
-// The suit's red panels: raised black webbing over the red
-function createSuitWebTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#c3141e';
-  ctx.fillRect(0, 0, 256, 256);
-  ctx.strokeStyle = 'rgba(28, 4, 6, 0.85)';
-  ctx.lineWidth = 2.2;
-  for (let i = 0; i <= 256; i += 32) {
-    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke();
-  }
-  ctx.lineWidth = 1.6;
-  for (let j = 0; j <= 256; j += 24) {
-    ctx.beginPath();
-    for (let i = 0; i <= 256; i += 32) {
-      // little sagging arcs between the vertical strands, like the webbing on the suit
-      ctx.moveTo(i, j);
-      ctx.quadraticCurveTo(i + 16, j + 6, i + 32, j);
-    }
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(2, 2);
-  tex.anisotropy = 4;
-  return tex;
-}
 
 // A web splat: radial strands and rings, stuck on the wall where a web lands
 function createWebSplatTexture() {
@@ -98,120 +79,66 @@ function createWebSplatTexture() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Model: a jointed figure (hips -> spine -> head / shoulders -> elbows -> hands, hips -> knees -> feet), facing +Z
+// Model: the city's pedestrian body (pedestrians.js) wearing the suit, as an ordinary skinned mesh whose 15 bones
+// take the world-space transforms PersonRig.poseFK works out
 // ---------------------------------------------------------------------------------------------------------------
 
-function buildSpiderManModel() {
-  const red = new THREE.MeshStandardNodeMaterial({ color: 0xffffff, map: createSuitWebTexture(), roughness: 0.5, metalness: 0.0 });
-  const blue = new THREE.MeshStandardNodeMaterial({ color: 0x1a2f86, roughness: 0.42, metalness: 0.05 });
-  const black = new THREE.MeshStandardNodeMaterial({ color: 0x0b0b0e, roughness: 0.35 });
-  const lens = new THREE.MeshStandardNodeMaterial({ color: 0xf4f6ff, roughness: 0.15, emissive: 0x9aa6c4, emissiveIntensity: 0.25 });
+const JOINTS = ['spine', 'neck', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'ftL', 'hipR', 'knR', 'ftR'];
+const BONES = 15;
 
-  const capsule = (r, len, mat) => new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 12), mat);
-  const sphere = (r, mat) => new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
-  const at = (mesh, x, y, z) => { mesh.position.set(x, y, z); return mesh; };
+function buildSpiderManModel(scene) {
+  // The person geometry carries its two-bone skinning in a 'skin' attribute (bone a, bone b, weight of b, part):
+  // spelled out as standard skin indices & weights
+  const geometry = buildPersonGeometry(1).clone();
+  const skin = geometry.getAttribute('skin');
+  const indices = new Uint16Array(skin.count * 4);
+  const weights = new Float32Array(skin.count * 4);
+  for (let i = 0; i < skin.count; i++) {
+    indices[i * 4] = skin.getX(i);
+    indices[i * 4 + 1] = skin.getY(i);
+    weights[i * 4] = 1 - skin.getZ(i);
+    weights[i * 4 + 1] = skin.getZ(i);
+  }
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(indices, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
 
+  const mesh = new THREE.SkinnedMesh(geometry, createSpiderSuitMaterial());
+  mesh.name = 'SpiderMan';
+  // Bones outside the scene graph, with identity bind inverses: each one's matrixWorld is simply its pose
+  const bones = Array.from({ length: BONES }, () => {
+    const bone = new THREE.Bone();
+    bone.matrixAutoUpdate = false;
+    bone.matrixWorldAutoUpdate = false;
+    return bone;
+  });
+  mesh.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
+  mesh.frustumCulled = false; // it moves far from its bind-pose bounds
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  // An athletic build; no hair under the mask
+  const rig = new PersonRig({ seed: 1, scale: 1.0, girth: 1.0, hair: 0 });
+  // The entity's mesh: an empty anchor the controller manager moves around (the body is skinned in world space)
   const root = new THREE.Group();
   root.name = 'PlayerSpiderMan';
-  const body = new THREE.Group(); // pivots at the hips; the swing tilts the whole figure about it
-  body.position.y = 1.02;
-  root.add(body);
+  return { root, mesh, bones, rig, hands: [new THREE.Vector3(), new THREE.Vector3()] };
+}
 
-  // Pelvis & belt
-  const pelvis = at(capsule(0.13, 0.1, blue), 0, 0, 0);
-  pelvis.rotation.z = Math.PI / 2;
-  pelvis.scale.set(1, 1.3, 0.9);
-  body.add(pelvis);
+const _boneQ = new THREE.Quaternion();
+const _boneT = new THREE.Vector3();
+const _boneS = new THREE.Vector3();
 
-  const spine = new THREE.Group();
-  spine.position.y = 0.08;
-  body.add(spine);
-  const chest = at(capsule(0.15, 0.28, red), 0, 0.25, 0);
-  chest.scale.set(1.3, 1, 0.82);
-  spine.add(chest);
-  // Blue flanks under the arms
-  for (const s of [-1, 1]) {
-    const flank = at(capsule(0.06, 0.24, blue), s * 0.15, 0.2, 0);
-    flank.scale.set(1, 1, 1.6);
-    spine.add(flank);
+// Copies the rig's pose (per bone: rotation, translation, scale) into the skeleton
+function applyRigToBones(model) {
+  const a = model.rig.pose;
+  for (let b = 0; b < BONES; b++) {
+    const o = b * 8;
+    _boneQ.set(a[o], a[o + 1], a[o + 2], a[o + 3]);
+    _boneT.set(a[o + 4], a[o + 5], a[o + 6]);
+    _boneS.setScalar(a[o + 7]);
+    model.bones[b].matrixWorld.compose(_boneT, _boneQ, _boneS);
   }
-  // Chest spider emblem
-  const emblem = at(sphere(0.035, black), 0, 0.32, 0.118);
-  emblem.scale.set(0.8, 1.5, 0.35);
-  spine.add(emblem);
-  for (let i = 0; i < 4; i++) {
-    for (const s of [-1, 1]) {
-      const leg = at(new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.008, 0.008), black), s * 0.04, 0.35 - i * 0.022, 0.118);
-      leg.rotation.z = s * (0.7 - i * 0.45);
-      spine.add(leg);
-    }
-  }
-
-  // Head with the big white lenses
-  const neck = new THREE.Group();
-  neck.position.y = 0.55;
-  spine.add(neck);
-  const head = at(sphere(0.115, red), 0, 0.12, 0);
-  head.scale.set(0.95, 1.18, 1.0);
-  neck.add(head);
-  for (const s of [-1, 1]) {
-    const rim = at(sphere(0.04, black), s * 0.047, 0.135, 0.092);
-    rim.scale.set(1.15, 0.82, 0.45);
-    rim.rotation.z = s * 0.55;
-    neck.add(rim);
-    const eye = at(sphere(0.034, lens), s * 0.047, 0.135, 0.1);
-    eye.scale.set(1.1, 0.75, 0.4);
-    eye.rotation.z = s * 0.55;
-    neck.add(eye);
-  }
-
-  // Arms: shoulder (x, y, z) -> elbow (x) -> hand
-  const arm = (side) => {
-    const shoulder = new THREE.Group();
-    shoulder.position.set(side * 0.215, 0.44, 0);
-    spine.add(shoulder);
-    shoulder.add(at(sphere(0.07, red), 0, 0, 0));
-    shoulder.add(at(capsule(0.055, 0.2, blue), 0, -0.15, 0));
-    const elbow = new THREE.Group();
-    elbow.position.y = -0.3;
-    shoulder.add(elbow);
-    elbow.add(at(capsule(0.047, 0.2, red), 0, -0.13, 0));
-    const hand = new THREE.Group();
-    hand.position.y = -0.29;
-    elbow.add(hand);
-    hand.add(at(sphere(0.055, red), 0, 0, 0));
-    return { shoulder, elbow, hand };
-  };
-  // Legs: hip (x, z) -> knee (x) -> foot
-  const leg = (side) => {
-    const hip = new THREE.Group();
-    hip.position.set(side * 0.1, -0.04, 0);
-    body.add(hip);
-    hip.add(at(capsule(0.078, 0.3, blue), 0, -0.22, 0));
-    const knee = new THREE.Group();
-    knee.position.y = -0.45;
-    hip.add(knee);
-    knee.add(at(capsule(0.06, 0.32, red), 0, -0.22, 0));
-    const foot = at(capsule(0.05, 0.12, red), 0, -0.47, 0.05);
-    foot.rotation.x = Math.PI / 2;
-    knee.add(foot);
-    return { hip, knee };
-  };
-
-  const left = arm(1), right = arm(-1); // the figure's left is +X (it faces +Z)
-  const legL = leg(1), legR = leg(-1);
-
-  return {
-    root,
-    body,
-    joints: {
-      spine, neck,
-      shL: left.shoulder, elL: left.elbow, handL: left.hand,
-      shR: right.shoulder, elR: right.elbow, handR: right.hand,
-      hipL: legL.hip, knL: legL.knee,
-      hipR: legR.hip, knR: legR.knee
-    }
-  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -400,26 +327,19 @@ function clipCameraToBuildings(controllers, target, camera) {
 // Entity
 // ---------------------------------------------------------------------------------------------------------------
 
-function createSpiderManEntity(scene) {
-  const model = buildSpiderManModel();
-  scene.add(model.root);
-  const webs = buildWebs(scene);
-  const joints = {};
-  for (const name of Object.keys(model.joints)) joints[name] = { x: 0, y: 0, z: 0 };
-
+// Everything the controller simulates (no meshes): also what the unit tests drive
+function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
+  const pose = {};
+  for (const name of JOINTS) pose[name] = { x: 0, y: 0, z: 0 };
   return {
     type: 'spider',
     label: 'Spider-Man',
-    mesh: model.root,
-    model,
-    webs,
-    pose: joints,
-    // Starts on 5th Ave at 37th St, looking south down the avenue to the Empire State Building
-    position: new THREE.Vector3(-11.6, ISLAND_BOUNDS.sidewalkHeight, streetZ(37) + 12),
+    pose,
+    position: new THREE.Vector3(x, y, z),
     velocity: new THREE.Vector3(),
-    heading: 0,
+    heading,
     speed: 0,
-    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall'
+    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun'
     web: {
       phase: 'none', // 'none' | 'shooting' | 'attached' | 'miss'
       anchor: new THREE.Vector3(),
@@ -438,17 +358,26 @@ function createSpiderManEntity(scene) {
       dirX: 0,
       dirZ: 1
     },
+    // The quick forward web of a tap (drawn for a moment, while it yanks)
+    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0 },
     nextSide: 1,
     webHeld: false,
+    pressTime: 0,
     webCooldown: 0,
     webRetry: 0,
     groundTime: 0,
-    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0 },
+    // Wall contact: outward normal, how high it goes, time on it, the direction of travel when it was hit, the
+    // crawl direction in the wall's plane (the body's up while crawling) and how fast the stick is moving him
+    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0 },
+    // Running along / up a wall: direction (in the wall's plane) and speed
+    wallRun: { dx: 0, dy: 1, dz: 0, speed: 0 },
     flip: 1,
+    roll: 1,
     crouch: 0,
     runPhase: 0,
     climbPhase: 0,
     bodyQuat: new THREE.Quaternion(),
+    pelvisOffset: new THREE.Vector3(0, PELVIS_HEIGHT, 0),
     onWebShot: null,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
     chaseDistance: 4.6,
@@ -456,16 +385,28 @@ function createSpiderManEntity(scene) {
   };
 }
 
+function createSpiderManEntity(scene) {
+  const model = buildSpiderManModel(scene);
+  scene.add(model.root);
+  // Starts on 5th Ave at 37th St, looking south down the avenue to the Empire State Building
+  const ent = createSpiderManState(-11.6, ISLAND_BOUNDS.sidewalkHeight, streetZ(37) + 12, 0);
+  ent.mesh = model.root;
+  ent.model = model;
+  ent.webs = buildWebs(scene);
+  return ent;
+}
+
 function resetSpiderMan(ent) {
   ent.velocity.set(0, 0, 0);
   ent.speed = 0;
   ent.state = 'ground';
   ent.web.phase = 'none';
+  ent.zip.time = -1;
   releaseSplat(ent);
   ent.webCooldown = 0;
   ent.crouch = 0;
-  ent.flip = 1;
-  ent.bodyQuat.setFromAxisAngle(UP, 0);
+  ent.flip = ent.roll = 1;
+  ent.bodyQuat.setFromAxisAngle(UP, ent.heading);
 }
 
 // Puts Spider-Man on the nearest rooftop of a mid-rise (12-60 m) within ~30 m of where he stands: every swing
@@ -561,15 +502,7 @@ function attachWeb(controllers, ent) {
   web.phase = 'attached';
   ent.state = 'swing';
   // The splat stays on the wall while the web holds, then fades
-  const splat = ent.webs.splats[ent.webs.next];
-  ent.webs.next = (ent.webs.next + 1) % SPLATS;
-  splat.held = true;
-  splat.life = 1;
-  splat.mesh.position.copy(web.anchor).addScaledVector(web.normal, 0.06);
-  splat.mesh.quaternion.setFromUnitVectors(_offset.set(0, 0, 1), web.normal);
-  splat.mesh.rotateZ(Math.random() * Math.PI * 2);
-  splat.mesh.scale.setScalar(0.8 + Math.random() * 0.5);
-  web.splat = splat;
+  web.splat = ent.webs ? stickSplat(ent, web.anchor, web.normal, true) : null;
 }
 
 function releaseWeb(controllers, ent, boost) {
@@ -621,22 +554,108 @@ function alignToGrid(ent, dt) {
   steerVelocity(ent, Math.sign(diff) * Math.min(Math.abs(diff) / (AIR_TURN_RATE * dt), 0.35), dt);
 }
 
+// A web splat stuck flat on a surface; `held` ones stay until let go, the rest fade over a few seconds
+function stickSplat(ent, position, normal, held) {
+  const splat = ent.webs.splats[ent.webs.next];
+  ent.webs.next = (ent.webs.next + 1) % SPLATS;
+  splat.held = held;
+  splat.life = 1;
+  splat.mesh.position.copy(position).addScaledVector(normal, 0.06);
+  splat.mesh.quaternion.setFromUnitVectors(_offset.set(0, 0, 1), normal);
+  splat.mesh.rotateZ(Math.random() * Math.PI * 2);
+  splat.mesh.scale.setScalar(0.8 + Math.random() * 0.5);
+  return splat;
+}
+
+// A tap: a web shot straight ahead that yanks him on. It sticks to whatever building is in the way, and snaps taut
+// in thin air when there's none, so a few taps carry him across a park or a wide avenue without losing momentum.
+function webZip(controllers, ent) {
+  const p = ent.position;
+  const v = ent.velocity;
+  const zip = ent.zip;
+  const dir = travelDirection(ent);
+  const cy = p.y + 1.3;
+  _dir.set(dir.x, 0.3, dir.z).normalize();
+  let t = 42, hit = false;
+  for (const c of controllers.nearColliders(p.x + dir.x * 21, p.z + dir.z * 21, 24)) {
+    if (rayBox(c, p.x, cy, p.z, _dir.x, _dir.y, _dir.z, t, _hit)) {
+      t = _hit.t;
+      hit = true;
+      _seg.set(_hit.nx, _hit.ny, _hit.nz);
+    }
+  }
+  zip.anchor.set(p.x + _dir.x * t, cy + _dir.y * t, p.z + _dir.z * t);
+  if (hit && ent.webs) stickSplat(ent, zip.anchor, _seg, false);
+  zip.time = 0;
+  zip.side = ent.nextSide;
+  ent.nextSide = -zip.side;
+  zip.cooldown = 0.28;
+  // Forward speed gets a push (never a cut), and a little lift: rapid taps glide down slowly rather than climb
+  const hs = Math.hypot(v.x, v.z);
+  const forward = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
+  v.set(dir.x * forward, Math.max(v.y, 0) * 0.4 + 4.5, dir.z * forward);
+  ent.state = 'air';
+  ent.roll = 0;
+  ent.flip = 1;
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(t);
+}
+
+// Starts running along (or up) a wall at `speed`, in direction (dx, dy, dz) within its plane
+function startWallRun(ent, dx, dy, dz, speed) {
+  const r = ent.wallRun;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  r.dx = dx / len; r.dy = dy / len; r.dz = dz / len;
+  r.speed = speed;
+  ent.state = 'wallrun';
+  ent.velocity.set(r.dx * speed, r.dy * speed, r.dz * speed);
+}
+
+// Clings to the wall, ready to crawl, head up (or `angle` round from up towards the figure's left)
+function startCrawl(ent, angle = 0) {
+  ent.state = 'wall';
+  ent.wall.angle = angle;
+  ent.wall.move = 0;
+  ent.velocity.set(0, 0, 0);
+}
+
+// Kicks off the wall the way he was travelling along it (or straight out after a head-on hit), with `carry` m/s
+// of momentum along the wall on top
+function kickOffWall(ent, carry) {
+  const w = ent.wall;
+  const along = w.tx * -w.nz + w.tz * w.nx;
+  const tx = Math.abs(along) > 0.25 ? -w.nz * Math.sign(along) : 0;
+  const tz = Math.abs(along) > 0.25 ? w.nx * Math.sign(along) : 0;
+  const v = ent.velocity;
+  v.set(w.nx * 7 + tx * Math.max(14, carry), 9, w.nz * 7 + tz * Math.max(14, carry));
+  ent.heading = Math.atan2(v.x, v.z);
+  ent.state = 'air';
+  ent.webCooldown = 0.12;
+}
+
 function updateSpiderMan(controllers, ent, dt) {
   if (dt <= 0) return;
   const keys = controllers.keys;
   const p = ent.position;
   const v = ent.velocity;
   const web = ent.web;
+  const zip = ent.zip;
   const fwdIn = +keys.forward || 0;
   const backIn = +keys.backward || 0;
   const turn = (+keys.left || 0) - (+keys.right || 0);
   const held = Boolean(keys.up);
   const pressed = held && !ent.webHeld;
+  const released = !held && ent.webHeld;
+  const tap = released && ent.pressTime < TAP_TIME;
+  if (pressed) ent.pressTime = 0;
+  else if (held) ent.pressTime += dt;
   ent.webHeld = held;
   ent.webCooldown = Math.max(0, ent.webCooldown - dt);
   ent.webRetry = Math.max(0, ent.webRetry - dt);
+  zip.cooldown = Math.max(0, zip.cooldown - dt);
+  if (zip.time >= 0) zip.time = zip.time + dt > 0.35 ? -1 : zip.time + dt;
   ent.crouch = Math.max(0, ent.crouch - dt * 3);
   if (ent.flip < 1) ent.flip = Math.min(1, ent.flip + dt / 0.7);
+  if (ent.roll < 1) ent.roll = Math.min(1, ent.roll + dt / 0.55);
 
   // --- Web lifecycle -----------------------------------------------------------------------------------------
   if (web.phase === 'shooting' || web.phase === 'miss') {
@@ -647,13 +666,19 @@ function updateSpiderMan(controllers, ent, dt) {
       else web.phase = 'none';
     }
   }
-  if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2);
+  if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2 && !tap);
+
+  // A tap in the air zips forward instead
+  if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0) {
+    web.phase = 'none';
+    webZip(controllers, ent);
+  }
 
   if (ent.state === 'ground') {
     ent.groundTime += dt;
     // Holding the button through a landing launches straight into the next swing
     if (pressed || (held && ent.groundTime > 0.25)) {
-      // Jump, and fire a web on the way up if the button stays down
+      // Jump, and fire a web on the way up if the button stays down (a tap leaps on into a zip)
       v.y = 12.5;
       const dir = { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
       const hs = Math.hypot(v.x, v.z);
@@ -665,7 +690,9 @@ function updateSpiderMan(controllers, ent, dt) {
   } else {
     ent.groundTime = 0;
   }
-  if (ent.state === 'air' && held && web.phase === 'none' && ent.webCooldown <= 0 && ent.webRetry <= 0) {
+  // In the air a held button fires the swing web (after a moment, so that a tap stays a zip)
+  if (ent.state === 'air' && held && ent.pressTime >= 0.08 && web.phase === 'none' && ent.webCooldown <= 0
+    && ent.webRetry <= 0) {
     shootWeb(controllers, ent);
   }
 
@@ -757,34 +784,40 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.crouch = Math.min(1, -v.y / 22);
         ent.state = 'ground';
         v.y = 0;
-        ent.flip = 1;
+        ent.flip = ent.roll = 1;
       }
     }
   } else if (ent.state === 'wall') {
-    // Clinging to a facade: climb up on its own (the stick slides you sideways, back drops you off)
+    // Crawling: only while the stick is held (up climbs head first, down goes down head first, the sides go
+    // sideways); let go of the stick and he holds still
     const w = ent.wall;
-    const sideX = -w.nz, sideZ = w.nx; // along the wall, to the figure's right... sign doesn't matter for the stick
-    const climb = backIn > 0.3 ? -4 : WALL_CLIMB_SPEED * (0.6 + 0.4 * fwdIn);
-    v.set(sideX * -turn * 5, climb, sideZ * -turn * 5);
-    p.addScaledVector(v, dt);
-    ent.climbPhase += dt * Math.abs(climb) * 1.6;
-    ent.heading = Math.atan2(-w.nx, -w.nz);
     w.time += dt;
-    if (pressed || (held && w.time > 0.35)) {
-      // Kick off the wall and web on: carried on along the street the way you were going, or back out if you
-      // hit it head on
-      const along = w.tx * -w.nz + w.tz * w.nx;
-      const tx = Math.abs(along) > 0.25 ? -w.nz * Math.sign(along) : 0;
-      const tz = Math.abs(along) > 0.25 ? w.nx * Math.sign(along) : 0;
-      v.set(w.nx * 7 + tx * 14, 10, w.nz * 7 + tz * 14);
-      ent.heading = Math.atan2(v.x, v.z);
-      ent.state = 'air';
-      ent.webCooldown = 0.15;
-    } else if (backIn > 0.6 && p.y < _before.y) {
-      const ground = groundAt(controllers, p.x, p.z, p.y);
-      if (p.y <= ground + 0.05) { p.y = ground; ent.state = 'ground'; }
+    const lx = -w.nz, lz = w.nx; // the figure's left as he faces the wall
+    const vert = fwdIn - backIn;
+    if (Math.hypot(vert, turn) > 0.12) {
+      const vy = vert * (vert > 0 ? CRAWL_UP_SPEED : CRAWL_DOWN_SPEED);
+      const vs = turn * CRAWL_SIDE_SPEED;
+      v.set(lx * vs, vy, lz * vs);
+      // The body turns head first towards where he crawls (round through the side, never flipping over)
+      let diff = Math.atan2(vs, vy) - w.angle;
+      diff -= Math.round(diff / (Math.PI * 2)) * Math.PI * 2;
+      w.angle += diff * (1 - Math.exp(-dt * 7));
+      w.move = Math.hypot(vs, vy);
+      ent.climbPhase += dt * w.move * 2.4;
+    } else {
+      v.set(0, 0, 0);
+      w.move = 0;
     }
-    if (ent.state === 'wall' && p.y + 1.1 >= w.top) {
+    p.addScaledVector(v, dt);
+    ent.heading = Math.atan2(-w.nx, -w.nz);
+    const ground = groundAt(controllers, p.x, p.z, p.y);
+    if (pressed || (held && w.time > 0.35)) {
+      kickOffWall(ent, 0);
+    } else if (vert < 0 && p.y <= ground + 0.02) {
+      // Down at the bottom: stand up
+      p.y = ground;
+      ent.state = 'ground';
+    } else if (p.y + 1.1 >= w.top && vert > 0) {
       // Vault over the parapet onto the roof
       p.y = w.top;
       p.x -= w.nx * 0.9;
@@ -794,7 +827,57 @@ function updateSpiderMan(controllers, ent, dt) {
       ent.flip = 1;
     }
     if (ent.state === 'wall') {
+      p.y = Math.max(p.y, ground);
       // Stay pressed to the wall; lose it round a corner
+      p.x -= w.nx * 0.25;
+      p.z -= w.nz * 0.25;
+    }
+  } else if (ent.state === 'wallrun') {
+    // Running along (or up) a facade, carrying the momentum he hit it with
+    const w = ent.wall;
+    const r = ent.wallRun;
+    w.time += dt;
+    const vertical = r.dy > 0.7;
+    if (vertical) {
+      r.speed -= GRAVITY * 0.5 * dt;
+    } else {
+      r.speed -= (fwdIn > 0.3 ? 0.6 : 2.0) * dt;
+      // Level out along the wall
+      r.dy *= Math.exp(-dt * 2.5);
+      const h = Math.hypot(r.dx, r.dz) || 1;
+      const k = Math.sqrt(Math.max(0, 1 - r.dy * r.dy)) / h;
+      r.dx *= k; r.dz *= k;
+    }
+    v.set(r.dx * r.speed, r.dy * r.speed, r.dz * r.speed);
+    p.addScaledVector(v, dt);
+    ent.runPhase += dt * (5 + r.speed * 0.55);
+    ent.heading = vertical ? Math.atan2(-w.nx, -w.nz) : Math.atan2(r.dx, r.dz);
+    const ground = groundAt(controllers, p.x, p.z, _before.y);
+    if (pressed || (!vertical && held && w.time > 0.3)) {
+      // Kick off and carry on (holding the button through a run along a wall flows straight into the next swing)
+      const carry = r.speed;
+      v.set(r.dx * carry + w.nx * 7, Math.max(r.dy * carry, 0) + 7, r.dz * carry + w.nz * 7);
+      ent.heading = Math.atan2(v.x, v.z);
+      ent.state = 'air';
+      ent.webCooldown = 0.1;
+      if (carry > 16) ent.flip = 0;
+    } else if (vertical && p.y + 1.4 >= w.top) {
+      // Up and over the top with the run's momentum
+      v.set(-w.nx * 5, Math.min(r.speed, 16) * 0.7 + 4, -w.nz * 5);
+      ent.state = 'air';
+      ent.flip = 0;
+    } else if (r.speed < 4.5) {
+      // Out of steam: cling on, head the way he was running
+      const lx = -w.nz, lz = w.nx;
+      startCrawl(ent, Math.atan2(r.dx * lx + r.dz * lz, r.dy));
+    } else if (!vertical && p.y <= ground + 0.02) {
+      // Ran down onto the street or a roof: keep running
+      p.y = ground;
+      v.set(r.dx * r.speed, 0, r.dz * r.speed);
+      ent.state = 'ground';
+    }
+    if (ent.state === 'wallrun') {
+      p.y = Math.max(p.y, ground);
       p.x -= w.nx * 0.25;
       p.z -= w.nz * 0.25;
     }
@@ -805,43 +888,81 @@ function updateSpiderMan(controllers, ent, dt) {
   controllers.resolveHorizontalCollision(p, 0.42);
   const pushX = p.x - preX, pushZ = p.z - preZ;
   const push = Math.hypot(pushX, pushZ);
+  const onWall = ent.state === 'wall' || ent.state === 'wallrun';
   if (push > 0.01) {
     const nx = pushX / push, nz = pushZ / push;
+    const hs = Math.hypot(v.x, v.z);
     const into = v.x * nx + v.z * nz;
+    const tx = v.x - nx * Math.min(0, into), tz = v.z - nz * Math.min(0, into);
     if (into < 0) { v.x -= nx * into; v.z -= nz * into; }
-    // Brushing a wall mid-chain doesn't stop the swing; flying into one (or letting go near one) sticks to it
-    if ((ent.state === 'air' && (!held || -into > 6)) || (ent.state === 'ground' && fwdIn > 0.5 && -into > 1)
-      || (ent.state === 'swing' && (-into > 10 || Math.hypot(v.x, v.z) < 5))) {
-      const top = wallTopAt(controllers, p.x - nx * 0.6, p.y + 0.5, p.z - nz * 0.6);
-      if (top > p.y + 2.2) {
-        if (ent.state === 'swing') releaseWeb(controllers, ent, false);
-        const dir = travelDirection(ent);
-        ent.state = 'wall';
-        ent.wall.nx = nx; ent.wall.nz = nz; ent.wall.top = top;
-        ent.wall.time = 0; ent.wall.tx = dir.x; ent.wall.tz = dir.z;
-        ent.heading = Math.atan2(-nx, -nz);
-        v.set(0, 0, 0);
-      }
-    } else if (ent.state === 'wall') {
+    if (onWall) {
       ent.wall.nx = nx; ent.wall.nz = nz;
+    } else {
+      // What a wall does to him: fast enough, he runs along it (or up it, head on); slower, he sticks to it.
+      // Brushing one mid-swing just slides along it
+      let mode = null;
+      if (ent.state === 'air') mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : !held || -into > 6 ? 'crawl' : null;
+      else if (ent.state === 'swing') mode = -into > 4 ? (hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl') : hs < 5 ? 'crawl' : null;
+      else if (ent.state === 'ground' && fwdIn > 0.5 && -into > 1) mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl';
+      const reaching = ent.state === 'air' || (ent.state === 'ground' && fwdIn > 0.5);
+      const top = mode || (reaching && -into > 0.5) ? wallTopAt(controllers, p.x - nx * 0.6, p.y + 0.5, p.z - nz * 0.6) : -Infinity;
+      if (reaching && top > p.y + 0.3 && top <= p.y + 2.2) {
+        // A ledge within reach (a parapet, a step in the roof): pull himself up onto it
+        p.set(p.x - nx * 0.7, top, p.z - nz * 0.7);
+        v.set(-nx * Math.max(4, hs * 0.5), 0, -nz * Math.max(4, hs * 0.5));
+        ent.state = 'ground';
+        ent.crouch = 0.6;
+      } else if (mode && top > p.y + 2.2) {
+        if (ent.state === 'swing') releaseWeb(controllers, ent, false);
+        const travel = Math.hypot(tx, tz);
+        const w = ent.wall;
+        w.nx = nx; w.nz = nz; w.top = top; w.time = 0;
+        w.tx = travel > 1 ? tx / travel : Math.sin(ent.heading);
+        w.tz = travel > 1 ? tz / travel : Math.cos(ent.heading);
+        if (mode === 'run' && travel > 0.45 * hs) {
+          startWallRun(ent, tx, Math.max(-0.2, Math.min(0.35, v.y / Math.max(hs, 1))) * travel, tz, Math.max(travel, hs * 0.85));
+        } else if (mode === 'run') {
+          startWallRun(ent, 0, 1, 0, hs * 0.8 + Math.max(0, v.y) * 0.5);
+        } else {
+          startCrawl(ent);
+        }
+        ent.heading = ent.state === 'wallrun' && ent.wallRun.dy <= 0.7 ? Math.atan2(ent.wallRun.dx, ent.wallRun.dz) : Math.atan2(-nx, -nz);
+      }
     }
-  } else if (ent.state === 'wall') {
-    // Nothing to hold on to any more (round a corner, or the wall ended): drop off it
-    p.x += ent.wall.nx * 0.25;
-    p.z += ent.wall.nz * 0.25;
-    v.set(ent.wall.nx * 2, 1, ent.wall.nz * 2);
+  } else if (onWall) {
+    const w = ent.wall;
+    if (v.y > 0.5) {
+      // The wall ended above him (a ledge, a setback): up and over it onto the roof
+      p.x -= w.nx * 0.35;
+      p.z -= w.nz * 0.35;
+      v.set(-w.nx * 4.5, Math.max(v.y * 0.6, 3) + 3, -w.nz * 4.5);
+      if (ent.state === 'wallrun') ent.flip = 0;
+    } else {
+      // Nothing to hold on to any more (round a corner, or the wall ended): carry on through the air
+      p.x += w.nx * 0.25;
+      p.z += w.nz * 0.25;
+      if (ent.state === 'wallrun') v.addScaledVector(_offset.set(w.nx, 0, w.nz), 1.5);
+      else v.set(w.nx * 2, 1, w.nz * 2);
+    }
     ent.state = 'air';
   }
 
   // Never below the street (tunnels, piers or a teleport onto a roof edge)
   const floor = controllers.getGroundHeight(p.x, p.z, 'person');
-  if (p.y < floor) { p.y = floor; if (ent.state !== 'wall' && ent.state !== 'swing') { ent.state = 'ground'; v.y = 0; } }
+  if (p.y < floor) {
+    p.y = floor;
+    if (ent.state === 'air') { ent.state = 'ground'; v.y = 0; }
+  }
 
-  ent.speed = Math.hypot(v.x, v.z, ent.state === 'swing' || ent.state === 'air' ? v.y * 0.5 : 0);
+  ent.speed = ent.state === 'wallrun' ? ent.wallRun.speed
+    : Math.hypot(v.x, v.z, ent.state === 'swing' || ent.state === 'air' ? v.y * 0.5 : 0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Animation
+// Animation: joint angles per state (eased), the body's orientation and pelvis placement, then the skinned body is
+// posed by forward kinematics (PersonRig.poseFK). Angles are {x, y, z} Euler radians with the limbs hanging
+// straight down at zero: negative x swings a limb forward, positive x bends a knee back (and negative an elbow
+// forward), positive z raises the left arm sideways (negative the right).
 // ---------------------------------------------------------------------------------------------------------------
 
 function setPose(t, name, x, y, z) {
@@ -849,37 +970,83 @@ function setPose(t, name, x, y, z) {
   j.x = x; j.y = y; j.z = z;
 }
 
+// Crawling a wall, chest to it. `down`: head first down the wall, wary and splayed (shorter reaches, arms wide,
+// knees out like a spider); otherwise the long alternating reach of a climb. Diagonal limbs move together.
+function crawlPose(t, ent, down) {
+  const c = Math.sin(ent.climbPhase);
+  const lift = Math.max(0, Math.cos(ent.climbPhase)); // the reaching hand comes off the wall
+  if (down) {
+    setPose(t, 'spine', 0.3, 0, 0);
+    setPose(t, 'neck', -0.75, 0, 0);
+    setPose(t, 'shL', -0.75 - lift * 0.2, 0, 1.75 + c * 0.3);
+    setPose(t, 'shR', -0.75 - (1 - lift) * 0.2, 0, -1.75 + c * 0.3);
+    setPose(t, 'elL', -1.25 + c * 0.25, 0, 0);
+    setPose(t, 'elR', -1.25 - c * 0.25, 0, 0);
+    setPose(t, 'hipL', -0.75 - c * 0.3, 0, 0.85);
+    setPose(t, 'hipR', -0.75 + c * 0.3, 0, -0.85);
+    setPose(t, 'knL', 2.0 + c * 0.2, 0, 0);
+    setPose(t, 'knR', 2.0 - c * 0.2, 0, 0);
+    setPose(t, 'ftL', -0.4, 0, 0);
+    setPose(t, 'ftR', -0.4, 0, 0);
+  } else {
+    setPose(t, 'spine', 0.12, 0, 0);
+    setPose(t, 'neck', -0.55, 0, 0);
+    setPose(t, 'shL', -0.35 - lift * 0.15, 0, 2.35 + c * 0.5);
+    setPose(t, 'shR', -0.35 - (1 - lift) * 0.15, 0, -2.35 + c * 0.5);
+    setPose(t, 'elL', -0.85 + c * 0.45, 0, 0);
+    setPose(t, 'elR', -0.85 - c * 0.45, 0, 0);
+    setPose(t, 'hipL', -1.25 + c * 0.5, 0, 0.6);
+    setPose(t, 'hipR', -1.25 - c * 0.5, 0, -0.6);
+    setPose(t, 'knL', 1.85 - c * 0.45, 0, 0);
+    setPose(t, 'knR', 1.85 + c * 0.45, 0, 0);
+    setPose(t, 'ftL', -0.3, 0, 0);
+    setPose(t, 'ftR', -0.3, 0, 0);
+  }
+}
+
+// Running: `amt` 0 (standing) .. 1 (sprinting), leaning into it
+function runPose(t, ent, amt, lean) {
+  const s = Math.sin(ent.runPhase);
+  setPose(t, 'spine', lean + 0.32 * amt + ent.crouch * 0.5, 0, 0);
+  setPose(t, 'neck', -0.2 * amt - ent.crouch * 0.3, 0, 0);
+  setPose(t, 'hipL', -s * 1.0 * amt - ent.crouch * 1.1, 0, 0.04);
+  setPose(t, 'hipR', s * 1.0 * amt - ent.crouch * 1.1, 0, -0.04);
+  setPose(t, 'knL', (0.12 + Math.max(0, s) * 1.6) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
+  setPose(t, 'knR', (0.12 + Math.max(0, -s) * 1.6) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
+  setPose(t, 'ftL', Math.max(0, s) * 0.5 * amt, 0, 0);
+  setPose(t, 'ftR', Math.max(0, -s) * 0.5 * amt, 0, 0);
+  setPose(t, 'shL', s * 0.9 * amt - ent.crouch * 0.6, 0, 0.12 + ent.crouch * 0.5);
+  setPose(t, 'shR', -s * 0.9 * amt - ent.crouch * 0.6, 0, -0.12 - ent.crouch * 0.5);
+  setPose(t, 'elL', -0.2 - 1.1 * amt, 0, 0);
+  setPose(t, 'elR', -0.2 - 1.1 * amt, 0, 0);
+}
+
 function targetPose(ent, t) {
-  for (const name of Object.keys(t)) setPose(t, name, 0, 0, 0);
+  for (const name of JOINTS) setPose(t, name, 0, 0, 0);
   const v = ent.velocity;
   const web = ent.web;
   if (ent.state === 'ground') {
     const along = Math.hypot(v.x, v.z);
-    const amt = Math.min(1, along / RUN_SPEED);
-    const s = Math.sin(ent.runPhase);
-    const breathe = Math.sin(performance.now() * 0.002) * 0.03;
-    setPose(t, 'spine', 0.08 + 0.32 * amt + breathe + ent.crouch * 0.5, 0, 0);
-    setPose(t, 'neck', -0.2 * amt - ent.crouch * 0.3, 0, 0);
-    setPose(t, 'hipL', -s * 0.95 * amt - ent.crouch * 1.1, 0, 0.04);
-    setPose(t, 'hipR', s * 0.95 * amt - ent.crouch * 1.1, 0, -0.04);
-    setPose(t, 'knL', (0.12 + Math.max(0, s) * 1.5) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
-    setPose(t, 'knR', (0.12 + Math.max(0, -s) * 1.5) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
-    setPose(t, 'shL', s * 0.85 * amt - ent.crouch * 0.6, 0, 0.14 + ent.crouch * 0.5);
-    setPose(t, 'shR', -s * 0.85 * amt - ent.crouch * 0.6, 0, -0.14 - ent.crouch * 0.5);
-    setPose(t, 'elL', -0.25 - 0.9 * amt, 0, 0);
-    setPose(t, 'elR', -0.25 - 0.9 * amt, 0, 0);
+    runPose(t, ent, Math.min(1, along / RUN_SPEED), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
+  } else if (ent.state === 'wallrun') {
+    runPose(t, ent, 1, 0.15);
   } else if (ent.state === 'wall') {
-    const c = Math.sin(ent.climbPhase);
-    setPose(t, 'spine', -0.05, 0, 0);
-    setPose(t, 'neck', -0.45, 0, 0);
-    setPose(t, 'shL', -0.2, 0, 2.5 + c * 0.35);
-    setPose(t, 'shR', -0.2, 0, -2.5 + c * 0.35);
-    setPose(t, 'elL', -0.9 - c * 0.3, 0, 0);
-    setPose(t, 'elR', -0.9 + c * 0.3, 0, 0);
-    setPose(t, 'hipL', -1.0 + c * 0.45, 0, 0.55);
-    setPose(t, 'hipR', -1.0 - c * 0.45, 0, -0.55);
-    setPose(t, 'knL', 1.7 - c * 0.3, 0, 0);
-    setPose(t, 'knR', 1.7 + c * 0.3, 0, 0);
+    crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
+  } else if (ent.zip.time >= 0) {
+    // Zipping: the web arm thrown forward, the other tucked, legs trailing
+    const s = ent.zip.side;
+    const a = s > 0 ? 'L' : 'R', b = s > 0 ? 'R' : 'L';
+    setPose(t, 'spine', 0.2, 0, 0);
+    setPose(t, `sh${a}`, -2.9, 0, s * 0.15);
+    setPose(t, `el${a}`, -0.05, 0, 0);
+    setPose(t, `sh${b}`, -1.4, 0, -s * 0.5);
+    setPose(t, `el${b}`, -1.6, 0, 0);
+    setPose(t, 'hipL', 0.35, 0, 0.08);
+    setPose(t, 'hipR', 0.15, 0, -0.08);
+    setPose(t, 'knL', 0.5, 0, 0);
+    setPose(t, 'knR', 0.9, 0, 0);
+    setPose(t, 'ftL', 0.6, 0, 0);
+    setPose(t, 'ftR', 0.6, 0, 0);
   } else if (web.phase !== 'none' || ent.state === 'swing') {
     // One arm up the web, the other out for balance, legs tucked and trailing
     const up = web.side > 0 ? 'L' : 'R';
@@ -896,6 +1063,8 @@ function targetPose(ent, t) {
     setPose(t, 'hipR', -0.25 + swingLift * 0.35, 0, -0.12);
     setPose(t, 'knL', 1.25, 0, 0);
     setPose(t, 'knR', 0.55 - swingLift * 0.2, 0, 0);
+    setPose(t, 'ftL', 0.5, 0, 0);
+    setPose(t, 'ftR', 0.5, 0, 0);
   } else if (ent.flip < 1) {
     // Tucked flip after a fast release
     setPose(t, 'spine', 0.5, 0, 0);
@@ -908,6 +1077,8 @@ function targetPose(ent, t) {
     setPose(t, 'shR', -1.3, 0, -0.3);
     setPose(t, 'elL', -1.4, 0, 0);
     setPose(t, 'elR', -1.4, 0, 0);
+    setPose(t, 'ftL', 0.5, 0, 0);
+    setPose(t, 'ftR', 0.5, 0, 0);
   } else if (v.y > 0) {
     // Rising: reaching forward & up for the next web
     setPose(t, 'spine', 0.1, 0, 0);
@@ -919,6 +1090,8 @@ function targetPose(ent, t) {
     setPose(t, 'hipR', -0.15, 0, -0.1);
     setPose(t, 'knL', 1.4, 0, 0);
     setPose(t, 'knR', 0.6, 0, 0);
+    setPose(t, 'ftL', 0.4, 0, 0);
+    setPose(t, 'ftR', 0.5, 0, 0);
   } else {
     // Falling: the classic spread
     setPose(t, 'spine', -0.1, 0, 0);
@@ -931,32 +1104,48 @@ function targetPose(ent, t) {
     setPose(t, 'hipR', 0.2, 0, -0.3);
     setPose(t, 'knL', 0.9, 0, 0);
     setPose(t, 'knR', 1.2, 0, 0);
+    setPose(t, 'ftL', 0.4, 0, 0);
+    setPose(t, 'ftR', 0.4, 0, 0);
   }
 }
 
 const _target = {};
-const _qYaw = new THREE.Quaternion();
+for (const name of JOINTS) _target[name] = { x: 0, y: 0, z: 0 };
 const _qWant = new THREE.Quaternion();
-const _qFlip = new THREE.Quaternion();
+const _qSpin = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
-const _hand = new THREE.Vector3();
+const _pelvisWant = new THREE.Vector3();
+const _pelvis = new THREE.Vector3();
 const _seg = new THREE.Vector3();
+const _axis = new THREE.Vector3();
 
-// Orientation of the whole figure: upright on the ground and walls, hanging along the web while swinging,
-// leaning into the flight path in the air
+// Orientation of the whole figure: upright on the ground, hanging along the web while swinging, leaning into the
+// flight path in the air, chest to the wall (head the way he crawls) when crawling, feet to the wall when running
+// along it
 function bodyOrientation(ent, out) {
   const v = ent.velocity;
   const p = ent.position;
   const web = ent.web;
+  const w = ent.wall;
   const h = Math.hypot(v.x, v.z);
   _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
-  if (ent.state === 'swing' && web.phase === 'attached') {
+  if (ent.state === 'wall') {
+    const c = Math.cos(w.angle), s = Math.sin(w.angle);
+    _bz.set(-w.nx, 0, -w.nz);
+    _by.set(-w.nz * s, c, w.nx * s);
+  } else if (ent.state === 'wallrun') {
+    const r = ent.wallRun;
+    _by.set(w.nx, 0, w.nz);
+    _bz.set(r.dx, r.dy, r.dz);
+  } else if (ent.state === 'swing' && web.phase === 'attached') {
     _by.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
     if (v.lengthSq() > 4) _bz.copy(v).normalize();
   } else if (ent.state === 'air' || ent.state === 'swing') {
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
-    _by.set(0, 1, 0).addScaledVector(_bz, -Math.sin(pitch) * 0.8).normalize();
+    // Zipping: flat out along the web
+    const dive = ent.zip.time >= 0 ? 0.9 : Math.sin(pitch) * 0.8;
+    _by.set(0, 1, 0).addScaledVector(_bz, -dive).normalize();
   } else {
     _by.set(0, 1, 0);
   }
@@ -967,48 +1156,69 @@ function bodyOrientation(ent, out) {
   _m.makeBasis(_bx, _by, _bz);
   out.setFromRotationMatrix(_m);
   if (ent.flip < 1) {
+    // a forward somersault after a fast release
     const e = ent.flip * ent.flip * (3 - 2 * ent.flip);
-    out.multiply(_qFlip.setFromAxisAngle(_bx.set(1, 0, 0), e * Math.PI * 2));
+    out.multiply(_qSpin.setFromAxisAngle(_axis.set(1, 0, 0), e * Math.PI * 2));
+  } else if (ent.roll < 1) {
+    // a corkscrew with each zip
+    const e = ent.roll * ent.roll * (3 - 2 * ent.roll);
+    out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 0, 1), e * Math.PI * 2 * (ent.zip.side || 1)));
   }
   return out;
 }
 
+// Where the pelvis sits relative to the simulated position (the feet, on the ground): crouched on landing, close
+// to the facade when crawling, a leg's length out from it when running along it
+function pelvisOffset(ent, out) {
+  const w = ent.wall;
+  if (ent.state === 'wall') return out.set(-w.nx * 0.12, 1.0, -w.nz * 0.12);
+  if (ent.state === 'wallrun') return out.set(w.nx * 0.55, 1.0, w.nz * 0.55);
+  return out.set(0, PELVIS_HEIGHT - ent.crouch * 0.3, 0);
+}
+
 function updateSpiderManVisuals(ent, dt, active) {
-  const { model, webs, web } = ent;
-  if (!_target.spine) for (const name of Object.keys(ent.pose)) _target[name] = { x: 0, y: 0, z: 0 };
+  const { model, webs, web, zip } = ent;
   targetPose(ent, _target);
   const k = 1 - Math.exp(-dt * (ent.state === 'swing' ? 10 : 14));
-  for (const name of Object.keys(ent.pose)) {
-    const cur = ent.pose[name], want = _target[name], joint = model.joints[name];
+  for (const name of JOINTS) {
+    const cur = ent.pose[name], want = _target[name];
     cur.x += (want.x - cur.x) * k;
     cur.y += (want.y - cur.y) * k;
     cur.z += (want.z - cur.z) * k;
-    joint.rotation.set(cur.x, cur.y, cur.z);
   }
 
   bodyOrientation(ent, _qWant);
-  ent.bodyQuat.slerp(_qWant, ent.flip < 1 ? 1 : 1 - Math.exp(-dt * 10));
-  _qYaw.setFromAxisAngle(UP, ent.heading).invert();
-  model.body.quaternion.copy(_qYaw).multiply(ent.bodyQuat);
+  ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * 10));
+  pelvisOffset(ent, _pelvisWant);
+  ent.pelvisOffset.lerp(_pelvisWant, 1 - Math.exp(-dt * 12));
+  _pelvis.copy(ent.position).add(ent.pelvisOffset);
 
-  // The scene's matrices only update once per frame, after the controllers: the web needs the hand now
-  model.root.updateMatrixWorld(true);
+  // The skinned body, posed in world space; the hands come back for the webs
+  model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
+  applyRigToBones(model);
 
   const strand = webs.strand;
+  let from = null, to = null;
   if (active && web.phase !== 'none') {
-    const hand = web.side > 0 ? model.joints.handL : model.joints.handR;
-    hand.getWorldPosition(_hand);
+    from = model.hands[web.side > 0 ? 0 : 1];
     if (web.phase === 'attached') {
       web.tip.copy(web.anchor);
     } else {
       // Flying out: the tip races to the anchor along a slight arc
       const t = Math.min(1, web.travelled / Math.max(1, web.distance));
-      web.tip.lerpVectors(_hand, web.anchor, t);
+      web.tip.lerpVectors(from, web.anchor, t);
       web.tip.y += Math.sin(t * Math.PI) * 1.2 - (web.phase === 'miss' ? t * t * 8 : 0);
     }
-    _seg.subVectors(web.tip, _hand);
+    to = web.tip;
+  } else if (active && zip.time >= 0 && zip.time < 0.3) {
+    from = model.hands[zip.side > 0 ? 0 : 1];
+    zip.tip.lerpVectors(from, zip.anchor, Math.min(1, zip.time / 0.07));
+    to = zip.tip;
+  }
+  if (to) {
+    _seg.subVectors(to, from);
     const len = _seg.length();
-    strand.position.copy(_hand);
+    strand.position.copy(from);
     strand.quaternion.setFromUnitVectors(UP, _seg.multiplyScalar(1 / Math.max(len, 1e-4)));
     strand.scale.set(0.028, len, 0.028);
   } else {
@@ -1024,4 +1234,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   webs.group.updateMatrixWorld(true);
 }
 
-export { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan, perchOnRooftop, clipCameraToBuildings, findAnchor, rayBox, footprintContains };
+export {
+  createSpiderManEntity, createSpiderManState, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan,
+  perchOnRooftop, clipCameraToBuildings, findAnchor, rayBox, footprintContains
+};

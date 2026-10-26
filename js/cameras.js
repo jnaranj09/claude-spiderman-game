@@ -201,11 +201,14 @@ class CameraSystem {
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
-        const lookUpBias = entity.type === 'helicopter' ? 0.2 : (entity.type === 'car' ? 0.52 : 1.55);
+        const lookUpBias = entity.type === 'helicopter' ? 0.2 : (entity.type === 'car' ? 0.52 : entity.type === 'spider' ? 0.75 : 1.55);
+        // Spider-Man: look past him along the camera's own direction, so orbiting the view turns around him and
+        // keeps him centred (the vehicles look ahead along their heading)
+        const lookYaw = entity.type === 'spider' ? totalYaw : entity.heading;
         desiredLook.set(
-          entity.position.x + Math.sin(entity.heading) * 5.2,
+          entity.position.x + Math.sin(lookYaw) * 5.2,
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias,
-          entity.position.z + Math.cos(entity.heading) * 5.2
+          entity.position.z + Math.cos(lookYaw) * 5.2
         );
         break;
       }

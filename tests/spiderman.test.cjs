@@ -19,6 +19,7 @@ class Vector3 {
   multiplyScalar(s) { return this.set(this.x * s, this.y * s, this.z * s); }
   dot(v) { return this.x * v.x + this.y * v.y + this.z * v.z; }
   lengthSq() { return this.dot(this); }
+  lerp(v, t) { return this.set(this.x + (v.x - this.x) * t, this.y + (v.y - this.y) * t, this.z + (v.z - this.z) * t); }
   length() { return Math.sqrt(this.lengthSq()); }
   normalize() { return this.multiplyScalar(1 / (this.length() || 1)); }
   distanceTo(v) { return Math.hypot(this.x - v.x, this.y - v.y, this.z - v.z); }
@@ -39,7 +40,7 @@ const THREE = { Vector3, Quaternion: Rotation, Matrix4: Rotation };
 
 const ISLAND_BOUNDS = { minX: -5000, maxX: 5000, minZ: -5000, maxZ: 5000, sidewalkHeight: 0 };
 const spider = loadModule(spiderSource, {
-  imports: { 'three/webgpu': THREE, './city-config.js': { ISLAND_BOUNDS, streetZ: () => 0 } }
+  imports: { 'three/webgpu': THREE, './city-config.js': { ISLAND_BOUNDS, streetZ: () => 0 }, './pedestrians.js': {} }
 });
 
 // The real controller manager's collision code (nearColliders, resolveHorizontalCollision, ground)
@@ -74,22 +75,7 @@ function world(colliders) {
 }
 
 function spiderEntity(x = 0, y = 0, z = 0, heading = 0) {
-  const mesh = () => ({ position: new Vector3(), quaternion: new Rotation(), scale: new Vector3(), rotateZ() {} });
-  return {
-    type: 'spider',
-    webs: { splats: Array.from({ length: 8 }, () => ({ mesh: mesh(), life: 0, held: false })), next: 0 },
-    position: new Vector3(x, y, z),
-    velocity: new Vector3(),
-    heading, speed: 0, state: 'ground',
-    web: {
-      phase: 'none', anchor: new Vector3(), normal: new Vector3(), pivot: new Vector3(), tip: new Vector3(),
-      length: 0, targetLength: 0, travelled: 0, distance: 0, side: 1, splat: null, swingTime: 0,
-      passedBottom: false, rising: false, dirX: 0, dirZ: 1
-    },
-    nextSide: 1, webHeld: false, webCooldown: 0, webRetry: 0, groundTime: 0,
-    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0 },
-    flip: 1, crouch: 0, runPhase: 0, climbPhase: 0, bodyQuat: new Rotation()
-  };
+  return spider.createSpiderManState(x, y, z, heading);
 }
 
 // An avenue running along +Z: 30 m wide, lined by 50 m-deep blocks of towers with 20 m cross streets
@@ -205,7 +191,7 @@ test('running into a building climbs it and vaults onto the roof', () => {
   const ent = spiderEntity(0, 0, 0, 0);
   controllers.keys.forward = 1;
   let climbed = false;
-  for (let i = 0; i < 60 * 6 && !(ent.state === 'ground' && ent.position.y > 20); i++) {
+  for (let i = 0; i < 60 * 12 && !(ent.state === 'ground' && ent.position.y > 20); i++) {
     spider.updateSpiderMan(controllers, ent, 1 / 60);
     climbed ||= ent.state === 'wall';
     assert.equal(insideAny(colliders, ent.position), false);
@@ -238,4 +224,81 @@ test('the follow camera is pulled in front of a wall it would go through', () =>
   const clear = new Vector3(0, 6, 8);
   assert.equal(spider.clipCameraToBuildings(controllers, target, clear), false);
   assert.equal(clear.z, 8);
+});
+
+function step(controllers, ent, seconds, keys = {}) {
+  Object.assign(controllers.keys, keys);
+  for (let i = 0; i < Math.round(seconds * 60); i++) spider.updateSpiderMan(controllers, ent, 1 / 60);
+}
+
+// A 60 m tower whose west face (x = 10) looks onto open ground
+const tower = () => [{ minX: 10, maxX: 40, minZ: -100, maxZ: 100, minY: 0, maxY: 60 }];
+
+test('crawling moves only while the stick is held, head first up and down', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(0, 0, 0, Math.PI / 2); // facing the wall (+X)
+  step(controllers, ent, 2, { forward: 0.6 });  // jog into it: sticks
+  assert.equal(ent.state, 'wall');
+  step(controllers, ent, 1, { forward: 1 });
+  const y = ent.position.y;
+  assert.ok(y > 3, `climbed to ${y.toFixed(1)} m`);
+  assert.ok(Math.cos(ent.wall.angle) > 0.9, 'head up');
+  step(controllers, ent, 1.5, { forward: 0 });
+  assert.equal(ent.state, 'wall');
+  assert.ok(Math.abs(ent.position.y - y) < 1e-9, 'holds still with the stick released');
+  step(controllers, ent, 0.8, { backward: 1 });
+  assert.ok(ent.position.y < y - 1, 'crawls down');
+  assert.ok(Math.cos(ent.wall.angle) < -0.5, 'head first');
+  step(controllers, ent, 5, { backward: 1 });
+  assert.equal(ent.state, 'ground', 'stands up at the bottom');
+});
+
+test('hitting a wall at speed runs along it and keeps the momentum', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(8, 20, -30);
+  ent.state = 'air';
+  ent.velocity.set(8, 0, 25); // glancing into the wall while flying along it
+  let ran = false, minSpeed = Infinity;
+  for (let i = 0; i < 40; i++) {
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+    if (ent.state === 'wallrun') { ran = true; minSpeed = Math.min(minSpeed, ent.wallRun.speed); }
+  }
+  assert.ok(ran, 'ran along the wall');
+  assert.ok(Math.abs(ent.wallRun.dy) < 0.4, 'along it, not up it');
+  assert.ok(minSpeed > 20, `kept its speed (${minSpeed.toFixed(1)} m/s)`);
+  // Holding the button kicks off and carries on, still fast
+  step(controllers, ent, 0.5, { up: true });
+  assert.notEqual(ent.state, 'wallrun');
+  assert.ok(Math.hypot(ent.velocity.x, ent.velocity.z) > 20);
+  assert.ok(ent.velocity.z > 15, 'still heading the same way');
+});
+
+test('a head-on hit at speed runs up the wall instead of stopping dead', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(5, 10, 0);
+  ent.state = 'air';
+  ent.velocity.set(25, 0, 0);
+  step(controllers, ent, 0.4);
+  assert.equal(ent.state, 'wallrun');
+  assert.ok(ent.wallRun.dy > 0.7);
+  assert.ok(ent.position.y > 13, `ran up to ${ent.position.y.toFixed(1)} m`);
+});
+
+test('a tap zips forward, building or not, and keeps him in the air', () => {
+  const controllers = world([]);
+  const tapper = spiderEntity(0, 40, 0);
+  const faller = spiderEntity(0, 40, 0);
+  for (const e of [tapper, faller]) { e.state = 'air'; e.velocity.set(0, 0, 15); }
+  const tap = () => {
+    step(controllers, tapper, 3 / 60, { up: true });
+    step(controllers, tapper, 0.3, { up: false });
+  };
+  tap();
+  assert.ok(tapper.zip.time >= 0 || tapper.velocity.z > 20, 'zipped');
+  assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) > 22, 'pushed forward');
+  for (let i = 0; i < 5; i++) tap();
+  step(controllers, faller, 6 * (3 / 60 + 0.3));
+  assert.ok(tapper.position.z > faller.position.z + 40, 'went much further');
+  assert.ok(tapper.position.y > faller.position.y + 5, 'stayed up longer');
+  assert.equal(tapper.web.phase, 'none', 'never attached to anything');
 });
