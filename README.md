@@ -17,9 +17,9 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Look around | drag the screen | drag | right stick |
 
 Hold **WEB** and Spider-Man jumps, fires a web at the nearest building and keeps chaining swings on his own. Steer
-with the stick. Let go to fly, and press again to catch the next building. **Tap** WEB to zip a web straight
-ahead and yank yourself forward. It works even with no buildings around, so a few taps carry you across a park
-with your momentum.
+with the stick. Let go to fly, and press again to catch the next building. **Tap** WEB to zip a web at the
+building ahead and yank yourself toward it. Webs only ever leave his wrist when they will hit something: with
+nothing in reach (over a park or a river) no web is thrown.
 
 Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding WEB kicks
 off and swings on; running up to the top launches him over the roof. Touching a wall slowly makes him **cling**.

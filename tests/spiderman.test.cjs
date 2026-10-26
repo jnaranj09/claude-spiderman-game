@@ -284,21 +284,45 @@ test('a head-on hit at speed runs up the wall instead of stopping dead', () => {
   assert.ok(ent.position.y > 13, `ran up to ${ent.position.y.toFixed(1)} m`);
 });
 
-test('a tap zips forward, building or not, and keeps him in the air', () => {
-  const controllers = world([]);
-  const tapper = spiderEntity(0, 40, 0);
-  const faller = spiderEntity(0, 40, 0);
+test('a tap zips forward on a web stuck to a building ahead', () => {
+  const colliders = avenue();
+  const controllers = world(colliders);
+  const tapper = spiderEntity(0, 20, 0);
+  const faller = spiderEntity(0, 20, 0);
   for (const e of [tapper, faller]) { e.state = 'air'; e.velocity.set(0, 0, 15); }
   const tap = () => {
     step(controllers, tapper, 3 / 60, { up: true });
     step(controllers, tapper, 0.3, { up: false });
   };
-  tap();
-  assert.ok(tapper.zip.time >= 0 || tapper.velocity.z > 20, 'zipped');
+  step(controllers, tapper, 3 / 60, { up: true });
+  step(controllers, tapper, 1 / 60, { up: false });
+  assert.ok(tapper.zip.time >= 0, 'zipped');
+  const a = tapper.zip.anchor;
+  const onFace = colliders.some((c) => a.x >= c.minX - 1e-6 && a.x <= c.maxX + 1e-6 && a.z >= c.minZ - 1e-6
+    && a.z <= c.maxZ + 1e-6 && a.y <= c.maxY + 1e-6);
+  assert.ok(onFace, `the web stuck to a building (${a.toArray().map((n) => n.toFixed(1))})`);
+  assert.ok(a.z > tapper.position.z, 'ahead');
   assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) > 22, 'pushed forward');
-  for (let i = 0; i < 5; i++) tap();
-  step(controllers, faller, 6 * (3 / 60 + 0.3));
-  assert.ok(tapper.position.z > faller.position.z + 40, 'went much further');
-  assert.ok(tapper.position.y > faller.position.y + 5, 'stayed up longer');
-  assert.equal(tapper.web.phase, 'none', 'never attached to anything');
+  step(controllers, tapper, 0.3, { up: false });
+  for (let i = 0; i < 4; i++) tap();
+  step(controllers, faller, 0.3 + 3 / 60 + 1 / 60 + 0.3 + 4 * (3 / 60 + 0.3));
+  assert.ok(tapper.position.z > faller.position.z + 20, 'went further');
+  assert.equal(tapper.web.phase, 'none', 'never swung');
+});
+
+test('over open ground no web is thrown at all, tapped or held', () => {
+  const controllers = world([]);
+  const ent = spiderEntity(0, 40, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 15);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.equal(ent.zip.time, -1, 'no zip into thin air');
+  assert.ok(Math.abs(ent.velocity.z - 15) < 1e-9, 'no push from nothing');
+  let shown = false;
+  for (let i = 0; i < 120; i++) {
+    step(controllers, ent, 1 / 60, { up: true });
+    shown ||= ent.web.phase !== 'none';
+  }
+  assert.equal(shown, false, 'no web flies out to miss');
 });

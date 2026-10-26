@@ -341,7 +341,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     speed: 0,
     state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun'
     web: {
-      phase: 'none', // 'none' | 'shooting' | 'attached' | 'miss'
+      phase: 'none', // 'none' | 'shooting' | 'attached'
       anchor: new THREE.Vector3(),
       normal: new THREE.Vector3(),
       pivot: new THREE.Vector3(),
@@ -461,21 +461,18 @@ function shootWeb(controllers, ent) {
   const web = ent.web;
   const anchor = findAnchor(controllers, p.x, cy, p.z, dir.x, dir.z, ent.nextSide, _anchorOut,
     controllers.getGroundHeight(p.x, p.z, 'person'));
-  web.side = anchor ? anchor.side : ent.nextSide;
+  if (!anchor) {
+    // Nothing to stick to: no web at all (a web only ever leaves his wrist to hit something); look again shortly
+    ent.webRetry = 0.15;
+    return;
+  }
+  web.side = anchor.side;
   ent.nextSide = -web.side; // alternate hands, like the real thing
   web.travelled = 0;
   web.swingTime = 0;
   web.passedBottom = web.rising = false;
   web.dirX = dir.x;
   web.dirZ = dir.z;
-  if (!anchor) {
-    // Nothing to stick to: the web flies out and falls short, and the player keeps falling
-    web.phase = 'miss';
-    web.anchor.set(p.x + dir.x * 30, cy + 26, p.z + dir.z * 30);
-    web.distance = web.anchor.distanceTo(_center.set(p.x, cy, p.z));
-    ent.webRetry = 0.3;
-    return;
-  }
   web.phase = 'shooting';
   web.anchor.set(anchor.x, anchor.y, anchor.z);
   web.normal.set(anchor.nx, anchor.ny, anchor.nz);
@@ -567,37 +564,68 @@ function stickSplat(ent, position, normal, held) {
   return splat;
 }
 
-// A tap: a web shot straight ahead that yanks him on. It sticks to whatever building is in the way, and snaps taut
-// in thin air when there's none, so a few taps carry him across a park or a wide avenue without losing momentum.
+// A tap: a web shot ahead that yanks him on towards a real surface. A fan of rays (straight ahead first, then
+// higher and wider) looks for any building face within ~90 m at or above his height; with nothing in reach the tap
+// does nothing (a web never sticks to thin air).
+function findZipTarget(controllers, cx, cy, cz, fx, fz, out) {
+  const lx = fz, lz = -fx;
+  const candidates = controllers.nearColliders(cx + fx * 45, cz + fz * 45, 60).filter((c) => c.maxY > cy - 1);
+  if (!candidates.length) return null;
+  let best = null, bestScore = -Infinity;
+  for (const elev of [0.12, 0.3, 0.55, 0.85]) {
+    for (const lat of [0, 0.25, -0.25, 0.5, -0.5]) {
+      _dir.set(fx + lx * lat, elev, fz + lz * lat).normalize();
+      let t = 90, found = false;
+      for (const c of candidates) {
+        if (rayBox(c, cx, cy, cz, _dir.x, _dir.y, _dir.z, t, _hit)) {
+          t = _hit.t;
+          found = true;
+          out.nx = _hit.nx; out.ny = _hit.ny; out.nz = _hit.nz;
+        }
+      }
+      if (!found || t < 6) continue;
+      // Straight ahead and not too steep reads best; nearer is snappier
+      const score = -Math.abs(lat) * 20 - elev * 8 - t * 0.05;
+      if (score > bestScore) {
+        bestScore = score;
+        best = out;
+        out.x = cx + _dir.x * t; out.y = cy + _dir.y * t; out.z = cz + _dir.z * t;
+        out.bnx = out.nx; out.bny = out.ny; out.bnz = out.nz;
+      }
+    }
+  }
+  if (best) { best.nx = best.bnx; best.ny = best.bny; best.nz = best.bnz; }
+  return best;
+}
+
+const _zipOut = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, bnx: 0, bny: 0, bnz: 0 };
+
 function webZip(controllers, ent) {
   const p = ent.position;
   const v = ent.velocity;
   const zip = ent.zip;
   const dir = travelDirection(ent);
   const cy = p.y + 1.3;
-  _dir.set(dir.x, 0.3, dir.z).normalize();
-  let t = 42, hit = false;
-  for (const c of controllers.nearColliders(p.x + dir.x * 21, p.z + dir.z * 21, 24)) {
-    if (rayBox(c, p.x, cy, p.z, _dir.x, _dir.y, _dir.z, t, _hit)) {
-      t = _hit.t;
-      hit = true;
-      _seg.set(_hit.nx, _hit.ny, _hit.nz);
-    }
-  }
-  zip.anchor.set(p.x + _dir.x * t, cy + _dir.y * t, p.z + _dir.z * t);
-  if (hit && ent.webs) stickSplat(ent, zip.anchor, _seg, false);
+  const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut);
+  if (!target) return false;
+  zip.anchor.set(target.x, target.y, target.z);
+  if (ent.webs) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
   zip.time = 0;
   zip.side = ent.nextSide;
   ent.nextSide = -zip.side;
   zip.cooldown = 0.28;
-  // Forward speed gets a push (never a cut), and a little lift: rapid taps glide down slowly rather than climb
+  // Yanked towards where it stuck: forward speed gets a push (never a cut), and a little lift, so rapid taps glide
+  // on rather than climb
+  const tx = target.x - p.x, tz = target.z - p.z;
+  const th = Math.hypot(tx, tz) || 1;
   const hs = Math.hypot(v.x, v.z);
   const forward = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
-  v.set(dir.x * forward, Math.max(v.y, 0) * 0.4 + 4.5, dir.z * forward);
+  v.set(tx / th * forward, Math.max(v.y, 0) * 0.4 + 4.5, tz / th * forward);
   ent.state = 'air';
   ent.roll = 0;
   ent.flip = 1;
-  if (typeof ent.onWebShot === 'function') ent.onWebShot(t);
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(th);
+  return true;
 }
 
 // Starts running along (or up) a wall at `speed`, in direction (dx, dy, dz) within its plane
@@ -658,13 +686,10 @@ function updateSpiderMan(controllers, ent, dt) {
   if (ent.roll < 1) ent.roll = Math.min(1, ent.roll + dt / 0.55);
 
   // --- Web lifecycle -----------------------------------------------------------------------------------------
-  if (web.phase === 'shooting' || web.phase === 'miss') {
+  if (web.phase === 'shooting') {
     web.travelled += WEB_SPEED * dt;
-    if (web.phase === 'shooting' && !held) web.phase = 'none';
-    else if (web.travelled >= web.distance) {
-      if (web.phase === 'shooting') attachWeb(controllers, ent);
-      else web.phase = 'none';
-    }
+    if (!held) web.phase = 'none';
+    else if (web.travelled >= web.distance) attachWeb(controllers, ent);
   }
   if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2 && !tap);
 
@@ -1207,7 +1232,7 @@ function updateSpiderManVisuals(ent, dt, active) {
       // Flying out: the tip races to the anchor along a slight arc
       const t = Math.min(1, web.travelled / Math.max(1, web.distance));
       web.tip.lerpVectors(from, web.anchor, t);
-      web.tip.y += Math.sin(t * Math.PI) * 1.2 - (web.phase === 'miss' ? t * t * 8 : 0);
+      web.tip.y += Math.sin(t * Math.PI) * 1.2;
     }
     to = web.tip;
   } else if (active && zip.time >= 0 && zip.time < 0.3) {
