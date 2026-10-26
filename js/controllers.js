@@ -22,6 +22,7 @@ import {
 import { PersonCrowd, PersonRig } from './pedestrians.js';
 import { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } from './vehicle-lights.js';
 import { bryantParkLawn } from './landmarks.js';
+import { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan } from './spiderman.js';
 
 // js/controllers.js
 // Sculpted, non-blocky GTA 6-style 3D models, animations, and physics controllers
@@ -30,6 +31,7 @@ import { bryantParkLawn } from './landmarks.js';
 // 2. Car (Aerodynamic Sculpted NYC Medallion Yellow Taxi with Sloped Windshield & Clearcoat)
 // 3. Cyclist (Sculpted Road Cyclist with Drop-Bar Frame & Aero Helmet)
 // 4. Helicopter (Manhattan Sightseeing Twin-Turbine Chopper)
+// 5. Spider-Man (web-swinging hero, see spiderman.js)
 
 // Spawn on 5th Ave at 37th St, facing south down the avenue toward the Empire State Building (34th St)
 const SPAWN_Z = streetZ(37);
@@ -192,7 +194,7 @@ class ThirdPersonControllerManager {
     this.scene = scene;
     this.colliders = colliders;
     this._colliderCells = null; // built on first use, see nearColliders()
-    this.activeMode = 'car'; // 'person' | 'car' | 'cyclist' | 'helicopter'
+    this.activeMode = 'spider'; // 'spider' | 'person' | 'car' | 'cyclist' | 'helicopter'
 
     this.keys = {
       forward: false,
@@ -207,7 +209,8 @@ class ThirdPersonControllerManager {
       person: this.createPersonEntity(),
       car: this.createCarEntity(),
       cyclist: this.createCyclistEntity(),
-      helicopter: this.createHelicopterEntity()
+      helicopter: this.createHelicopterEntity(),
+      spider: createSpiderManEntity(scene)
     };
 
     Object.values(this.entities).forEach((ent) => {
@@ -362,6 +365,8 @@ class ThirdPersonControllerManager {
       if (ent.carState) ent.carState.value.x = ent.carState.value.w = 0;
     } else if (this.activeMode === 'cyclist') {
       ent.leanAngle = ent.leanPivot.rotation.z = 0;
+    } else if (this.activeMode === 'spider') {
+      resetSpiderMan(ent);
     } else if (heli) {
       ent.verticalSpeed = ent.pitchAngle = ent.rollAngle = 0;
       ent.tiltPivot.rotation.x = ent.tiltPivot.rotation.z = 0;
@@ -377,14 +382,14 @@ class ThirdPersonControllerManager {
   findTeleportPosition(x, z, heading, altitude) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
     const heli = this.activeMode === 'helicopter';
-    const radius = heli ? 4.5 : this.activeMode === 'person' ? 0.48 : 0.65;
+    const radius = heli ? 4.5 : this.activeMode === 'person' || this.activeMode === 'spider' ? 0.48 : 0.65;
     const sinH = Math.sin(heading), cosH = Math.cos(heading);
     const shape = collisionBody(this.activeMode, radius, heading, 0.1);
     const reach = Math.max(shape.extX, shape.extZ);
     const margin = heli ? 6000 : 0;
     const entity = this.getActiveEntity();
     // Conservative body cylinders, including the taxi's corners, bicycle wheels and helicopter tail/rotor.
-    const body = { person: [0.48, 1.9], car: [2.4, 1.9], cyclist: [1.0, 1.9], helicopter: [6.2, 3.2] };
+    const body = { person: [0.48, 1.9], car: [2.4, 1.9], cyclist: [1.0, 1.9], helicopter: [6.2, 3.2], spider: [0.48, 1.9] };
     const others = Object.values(this.entities).filter(e => e !== entity).map(e => ({
       x: e.position.x, z: e.position.z, radius: body[e.type][0],
       bottom: e.position.y - (e.type === 'helicopter' ? 0.7 : 0), top: e.position.y + body[e.type][1]
@@ -852,7 +857,7 @@ class ThirdPersonControllerManager {
     if (lawn && x > lawn.minX && x < lawn.maxX && z > lawn.minZ && z < lawn.maxZ) {
       return lawn.top;
     }
-    if (mode === 'person') {
+    if (mode === 'person' || mode === 'spider') {
       return this.isPointOnSidewalk(x, z) ? ISLAND_BOUNDS.sidewalkHeight : 0.0;
     }
     return 0.0;
@@ -1029,6 +1034,8 @@ class ThirdPersonControllerManager {
       this.updateCyclist(dt, elapsed);
     } else if (this.activeMode === 'helicopter') {
       this.updateHelicopter(dt, elapsed);
+    } else if (this.activeMode === 'spider') {
+      updateSpiderMan(this, this.entities.spider, dt);
     }
 
     for (const key of Object.keys(this.entities)) {
@@ -1054,6 +1061,7 @@ class ThirdPersonControllerManager {
     }
 
     this.poseCharacters(dt);
+    updateSpiderManVisuals(this.entities.spider, dt, this.activeMode === 'spider');
   }
 
   updatePerson(dt) {

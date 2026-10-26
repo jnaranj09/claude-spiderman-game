@@ -111,7 +111,7 @@ async function initApp() {
         controllerManager.setMode(mode);
         controllerManager.teleportActiveTo(p.x, p.z, p.heading, p.y);
       }
-      controllerManager.setMode(Object.hasOwn(controllerManager.entities, saved.activeMode) ? saved.activeMode : 'car');
+      controllerManager.setMode(Object.hasOwn(controllerManager.entities, saved.activeMode) ? saved.activeMode : 'spider');
     }
   } catch { /* Missing or unavailable storage does not prevent playing. */ }
 
@@ -243,7 +243,7 @@ async function initApp() {
   const elControlsHint = document.getElementById('hud-controls-hint');
   const gamepadControls = new GamepadControls(controllerManager, cameraSystem, {
     onCycleMode: (step) => {
-      const modes = ['person', 'car', 'cyclist', 'helicopter'];
+      const modes = ['spider', 'car', 'cyclist', 'helicopter'];
       selectMode(modes[(modes.indexOf(controllerManager.activeMode) + step + modes.length) % modes.length]);
     },
     onCycleCamera: cycleCamera,
@@ -253,13 +253,14 @@ async function initApp() {
 
   // Keyboard guide for each mode: [keys, action]
   const controlHints = {
+    spider: [[['Space'], 'Hold: Swing'], [['W'], 'Run / Pump'], [['A', 'D'], 'Steer'], [['Drag'], 'Orbit']],
     person: [[['W', 'S'], 'Walk / Run'], [['A', 'D'], 'Turn'], [['Space'], 'Jump'], [['Drag'], 'Orbit']],
     car: [[['W', 'S'], 'Drive / Reverse'], [['A', 'D'], 'Steer'], [['B'], 'Horn'], [['Drag'], 'Orbit']],
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Drag'], 'Orbit']],
     helicopter: [[['W', 'S'], 'Pitch'], [['A', 'D'], 'Yaw'], [['Space', 'E'], 'Ascend'], [['Q', 'C'], 'Descend']]
   };
   // Top speeds in mph (controllers.js caps them at 8.2, 36, 19 & 52 m/s): full scale of the speed meter
-  const topSpeedMph = { person: 18, car: 81, cyclist: 43, helicopter: 116 };
+  const topSpeedMph = { spider: 107, person: 18, car: 81, cyclist: 43, helicopter: 116 };
 
   function renderControlHints(mode) {
     if (!elControlsHint) return;
@@ -506,7 +507,7 @@ async function initApp() {
     if (isTypingInField(e)) return;
     switch (e.code) {
       case 'Digit1':
-        selectMode('person');
+        selectMode('spider');
         break;
       case 'Digit2':
         selectMode('car');
@@ -560,7 +561,12 @@ async function initApp() {
     }
   });
 
-  // Initialize the UI and chase camera around the restored player, or the default taxi on a first visit.
+  // Initialize the UI and chase camera around the restored player, or Spider-Man on a first visit.
+  controllerManager.entities.spider.onWebShot = () => audioSystem.thwip?.();
+  // ?debug exposes the simulation to the console (and to automated play tests)
+  if (new URLSearchParams(location.search).has('debug')) {
+    window.spiderDebug = { controllerManager, cameraSystem, renderer, scene, selectMode, teleportTo: (x, z, h) => teleportTo(x, z, h) };
+  }
   selectMode(controllerManager.activeMode);
   selectCamera('chase', true);
   selectTime('golden');

@@ -170,7 +170,7 @@ class CityAudioSources {
 
     for (let i = 0; i < this.players.length; i++) {
       const entity = this.players[i];
-      if (entity.mesh.visible === false || entity.position.y < -0.05) continue;
+      if (entity.mesh.visible === false || entity.position.y < -0.05 || entity.type === 'spider') continue;
       const { x, y, z } = entity.position;
       const player = entity === active;
       if (entity.type === 'person') {

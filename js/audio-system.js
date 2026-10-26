@@ -400,6 +400,34 @@ class CityAudioSystem {
     if (this.emit('horn', { id: entity, ...entity.position, heading: entity.heading, seed: 4 }, { intensity: 0.7 })) this.lastHorn = now;
   }
 
+  // Spider-Man's web shooter: a short burst of noise swept down through a band-pass filter
+  thwip() {
+    if (!this.ready || !this.enabled || this.context?.state !== 'running' || !this.mix) return;
+    const context = this.context;
+    const now = context.currentTime;
+    if (!this.thwipBuffer) {
+      const length = Math.round(context.sampleRate * 0.22);
+      this.thwipBuffer = context.createBuffer(1, length, context.sampleRate);
+      const data = this.thwipBuffer.getChannelData(0);
+      for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const source = context.createBufferSource();
+    source.buffer = this.thwipBuffer;
+    source.playbackRate.value = 0.9 + Math.random() * 0.25;
+    const filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 3.5;
+    filter.frequency.setValueAtTime(5200, now);
+    filter.frequency.exponentialRampToValueAtTime(900, now + 0.16);
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.5, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+    source.connect(filter).connect(gain).connect(this.mix);
+    source.start(now);
+    source.stop(now + 0.22);
+  }
+
   update(dt, elapsed, camera, night = false) {
     if (!this.ready || !this.enabled || this.context?.state !== 'running' || document.hidden) return;
     this.accumulator += dt;

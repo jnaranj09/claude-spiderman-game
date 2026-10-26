@@ -1444,3 +1444,37 @@ body.touch-enabled .pop-item { min-height: 44px; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Spider-Man ------------------------------------------------------------------------------------------------ */
+:root { --spider-red: #d0141f; --spider-blue: #1b3fa8; }
+
+.spider-bullet { display: inline-grid; place-items: center; background: var(--spider-red); color: #fff; }
+.spider-bullet .icon { width: 70%; height: 70%; }
+
+.touch-web-icon { display: none; }
+
+/* One big thumb button: hold to swing (it chains webs on its own), let go to fly */
+body[data-mode="spider"] .touch-action[data-touch-action="up"] {
+  width: 112px;
+  height: 112px;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: radial-gradient(circle at 50% 35%, #ef2a35, var(--spider-red) 58%, #8c0b13);
+  box-shadow: 0 10px 30px -8px rgba(208, 20, 31, 0.75), var(--shadow);
+}
+body[data-mode="spider"] .touch-action[data-touch-action="up"] .touch-action-glyph { display: none; }
+body[data-mode="spider"] .touch-action[data-touch-action="up"] .touch-web-icon { display: block; width: 40px; height: 40px; }
+body[data-mode="spider"] .touch-action[data-touch-action="up"].is-pressed {
+  color: #fff;
+  border-color: #fff;
+  background: radial-gradient(circle at 50% 35%, #4d73e8, var(--spider-blue) 60%, #0e2366);
+  transform: scale(0.94);
+}
+body[data-mode="spider"] .mode-indicator { background: var(--spider-red); }
+body[data-mode="spider"] .mode-btn.active,
+body[data-mode="spider"] .mode-btn.active:hover { color: #fff; }
