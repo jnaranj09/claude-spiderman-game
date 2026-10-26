@@ -18,7 +18,7 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 
 Hold **WEB** and Spider-Man jumps, fires a web at the nearest building and keeps chaining swings on his own. Steer
 with the stick. Let go to fly, and press again to catch the next building. **Tap** WEB to zip a web at the
-building ahead (or a roof a few metres below) for a smooth push forward that keeps your direction. Webs only ever leave his wrist when they will hit something: with
+building ahead (a roof or ledge up to 30 m below, or a street light) for a smooth push forward that keeps your direction. Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
 Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding WEB kicks

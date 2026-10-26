@@ -1219,7 +1219,8 @@ function buildStreetDetails(scene) {
   }
 
   scene.add(group);
-  return { group, footprints, signalClock, signalIntersections, audioSignals, update };
+  // lampSites: the cobra-head luminaires (x, y, z of each head), which Spider-Man can zip a web to
+  return { group, footprints, signalClock, signalIntersections, audioSignals, lampSites: cobraLampSites, update };
 }
 
 export { buildStreetDetails };

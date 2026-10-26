@@ -358,12 +358,37 @@ test('a zip can stick to a roof a little below him, and softens a fall without s
   assert.ok(ent.velocity.y < -8, 'still falling the frame after (no sudden stop)');
   step(controllers, ent, 0.25);
   assert.ok(ent.velocity.y > -12, 'the fall is softened');
-  // Too far down (12 m below the feet): out of reach
+  // Far below (25 m under the feet) is still in reach; 40 m is not
+  const below = world([{ ...roof, minZ: 30, maxZ: 90, maxY: 20 }]);
+  const high = spiderEntity(0, 45, 0);
+  high.state = 'air';
+  high.velocity.set(0, 0, 18);
+  step(below, high, 3 / 60, { up: true });
+  step(below, high, 1 / 60, { up: false });
+  assert.ok(high.zip.time >= 0, 'zipped to a roof 25 m down');
   const deep = world([{ ...roof, maxY: 6 }]);
-  const low = spiderEntity(0, 20, 0);
+  const low = spiderEntity(0, 46, 0);
   low.state = 'air';
   low.velocity.set(0, 0, 18);
   step(deep, low, 3 / 60, { up: true });
   step(deep, low, 1 / 60, { up: false });
   assert.equal(low.zip.time, -1);
+});
+
+test('a zip can stick to a street light ahead', () => {
+  const controllers = world([]);
+  controllers.lampSites = [
+    { x: 1.5, y: 8.02, z: 30 },  // ahead, a little to the side
+    { x: 0, y: 8.02, z: -30 },   // behind: never
+    { x: 60, y: 8.02, z: 20 }    // far off to the side: outside the fan
+  ];
+  const ent = spiderEntity(0, 12, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 16);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.ok(ent.zip.time >= 0, 'zipped');
+  assert.deepEqual(ent.zip.anchor.toArray(), [1.5, 8.02, 30], 'to the lamp head ahead');
+  step(controllers, ent, 0.3);
+  assert.ok(Math.abs(Math.atan2(ent.velocity.x, ent.velocity.z)) < 1e-9, 'still on his line');
 });

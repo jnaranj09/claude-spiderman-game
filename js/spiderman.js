@@ -36,7 +36,8 @@ const ZIP_PUSH = 10;             // m/s forward per zip
 const ZIP_MAX_SPEED = 38;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
 const ZIP_LIFT = 38;             // m/s² upward during the pull (against gravity's 22): softens a fall, never stops it dead
-const ZIP_BELOW = 6;             // m: how far under his feet a roof or ledge can be for a zip to stick to it
+const ZIP_BELOW = 30;            // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
+const ZIP_RANGE = 90;            // m
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
@@ -568,19 +569,60 @@ function stickSplat(ent, position, normal, held) {
   return splat;
 }
 
-// A tap: a web shot ahead that yanks him on, stuck to a real surface. A fan of rays (straight ahead first, then
-// up, down and wider) looks within ~90 m for a building face, or a roof or ledge up to a few metres under his feet;
-// with nothing in reach the tap does nothing (a web never sticks to thin air).
+// Street lights within `r` of (x, z): the luminaire heads street-details.js placed, bucketed once into 40 m cells
+function nearLamps(controllers, x, z, r) {
+  const sites = controllers.lampSites;
+  if (!sites || !sites.length) return [];
+  const CELL = 40;
+  if (!controllers._lampCells || controllers._lampCellsFor !== sites) {
+    controllers._lampCells = new Map();
+    controllers._lampCellsFor = sites;
+    for (const s of sites) {
+      const k = `${Math.floor(s.x / CELL)},${Math.floor(s.z / CELL)}`;
+      if (!controllers._lampCells.has(k)) controllers._lampCells.set(k, []);
+      controllers._lampCells.get(k).push(s);
+    }
+  }
+  const out = [];
+  for (let ix = Math.floor((x - r) / CELL); ix <= Math.floor((x + r) / CELL); ix++) {
+    for (let iz = Math.floor((z - r) / CELL); iz <= Math.floor((z + r) / CELL); iz++) {
+      const list = controllers._lampCells.get(`${ix},${iz}`);
+      if (list) out.push(...list);
+    }
+  }
+  return out;
+}
+
+// A tap: a web shot ahead that yanks him on, stuck to something real. A fan of rays (straight ahead first, then
+// up, down and wider) looks within ~90 m for a building face, roof or ledge (as far as 30 m under his feet), and
+// the street lights ahead count too; with nothing in reach the tap does nothing (a web never sticks to thin air).
 function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
   const lx = fz, lz = -fx;
   const lowest = feetY - ZIP_BELOW;
   const candidates = controllers.nearColliders(cx + fx * 45, cz + fz * 45, 60).filter((c) => c.maxY > lowest);
-  if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
-  for (const elev of [-0.3, -0.15, -0.05, 0.08, 0.25, 0.5, 0.85]) {
+  // Street lights: the lamp head itself, if it lies within the fan
+  for (const lamp of nearLamps(controllers, cx + fx * 45, cz + fz * 45, 60)) {
+    const dx = lamp.x - cx, dy = lamp.y - cy, dz = lamp.z - cz;
+    const ahead = dx * fx + dz * fz;
+    if (ahead < 6 || lamp.y < lowest) continue;
+    const lat = (dx * lx + dz * lz) / ahead;
+    const elev = dy / ahead;
+    const dist = Math.hypot(dx, dy, dz);
+    if (Math.abs(lat) > 0.5 || elev < -1.2 || elev > 0.9 || dist > ZIP_RANGE) continue;
+    const score = -Math.abs(lat) * 20 - Math.abs(elev) * 8 - dist * 0.05;
+    if (score > bestScore) {
+      bestScore = score;
+      best = out;
+      out.x = lamp.x; out.y = lamp.y; out.z = lamp.z;
+      out.bnx = 0; out.bny = 1; out.bnz = 0;
+      out.lamp = true;
+    }
+  }
+  for (const elev of [-1.0, -0.7, -0.45, -0.3, -0.15, -0.05, 0.08, 0.25, 0.5, 0.85]) {
     for (const lat of [0, 0.25, -0.25, 0.5, -0.5]) {
       _dir.set(fx + lx * lat, elev, fz + lz * lat).normalize();
-      let t = 90, found = false;
+      let t = ZIP_RANGE, found = false;
       for (const c of candidates) {
         if (rayBox(c, cx, cy, cz, _dir.x, _dir.y, _dir.z, t, _hit)) {
           t = _hit.t;
@@ -596,6 +638,7 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
         best = out;
         out.x = cx + _dir.x * t; out.y = cy + _dir.y * t; out.z = cz + _dir.z * t;
         out.bnx = out.nx; out.bny = out.ny; out.bnz = out.nz;
+        out.lamp = false;
       }
     }
   }
@@ -603,7 +646,7 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
   return best;
 }
 
-const _zipOut = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, bnx: 0, bny: 0, bnz: 0 };
+const _zipOut = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, bnx: 0, bny: 0, bnz: 0, lamp: false };
 
 function webZip(controllers, ent) {
   const p = ent.position;
@@ -614,7 +657,8 @@ function webZip(controllers, ent) {
   const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y);
   if (!target) return false;
   zip.anchor.set(target.x, target.y, target.z);
-  if (ent.webs) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
+  // A splat on a wall or roof (a street light just takes the strand round its head)
+  if (ent.webs && !target.lamp) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
   zip.time = 0;
   zip.side = ent.nextSide;
   ent.nextSide = -zip.side;

@@ -127,6 +127,8 @@ async function initApp() {
     } catch { /* Storage may be disabled or full. */ }
   }
 
+  // Street lights Spider-Man can zip to
+  controllerManager.lampSites = streetDetails.lampSites || [];
   const cameraSystem = new CameraSystem(renderer.domElement, controllerManager);
   const touchControls = new TouchControls(controllerManager);
   const soundButton = document.getElementById('btn-sound');
