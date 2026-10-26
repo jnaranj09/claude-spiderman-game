@@ -34,6 +34,7 @@ const WALL_RUN_MIN_SPEED = 9;    // hitting a wall faster than this runs along /
 const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
 const ZIP_PUSH = 10;             // m/s forward per zip
 const ZIP_MAX_SPEED = 38;
+const ZIP_MAX_TURN = 0.14;       // rad: the most a zip bends the line of travel towards its anchor
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
@@ -614,13 +615,17 @@ function webZip(controllers, ent) {
   zip.side = ent.nextSide;
   ent.nextSide = -zip.side;
   zip.cooldown = 0.28;
-  // Yanked towards where it stuck: forward speed gets a push (never a cut), and a little lift, so rapid taps glide
-  // on rather than climb
+  // The yank keeps him on his line: it only leans his heading a little (at most ~8 degrees) towards where the web
+  // stuck, rather than hauling him straight at it. Forward speed gets a push (never a cut), and a little lift, so
+  // rapid taps glide on rather than climb
   const tx = target.x - p.x, tz = target.z - p.z;
   const th = Math.hypot(tx, tz) || 1;
+  let lean = Math.atan2(tx, tz) - Math.atan2(dir.x, dir.z);
+  lean -= Math.round(lean / (Math.PI * 2)) * Math.PI * 2;
+  const yaw = Math.atan2(dir.x, dir.z) + Math.max(-ZIP_MAX_TURN, Math.min(ZIP_MAX_TURN, lean * 0.3));
   const hs = Math.hypot(v.x, v.z);
   const forward = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
-  v.set(tx / th * forward, Math.max(v.y, 0) * 0.4 + 4.5, tz / th * forward);
+  v.set(Math.sin(yaw) * forward, Math.max(v.y, 0) * 0.4 + 4.5, Math.cos(yaw) * forward);
   ent.state = 'air';
   ent.roll = 0;
   ent.flip = 1;

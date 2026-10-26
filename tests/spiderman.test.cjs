@@ -303,6 +303,7 @@ test('a tap zips forward on a web stuck to a building ahead', () => {
   assert.ok(onFace, `the web stuck to a building (${a.toArray().map((n) => n.toFixed(1))})`);
   assert.ok(a.z > tapper.position.z, 'ahead');
   assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) > 22, 'pushed forward');
+  assert.ok(Math.abs(Math.atan2(tapper.velocity.x, tapper.velocity.z)) <= 0.141, 'barely changes direction');
   step(controllers, tapper, 0.3, { up: false });
   for (let i = 0; i < 4; i++) tap();
   step(controllers, faller, 0.3 + 3 / 60 + 1 / 60 + 0.3 + 4 * (3 / 60 + 0.3));
@@ -325,4 +326,18 @@ test('over open ground no web is thrown at all, tapped or held', () => {
     shown ||= ent.web.phase !== 'none';
   }
   assert.equal(shown, false, 'no web flies out to miss');
+});
+
+test('a zip to a building off to the side only nudges the line of travel', () => {
+  // One tower ahead and well to the left
+  const controllers = world([{ minX: 20, maxX: 50, minZ: 40, maxZ: 80, minY: 0, maxY: 80 }]);
+  const ent = spiderEntity(0, 20, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 20);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.ok(ent.zip.time >= 0, 'zipped to the tower');
+  assert.ok(ent.zip.anchor.x >= 20 - 1e-6, 'the web is on the tower, off to the side');
+  const turn = Math.atan2(ent.velocity.x, ent.velocity.z);
+  assert.ok(turn > 0 && turn <= 0.141, `leaned only ${turn.toFixed(3)} rad towards it`);
 });
