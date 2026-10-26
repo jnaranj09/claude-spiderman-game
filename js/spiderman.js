@@ -320,6 +320,20 @@ function wallTopAt(controllers, x, y, z) {
 const _hit = { t: 0, nx: 0, ny: 0, nz: 0, top: 0 };
 const _dir = new THREE.Vector3();
 
+// Horizontal clearance to the facades on either side, for keeping swings in the middle of the street canyon.
+// Returns how far the middle of the canyon lies to the left (negative: to the right), or 0 in the open.
+function canyonCentreOffset(controllers, cx, cy, cz, fx, fz) {
+  const lx = fz, lz = -fx;
+  const reach = 45;
+  let left = reach, right = reach;
+  for (const c of controllers.nearColliders(cx, cz, reach)) {
+    if (c.maxY < cy + 2) continue;
+    if (rayBox(c, cx, cy, cz, lx, 0, lz, left, _hit)) left = _hit.t;
+    if (rayBox(c, cx, cy, cz, -lx, 0, -lz, right, _hit)) right = _hit.t;
+  }
+  return left < reach && right < reach ? (left - right) * 0.5 : 0;
+}
+
 // Ray casts a fan of candidate web directions, ahead and up, favouring the side the next hand swings from.
 // Returns the best anchor on a real building surface, or null over open ground (parks, rivers, low rooftops).
 function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
@@ -347,7 +361,7 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
         // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
         // swinging looks best, rather than climbing a little higher with every web until the buildings run out
         const bottom = hy - tBest * 0.94;
-        const score = -Math.abs(tBest - 40) * 0.25 - Math.abs(rise - 26) * 0.2 - Math.abs(bottom - ground - 10) * 0.3
+        const score = -Math.abs(tBest - 40) * 0.25 - Math.abs(rise - 26) * 0.2 - Math.abs(bottom - ground - 12) * 0.3
           + ahead * 0.2 + (s === side ? 5 : 0)
           - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
         if (score > bestScore) {
@@ -361,6 +375,25 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
     }
   }
   return best;
+}
+
+// Keeps the follow camera out of the buildings: swinging and climbing put Spider-Man right against the facades,
+// where an unobstructed chase camera would end up inside them. Pulls `camera` in along the line from `target`.
+function clipCameraToBuildings(controllers, target, camera) {
+  const dx = camera.x - target.x, dy = camera.y - target.y, dz = camera.z - target.z;
+  const dist = Math.hypot(dx, dy, dz);
+  if (dist < 0.5) return false;
+  const ux = dx / dist, uy = dy / dist, uz = dz / dist;
+  let t = dist;
+  const midX = (camera.x + target.x) * 0.5, midZ = (camera.z + target.z) * 0.5;
+  for (const c of controllers.nearColliders(midX, midZ, dist * 0.5 + 1)) {
+    if (c.maxY < Math.min(camera.y, target.y)) continue;
+    if (rayBox(c, target.x, target.y, target.z, ux, uy, uz, t, _hit)) t = _hit.t;
+  }
+  if (t >= dist) return false;
+  const keep = Math.max(0.6, t - 0.45);
+  camera.set(target.x + ux * keep, target.y + uy * keep, target.z + uz * keep);
+  return true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -418,8 +451,8 @@ function createSpiderManEntity(scene) {
     bodyQuat: new THREE.Quaternion(),
     onWebShot: null,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
-    chaseDistance: 6.2,
-    chaseHeight: 2.1
+    chaseDistance: 4.6,
+    chaseHeight: 1.7
   };
 }
 
@@ -433,6 +466,30 @@ function resetSpiderMan(ent) {
   ent.crouch = 0;
   ent.flip = 1;
   ent.bodyQuat.setFromAxisAngle(UP, 0);
+}
+
+// Puts Spider-Man on the nearest rooftop of a mid-rise (12-60 m) within ~30 m of where he stands: every swing
+// starts better from up high, and it's where he belongs. Stays put when there is none (parks, waterfronts).
+function perchOnRooftop(controllers, ent) {
+  const p = ent.position;
+  for (let r = 0; r <= 30; r += 3) {
+    const steps = r ? 16 : 1;
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+      let top = -Infinity;
+      for (const c of controllers.nearColliders(x, z, 0.5)) {
+        if (footprintContains(c, x, z, -1.2)) top = Math.max(top, c.maxY);
+      }
+      if (top >= 12 && top <= 60) {
+        p.set(x, top, z);
+        ent.velocity.set(0, 0, 0);
+        ent.state = 'ground';
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function releaseSplat(ent) {
@@ -486,7 +543,9 @@ function shootWeb(controllers, ent) {
   const ox = anchor.x - p.x, oz = anchor.z - p.z;
   const ahead = ox * dir.x + oz * dir.z;
   const latX = ox - dir.x * ahead, latZ = oz - dir.z * ahead;
-  web.pivot.set(anchor.x - latX * PIVOT_PULL, anchor.y, anchor.z - latZ * PIVOT_PULL);
+  // ...and eased towards the middle of the street, so a chain of swings settles into the centre of the canyon
+  const centre = canyonCentreOffset(controllers, p.x, cy, p.z, dir.x, dir.z) * 0.6;
+  web.pivot.set(anchor.x - latX * PIVOT_PULL + dir.z * centre, anchor.y, anchor.z - latZ * PIVOT_PULL - dir.x * centre);
   if (typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
 }
 
@@ -498,7 +557,7 @@ function attachWeb(controllers, ent) {
   // Keep the bottom of the arc clear of the street: a short web reels the player up instead of dragging them
   const ground = controllers.getGroundHeight(p.x, p.z, 'person');
   web.length = dist;
-  web.targetLength = Math.max(6, Math.min(dist * 0.94, web.pivot.y - ground - 3.2));
+  web.targetLength = Math.max(6, Math.min(dist * 0.94, web.pivot.y - ground - 4.5));
   web.phase = 'attached';
   ent.state = 'swing';
   // The splat stays on the wall while the web holds, then fades
@@ -965,4 +1024,4 @@ function updateSpiderManVisuals(ent, dt, active) {
   webs.group.updateMatrixWorld(true);
 }
 
-export { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan, findAnchor, rayBox, footprintContains };
+export { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan, perchOnRooftop, clipCameraToBuildings, findAnchor, rayBox, footprintContains };

@@ -12,6 +12,7 @@ import { buildStreetDetails } from './street-details.js';
 import { createTrafficSystem, createHighwayTraffic } from './traffic.js';
 import { buildRoadPaint } from './road-paint.js';
 import { ThirdPersonControllerManager } from './controllers.js';
+import { clipCameraToBuildings } from './spiderman.js';
 import { TouchControls } from './touch-controls.js';
 import { GamepadControls } from './gamepad-controls.js';
 import { CameraSystem, CAMERA_PRESETS } from './cameras.js';
@@ -111,7 +112,9 @@ async function initApp() {
         controllerManager.setMode(mode);
         controllerManager.teleportActiveTo(p.x, p.z, p.heading, p.y);
       }
-      controllerManager.setMode(Object.hasOwn(controllerManager.entities, saved.activeMode) ? saved.activeMode : 'spider');
+      // Walking has no button any more: Spider-Man took over that slot
+      const restored = Object.hasOwn(controllerManager.entities, saved.activeMode) && saved.activeMode !== 'person';
+      controllerManager.setMode(restored ? saved.activeMode : 'spider');
     }
   } catch { /* Missing or unavailable storage does not prevent playing. */ }
 
@@ -668,6 +671,7 @@ async function initApp() {
   let fpsTimer = 0;
   let nextPlayerSave = 0;
   let warmedUp = false; // see the first frame below
+  const cameraTarget = new THREE.Vector3();
 
   if (elFps) elFps.textContent = '60';
 
@@ -681,6 +685,23 @@ async function initApp() {
     gamepadControls.update(dt);
     controllerManager.update(dt, elapsed);
     cameraSystem.update(dt, elapsed);
+    // Spider-Man: the follow cameras widen with speed, for a sense of rush on a small screen
+    if (cameraSystem.getActivePreset().category === 'follow') {
+      const preset = cameraSystem.getActivePreset();
+      const rush = controllerManager.activeMode === 'spider' ? Math.min(16, Math.max(0, cameraSystem.smoothedSpeed - 8) * 0.5) : 0;
+      const fov = preset.fov + rush;
+      if (Math.abs(fov - cameraSystem.camera.fov) > 0.05) {
+        cameraSystem.camera.fov = fov;
+        cameraSystem.camera.updateProjectionMatrix();
+      }
+      if (controllerManager.activeMode === 'spider' && preset.id !== 'pov') {
+        const spider = controllerManager.getActiveEntity();
+        cameraTarget.set(spider.position.x, spider.position.y + 1.3, spider.position.z);
+        if (clipCameraToBuildings(controllerManager, cameraTarget, cameraSystem.camera.position)) {
+          cameraSystem.camera.lookAt(cameraSystem.currentLookAt);
+        }
+      }
+    }
     streetDetails.signalClock.value = elapsed;
     trafficSystem.update(
       dt,

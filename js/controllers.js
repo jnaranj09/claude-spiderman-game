@@ -22,7 +22,7 @@ import {
 import { PersonCrowd, PersonRig } from './pedestrians.js';
 import { HEADLIGHTS, createVehicleHeadlight, placeVehicleHeadlight } from './vehicle-lights.js';
 import { bryantParkLawn } from './landmarks.js';
-import { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan } from './spiderman.js';
+import { createSpiderManEntity, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan, perchOnRooftop } from './spiderman.js';
 
 // js/controllers.js
 // Sculpted, non-blocky GTA 6-style 3D models, animations, and physics controllers
@@ -229,6 +229,9 @@ class ThirdPersonControllerManager {
       }
     });
 
+    // Spider-Man starts up on a rooftop over 5th Avenue
+    perchOnRooftop(this, this.entities.spider);
+
     this.bindKeyboard();
   }
 
@@ -367,6 +370,9 @@ class ThirdPersonControllerManager {
       ent.leanAngle = ent.leanPivot.rotation.z = 0;
     } else if (this.activeMode === 'spider') {
       resetSpiderMan(ent);
+      // A saved position comes back exactly as it was (often up on a roof, which the ground search would avoid)
+      if (savedAltitude !== null && Number.isFinite(savedAltitude)) ent.position.set(x, Math.max(0, savedAltitude), z);
+      else perchOnRooftop(this, ent);
     } else if (heli) {
       ent.verticalSpeed = ent.pitchAngle = ent.rollAngle = 0;
       ent.tiltPivot.rotation.x = ent.tiltPivot.rotation.z = 0;
