@@ -302,9 +302,10 @@ test('a tap zips forward on a web stuck to a building ahead', () => {
     && a.z <= c.maxZ + 1e-6 && a.y <= c.maxY + 1e-6);
   assert.ok(onFace, `the web stuck to a building (${a.toArray().map((n) => n.toFixed(1))})`);
   assert.ok(a.z > tapper.position.z, 'ahead');
-  assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) > 22, 'pushed forward');
-  assert.ok(Math.abs(Math.atan2(tapper.velocity.x, tapper.velocity.z)) <= 0.141, 'barely changes direction');
+  assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) < 18, 'the push builds up, not all at once');
   step(controllers, tapper, 0.3, { up: false });
+  assert.ok(Math.hypot(tapper.velocity.x, tapper.velocity.z) > 22, 'pushed forward');
+  assert.ok(Math.abs(Math.atan2(tapper.velocity.x, tapper.velocity.z)) < 1e-9, 'same direction');
   for (let i = 0; i < 4; i++) tap();
   step(controllers, faller, 0.3 + 3 / 60 + 1 / 60 + 0.3 + 4 * (3 / 60 + 0.3));
   assert.ok(tapper.position.z > faller.position.z + 20, 'went further');
@@ -328,7 +329,7 @@ test('over open ground no web is thrown at all, tapped or held', () => {
   assert.equal(shown, false, 'no web flies out to miss');
 });
 
-test('a zip to a building off to the side only nudges the line of travel', () => {
+test('a zip to a building off to the side keeps the line of travel', () => {
   // One tower ahead and well to the left
   const controllers = world([{ minX: 20, maxX: 50, minZ: 40, maxZ: 80, minY: 0, maxY: 80 }]);
   const ent = spiderEntity(0, 20, 0);
@@ -338,6 +339,31 @@ test('a zip to a building off to the side only nudges the line of travel', () =>
   step(controllers, ent, 1 / 60, { up: false });
   assert.ok(ent.zip.time >= 0, 'zipped to the tower');
   assert.ok(ent.zip.anchor.x >= 20 - 1e-6, 'the web is on the tower, off to the side');
-  const turn = Math.atan2(ent.velocity.x, ent.velocity.z);
-  assert.ok(turn > 0 && turn <= 0.141, `leaned only ${turn.toFixed(3)} rad towards it`);
+  step(controllers, ent, 0.3);
+  assert.ok(Math.abs(Math.atan2(ent.velocity.x, ent.velocity.z)) < 1e-9, 'not pulled off his line');
+  assert.ok(ent.velocity.z > 25, 'but still pushed on');
+});
+
+test('a zip can stick to a roof a little below him, and softens a fall without stopping it', () => {
+  // A low block ahead whose roof is 4 m under his feet; nothing taller anywhere
+  const roof = { minX: -20, maxX: 20, minZ: 15, maxZ: 60, minY: 0, maxY: 16 };
+  const controllers = world([roof]);
+  const ent = spiderEntity(0, 20, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, -12, 18);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.ok(ent.zip.time >= 0, 'zipped');
+  assert.ok(ent.zip.anchor.y <= 16 + 1e-6 && ent.zip.anchor.y < ent.position.y, 'on the roof below');
+  assert.ok(ent.velocity.y < -8, 'still falling the frame after (no sudden stop)');
+  step(controllers, ent, 0.25);
+  assert.ok(ent.velocity.y > -12, 'the fall is softened');
+  // Too far down (12 m below the feet): out of reach
+  const deep = world([{ ...roof, maxY: 6 }]);
+  const low = spiderEntity(0, 20, 0);
+  low.state = 'air';
+  low.velocity.set(0, 0, 18);
+  step(deep, low, 3 / 60, { up: true });
+  step(deep, low, 1 / 60, { up: false });
+  assert.equal(low.zip.time, -1);
 });

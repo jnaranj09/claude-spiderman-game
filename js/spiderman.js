@@ -34,7 +34,9 @@ const WALL_RUN_MIN_SPEED = 9;    // hitting a wall faster than this runs along /
 const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
 const ZIP_PUSH = 10;             // m/s forward per zip
 const ZIP_MAX_SPEED = 38;
-const ZIP_MAX_TURN = 0.14;       // rad: the most a zip bends the line of travel towards its anchor
+const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
+const ZIP_LIFT = 38;             // m/s² upward during the pull (against gravity's 22): softens a fall, never stops it dead
+const ZIP_BELOW = 6;             // m: how far under his feet a roof or ledge can be for a zip to stick to it
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
@@ -360,7 +362,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0 },
+    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0, pull: 0, targetSpeed: 0 },
     nextSide: 1,
     webHeld: false,
     pressTime: 0,
@@ -403,6 +405,7 @@ function resetSpiderMan(ent) {
   ent.state = 'ground';
   ent.web.phase = 'none';
   ent.zip.time = -1;
+  ent.zip.pull = 0;
   releaseSplat(ent);
   ent.webCooldown = 0;
   ent.crouch = 0;
@@ -565,15 +568,16 @@ function stickSplat(ent, position, normal, held) {
   return splat;
 }
 
-// A tap: a web shot ahead that yanks him on towards a real surface. A fan of rays (straight ahead first, then
-// higher and wider) looks for any building face within ~90 m at or above his height; with nothing in reach the tap
-// does nothing (a web never sticks to thin air).
-function findZipTarget(controllers, cx, cy, cz, fx, fz, out) {
+// A tap: a web shot ahead that yanks him on, stuck to a real surface. A fan of rays (straight ahead first, then
+// up, down and wider) looks within ~90 m for a building face, or a roof or ledge up to a few metres under his feet;
+// with nothing in reach the tap does nothing (a web never sticks to thin air).
+function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
   const lx = fz, lz = -fx;
-  const candidates = controllers.nearColliders(cx + fx * 45, cz + fz * 45, 60).filter((c) => c.maxY > cy - 1);
+  const lowest = feetY - ZIP_BELOW;
+  const candidates = controllers.nearColliders(cx + fx * 45, cz + fz * 45, 60).filter((c) => c.maxY > lowest);
   if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
-  for (const elev of [0.12, 0.3, 0.55, 0.85]) {
+  for (const elev of [-0.3, -0.15, -0.05, 0.08, 0.25, 0.5, 0.85]) {
     for (const lat of [0, 0.25, -0.25, 0.5, -0.5]) {
       _dir.set(fx + lx * lat, elev, fz + lz * lat).normalize();
       let t = 90, found = false;
@@ -584,9 +588,9 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out) {
           out.nx = _hit.nx; out.ny = _hit.ny; out.nz = _hit.nz;
         }
       }
-      if (!found || t < 6) continue;
-      // Straight ahead and not too steep reads best; nearer is snappier
-      const score = -Math.abs(lat) * 20 - elev * 8 - t * 0.05;
+      if (!found || t < 6 || cy + _dir.y * t < lowest) continue;
+      // Straight ahead and level reads best; nearer is snappier
+      const score = -Math.abs(lat) * 20 - Math.abs(elev) * 8 - t * 0.05;
       if (score > bestScore) {
         bestScore = score;
         best = out;
@@ -607,7 +611,7 @@ function webZip(controllers, ent) {
   const zip = ent.zip;
   const dir = travelDirection(ent);
   const cy = p.y + 1.3;
-  const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut);
+  const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y);
   if (!target) return false;
   zip.anchor.set(target.x, target.y, target.z);
   if (ent.webs) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
@@ -615,21 +619,21 @@ function webZip(controllers, ent) {
   zip.side = ent.nextSide;
   ent.nextSide = -zip.side;
   zip.cooldown = 0.28;
-  // The yank keeps him on his line: it only leans his heading a little (at most ~8 degrees) towards where the web
-  // stuck, rather than hauling him straight at it. Forward speed gets a push (never a cut), and a little lift, so
-  // rapid taps glide on rather than climb
-  const tx = target.x - p.x, tz = target.z - p.z;
-  const th = Math.hypot(tx, tz) || 1;
-  let lean = Math.atan2(tx, tz) - Math.atan2(dir.x, dir.z);
-  lean -= Math.round(lean / (Math.PI * 2)) * Math.PI * 2;
-  const yaw = Math.atan2(dir.x, dir.z) + Math.max(-ZIP_MAX_TURN, Math.min(ZIP_MAX_TURN, lean * 0.3));
+  // The yank never changes his direction (not quite physics, but it keeps the flight readable): over the next
+  // quarter second it builds his speed along the way he's already going and lifts against gravity (see the air
+  // update), never cutting speed or stopping a fall dead
   const hs = Math.hypot(v.x, v.z);
-  const forward = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
-  v.set(Math.sin(yaw) * forward, Math.max(v.y, 0) * 0.4 + 4.5, Math.cos(yaw) * forward);
+  zip.targetSpeed = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
+  zip.pull = ZIP_PULL_TIME;
+  if (hs < 3) {
+    // From a near standstill there's no line yet: start one along his facing
+    v.x = dir.x * 3;
+    v.z = dir.z * 3;
+  }
   ent.state = 'air';
   ent.roll = 0;
   ent.flip = 1;
-  if (typeof ent.onWebShot === 'function') ent.onWebShot(th);
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(Math.hypot(target.x - p.x, target.z - p.z));
   return true;
 }
 
@@ -752,6 +756,16 @@ function updateSpiderMan(controllers, ent, dt) {
     if (Math.abs(turn) < 0.05) alignToGrid(ent, dt);
     const dir = travelDirection(ent);
     const hs = Math.hypot(v.x, v.z);
+    if (ent.state === 'air' && zip.pull > 0) {
+      // A zip's pull: speed builds along the current line of travel only, with lift against gravity
+      const step = Math.min(dt, zip.pull);
+      zip.pull -= step;
+      const accel = ZIP_PUSH / ZIP_PULL_TIME;
+      const gain = Math.min(accel * step, Math.max(0, zip.targetSpeed - hs));
+      v.x += dir.x * gain;
+      v.z += dir.z * gain;
+      if (v.y < 4) v.y = Math.min(4, v.y + ZIP_LIFT * step);
+    }
     if (ent.state === 'air') {
       // Light air control and drag; terminal velocity keeps long falls readable
       if (fwdIn && hs < 16) { v.x += dir.x * 7 * fwdIn * dt; v.z += dir.z * 7 * fwdIn * dt; }
@@ -976,6 +990,9 @@ function updateSpiderMan(controllers, ent, dt) {
     }
     ent.state = 'air';
   }
+
+  // A zip's pull only carries him through the air: landing, a new swing or a wall ends it
+  if (ent.state !== 'air') zip.pull = 0;
 
   // Never below the street (tunnels, piers or a teleport onto a roof edge)
   const floor = controllers.getGroundHeight(p.x, p.z, 'person');
