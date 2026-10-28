@@ -157,17 +157,115 @@ function applyRigToBones(model) {
 // Webs: the strand from the hand to the anchor, and splats that stay on the walls for a few seconds
 // ---------------------------------------------------------------------------------------------------------------
 
+// The web line: a few hair-thin fibres (a core and two twisted round it, plus three that only show where the
+// line frays out into a fan on the wall), each a three-sided tube. Rebuilt in place every frame it's drawn.
+const FIBRES = [
+  // radius, distance from the core, twist phase, shade
+  { r: 0.0075, off: 0, phase: 0, shade: 1 },
+  { r: 0.0045, off: 0.014, phase: 0, shade: 0.86 },
+  { r: 0.0045, off: 0.014, phase: Math.PI, shade: 0.9 },
+  { r: 0.0035, off: 0.004, phase: Math.PI * 0.5, shade: 0.82 },
+  { r: 0.0035, off: 0.004, phase: Math.PI * 1.2, shade: 0.88 },
+  { r: 0.0035, off: 0.004, phase: Math.PI * 1.7, shade: 0.84 }
+];
+const STRAND_MAIN = 72;  // segments along the line up to the fray
+const STRAND_FRAY = 14;  // segments through the fray
+const STRAND_RINGS = STRAND_MAIN + STRAND_FRAY + 1;
+
+function buildStrand() {
+  const geo = new THREE.BufferGeometry();
+  const verts = FIBRES.length * STRAND_RINGS * 3;
+  const pos = new Float32Array(verts * 3);
+  const col = new Float32Array(verts * 3);
+  const index = [];
+  FIBRES.forEach((f, i) => {
+    const base = i * STRAND_RINGS * 3;
+    for (let k = 0; k < STRAND_RINGS * 3; k++) {
+      // A little lighter on one side of each fibre, so the twist reads
+      const c = f.shade * (k % 3 === 0 ? 1 : 0.8);
+      col.set([c * 0.96, c * 0.97, c], (base + k) * 3);
+    }
+    for (let ring = 0; ring < STRAND_RINGS - 1; ring++) {
+      for (let side = 0; side < 3; side++) {
+        const a = base + ring * 3 + side, b = base + ring * 3 + (side + 1) % 3;
+        index.push(a, a + 3, b, b, a + 3, b + 3);
+      }
+    }
+  });
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(index);
+  const mat = new THREE.MeshBasicNodeMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+const _sd = new THREE.Vector3();
+const _sa = new THREE.Vector3();
+const _sb = new THREE.Vector3();
+const _fu = new THREE.Vector3();
+const _fw = new THREE.Vector3();
+const _sp = new THREE.Vector3();
+
+// Lays the strand from `from` to `to` (positions relative to `from`, where the mesh sits). `fray` (0..1) fans the
+// end out over the surface with outward normal `normal` (a zero normal fans it round the line itself)
+function layStrand(mesh, from, to, fray, normal) {
+  const pos = mesh.geometry.attributes.position;
+  const arr = pos.array;
+  mesh.position.copy(from);
+  _sd.subVectors(to, from);
+  const len = Math.max(_sd.length(), 1e-3);
+  _sd.multiplyScalar(1 / len);
+  // A frame round the line...
+  _sa.set(Math.abs(_sd.y) < 0.9 ? 0 : 1, Math.abs(_sd.y) < 0.9 ? 1 : 0, 0).cross(_sd).normalize();
+  _sb.crossVectors(_sd, _sa);
+  // ...and one in the surface it sticks to, for the fan
+  if (normal.lengthSq() > 0.5) {
+    _fu.set(Math.abs(normal.y) < 0.9 ? 0 : 1, Math.abs(normal.y) < 0.9 ? 1 : 0, 0).cross(normal).normalize();
+    _fw.crossVectors(normal, _fu);
+  } else {
+    _fu.copy(_sa);
+    _fw.copy(_sb);
+  }
+  const frayLen = Math.min(1.6, len * 0.2) * fray;
+  const mainLen = len - frayLen;
+  // Twisted, but no more turns than the segments can draw
+  const twist = Math.min(len / 0.9, STRAND_MAIN / 6) * Math.PI * 2 / len;
+  FIBRES.forEach((f, i) => {
+    // Where this fibre lands in the fan: the core in the middle, the others spread around it
+    const fanAngle = f.phase + i * 0.7;
+    const fanR = i === 0 ? 0 : 0.18 + 0.07 * (i % 3);
+    for (let ring = 0; ring < STRAND_RINGS; ring++) {
+      const d = ring <= STRAND_MAIN ? mainLen * ring / STRAND_MAIN
+        : mainLen + frayLen * (ring - STRAND_MAIN) / STRAND_FRAY;
+      const s = frayLen > 0 ? Math.max(0, (d - mainLen) / frayLen) : 0;
+      const spread = s * s * (3 - 2 * s);
+      const ang = f.phase + d * twist;
+      const off = f.off * (1 - spread);
+      _sp.copy(_sd).multiplyScalar(d)
+        .addScaledVector(_sa, Math.cos(ang) * off).addScaledVector(_sb, Math.sin(ang) * off)
+        .addScaledVector(_fu, Math.cos(fanAngle) * fanR * spread).addScaledVector(_fw, Math.sin(fanAngle) * fanR * spread);
+      // The fibres taper a little towards the fan
+      const r = f.r * (1 - 0.4 * spread);
+      for (let side = 0; side < 3; side++) {
+        const t = side * Math.PI * 2 / 3;
+        const o = ((i * STRAND_RINGS + ring) * 3 + side) * 3;
+        arr[o] = _sp.x + (_sa.x * Math.cos(t) + _sb.x * Math.sin(t)) * r;
+        arr[o + 1] = _sp.y + (_sa.y * Math.cos(t) + _sb.y * Math.sin(t)) * r;
+        arr[o + 2] = _sp.z + (_sa.z * Math.cos(t) + _sb.z * Math.sin(t)) * r;
+      }
+    }
+  });
+  pos.needsUpdate = true;
+}
+
 function buildWebs(scene) {
   const group = new THREE.Group();
   group.name = 'SpiderWebs';
-  const strandGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
-  strandGeo.translate(0, 0.5, 0);
-  const strandMat = new THREE.MeshBasicNodeMaterial({ color: 0xf4f6fa });
-  const strand = new THREE.Mesh(strandGeo, strandMat);
-  strand.frustumCulled = false;
+  const strand = buildStrand();
   // Parked out of sight (rather than hidden) so its pipeline compiles behind the loading screen
   strand.position.set(0, -500, 0);
-  strand.scale.setScalar(0.001);
   group.add(strand);
 
   const splatTex = createWebSplatTexture();
@@ -371,7 +469,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0, pull: 0, targetSpeed: 0, chain: 0 },
+    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0,
+      targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
     webSpent: false, // this press already threw its web
@@ -687,6 +786,8 @@ function webZip(controllers, ent) {
   const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y);
   if (!target) return false;
   zip.anchor.set(target.x, target.y, target.z);
+  if (target.lamp) zip.normal.set(0, 0, 0);
+  else zip.normal.set(target.nx, target.ny, target.nz);
   // A splat on a wall or roof (a street light just takes the strand round its head)
   if (ent.webs && !target.lamp) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
   zip.time = 0;
@@ -1405,11 +1506,12 @@ function updateSpiderManVisuals(ent, dt, active) {
   applyRigToBones(model);
 
   const strand = webs.strand;
-  let from = null, to = null;
+  let from = null, to = null, fray = 0, normal = web.normal;
   if (active && web.phase !== 'none') {
     from = model.hands[web.side > 0 ? 0 : 1];
     if (web.phase === 'attached') {
       web.tip.copy(web.anchor);
+      fray = 1;
     } else {
       // Flying out: the tip races to the anchor along a slight arc
       const t = Math.min(1, web.travelled / Math.max(1, web.distance));
@@ -1421,16 +1523,13 @@ function updateSpiderManVisuals(ent, dt, active) {
     from = model.hands[zip.side > 0 ? 0 : 1];
     zip.tip.lerpVectors(from, zip.anchor, Math.min(1, zip.time / 0.07));
     to = zip.tip;
+    fray = zip.time >= 0.07 ? 1 : 0;
+    normal = zip.normal;
   }
   if (to) {
-    _seg.subVectors(to, from);
-    const len = _seg.length();
-    strand.position.copy(from);
-    strand.quaternion.setFromUnitVectors(UP, _seg.multiplyScalar(1 / Math.max(len, 1e-4)));
-    strand.scale.set(0.028, len, 0.028);
+    layStrand(strand, from, to, fray, normal);
   } else {
     strand.position.set(0, -500, 0);
-    strand.scale.setScalar(0.001);
   }
 
   for (const splat of webs.splats) {
