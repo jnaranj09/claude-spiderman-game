@@ -150,15 +150,21 @@ test('holding keeps him on one web, swinging to and fro, until the button is let
   let i = 0;
   while (ent.web.phase !== 'attached' && i++ < 600) spider.updateSpiderMan(controllers, ent, 1 / 60);
   const anchor = ent.web.anchor.toArray();
-  let swungBack = false;
+  let swungBack = false, earlyTurn = false, facedBack = false;
   for (let k = 0; k < 60 * 8; k++) {
+    const goingBack = ent.velocity.z < -1.5;
     spider.updateSpiderMan(controllers, ent, 1 / 60);
     assert.equal(ent.web.phase, 'attached', 'still on the web');
-    swungBack ||= ent.velocity.z < -1;
+    // Until he's really moving back, he keeps facing down the avenue (slowing at the top doesn't turn him)
+    if (!swungBack && !goingBack) earlyTurn ||= Math.cos(ent.heading) < 0.9;
+    swungBack ||= goingBack;
+    facedBack ||= Math.cos(ent.heading) < -0.9;
   }
   assert.deepEqual(ent.web.anchor.toArray(), anchor, 'the same web throughout');
   assert.ok(swungBack, 'it swings back like a pendulum');
-  assert.ok(Math.abs(Math.sin(ent.heading)) < 0.2 && Math.cos(ent.heading) > 0, 'still facing down the avenue');
+  assert.equal(earlyTurn, false, 'no turn before swinging back');
+  assert.ok(facedBack, 'then he turns to face the way he swings');
+  assert.ok(ent.velocity.length() < 12, 'and hanging on, the swing dies down');
   // If the web goes some other way (a wall in the way), holding on throws no other one
   const held = spiderEntity(-6, 30, 0, 0);
   held.state = 'air';
@@ -170,6 +176,28 @@ test('holding keeps him on one web, swinging to and fro, until the button is let
   controllers.keys.up = false;
   spider.updateSpiderMan(controllers, ent, 1 / 60);
   assert.equal(ent.web.phase, 'none', 'let go');
+});
+
+test('the web catches a fall smoothly, without a hard kink', () => {
+  for (const fall of [0, -10, -20]) {
+    const controllers = world(avenue());
+    const ent = spiderEntity(-6, 30, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, fall, 14);
+    controllers.keys.up = true;
+    let maxAccel = 0, caught = false;
+    for (let i = 0; i < 240; i++) {
+      const [x, y, z] = ent.velocity.toArray();
+      spider.updateSpiderMan(controllers, ent, 1 / 60);
+      if (ent.web.phase !== 'attached' || ent.web.swingTime > 1.5) continue;
+      const v = ent.velocity;
+      maxAccel = Math.max(maxAccel, Math.hypot(v.x - x, v.y - y, v.z - z) * 60);
+      caught ||= ent.web.caught;
+    }
+    // (a rigid rope stops a 20 m/s fall in one frame: some 600 m/s²)
+    assert.ok(maxAccel < 160, `falling at ${-fall} m/s: ${maxAccel.toFixed(0)} m/s² at most`);
+    assert.ok(caught, 'and then the web holds firm');
+  }
 });
 
 test('press, swing, release on the way up and press again: swings chain straight down the avenue', () => {
@@ -193,7 +221,7 @@ test('press, swing, release on the way up and press again: swings chain straight
       if (last !== 'attached') swings++;
       const p = ent.position;
       const d = Math.hypot(p.x - ent.web.pivot.x, p.y + 1 - ent.web.pivot.y, p.z - ent.web.pivot.z);
-      maxRopeError = Math.max(maxRopeError, d - ent.web.length);
+      if (ent.web.caught) maxRopeError = Math.max(maxRopeError, d - ent.web.length);
     }
     last = ent.web.phase;
     assert.equal(insideAny(colliders, ent.position), false, `inside a building at ${ent.position.toArray()}`);
@@ -202,7 +230,7 @@ test('press, swing, release on the way up and press again: swings chain straight
   }
   assert.ok(swings >= 5, `${swings} swings`);
   assert.ok(ent.position.z > 300, `travelled ${ent.position.z.toFixed(0)} m`);
-  assert.ok(maxRopeError < 0.6, 'the web never stretches (beyond one step of a reel-in)');
+  assert.ok(maxRopeError < 0.6, 'once caught, the web barely stretches');
   assert.ok(minY > 1 && maxY < 60, `stays in the canyon (${minY.toFixed(1)}-${maxY.toFixed(1)} m)`);
   assert.ok(Math.abs(Math.sin(ent.heading)) < 0.1, 'still facing down the avenue');
 });

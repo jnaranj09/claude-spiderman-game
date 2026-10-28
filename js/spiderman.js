@@ -25,6 +25,11 @@ const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the groun
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
+const ROPE_CATCH = 0.45;         // s: the web is springy this long as it catches, then rigid
+const ROPE_SOFT = 80;            // 1/s²: its springiness as it starts to take his weight...
+const ROPE_STIFF = 600;          // ...firming up to this
+const ROPE_MAX_STRETCH = 3;      // m
+const SWING_TURN_SPEED = 1.5;    // m/s back along the swing before he turns to face the other way
 const PIVOT_PULL = 0.95;         // share of the anchor's sideways offset the pendulum pivot moves back over the path
 const RELEASE_BOOST_UP = 5.5;
 const RELEASE_BOOST_FWD = 5.0;
@@ -464,6 +469,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       splat: null,
       swingTime: 0,
       passedBottom: false,
+      caught: false,
+      turned: false, // has swung back (hanging on past the top of the arc)
       rising: false,
       dirX: 0,
       dirZ: 1
@@ -590,7 +597,7 @@ function shootWeb(controllers, ent) {
   ent.nextSide = -web.side; // alternate hands, like the real thing
   web.travelled = 0;
   web.swingTime = 0;
-  web.passedBottom = web.rising = false;
+  web.passedBottom = web.rising = web.caught = web.turned = false;
   web.dirX = dir.x;
   web.dirZ = dir.z;
   web.phase = 'shooting';
@@ -990,9 +997,9 @@ function updateSpiderMan(controllers, ent, dt) {
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
       v.y = Math.max(v.y, ent.diving ? -DIVE_MAX_FALL : -42);
     } else {
-      // A gentle push on the down stroke (more with the stick held forward) keeps chained swings flowing; on a
-      // swing back he only coasts, with a little drag, so hanging on settles into a dangle
-      if (v.x * web.dirX + v.z * web.dirZ > 0) {
+      // A gentle push on the down stroke (more with the stick held forward) keeps chained swings flowing; once
+      // he's hung on into a swing back he only coasts, with a little drag, so it settles into a dangle
+      if (!web.turned && v.x * web.dirX + v.z * web.dirZ > 0) {
         if (v.y <= 0) {
           const push = 4.5 + 6 * pump;
           v.x += dir.x * push * dt;
@@ -1005,33 +1012,73 @@ function updateSpiderMan(controllers, ent, dt) {
     clampSpeed(v);
     p.addScaledVector(v, dt);
 
-    // Rope: an inextensible distance constraint about the pivot, measured from the hips
+    // Rope: an inextensible distance constraint about the pivot, measured from the hips. Except as the web catches:
+    // a rigid rope would turn his fall into the arc in a single frame (the hard kink from falling to swinging), so
+    // for the first moments it's a critically damped spring that firms up fast, stretching a little and easing
+    // him onto the arc. Then the rope locks at whatever length it has stretched to, and reels back in from there.
     if (ent.state === 'swing') {
       web.swingTime += dt;
-      web.length += (web.targetLength - web.length) * (1 - Math.exp(-dt * 6));
+      const reel = (web.targetLength - web.length) * (1 - Math.exp(-dt * 6));
       _center.set(p.x, p.y + 1.0, p.z);
       _offset.subVectors(_center, web.pivot);
-      const d = _offset.length();
+      let d = _offset.length();
+      if (d > 1e-4) _offset.multiplyScalar(1 / d);
+      // (it locks only while taut and no longer stretching, so it never snaps tight)
+      if (!web.caught && web.swingTime >= ROPE_CATCH && d >= web.length && v.dot(_offset) < 0.5) {
+        web.caught = true;
+        web.length = d;
+      }
+      const catching = !web.caught;
+      if (catching) {
+        // Reeling in moves him with the rope, rather than winding up the spring (which would add energy)
+        if (d >= web.length && d > 1e-4) {
+          p.addScaledVector(_offset, reel);
+          d += reel;
+        }
+      }
+      web.length += reel;
       if (d > web.length && d > 1e-4) {
-        _offset.multiplyScalar(1 / d);
-        _center.copy(web.pivot).addScaledVector(_offset, web.length);
-        p.set(_center.x, _center.y - 1.0, _center.z);
+        const stretch = d - web.length;
         const radial = v.dot(_offset);
-        if (radial > 0) v.addScaledVector(_offset, -radial);
+        if (catching) {
+          const firm = Math.min(1, web.swingTime / ROPE_CATCH);
+          const k = ROPE_SOFT + (ROPE_STIFF - ROPE_SOFT) * firm * firm;
+          // (implicit in the damping, so it stays stable at any frame rate; a rope only resists being stretched, so
+          // it damps outward motion only)
+          const pulled = radial - k * stretch * dt;
+          const radialNew = pulled > 0 ? pulled / (1 + 2 * Math.sqrt(k) * dt) : pulled;
+          v.addScaledVector(_offset, radialNew - radial);
+        }
+        if (!catching || stretch > ROPE_MAX_STRETCH) {
+          _center.copy(web.pivot).addScaledVector(_offset, web.length + (catching ? ROPE_MAX_STRETCH : 0));
+          p.set(_center.x, _center.y - 1.0, _center.z);
+          const out = v.dot(_offset);
+          if (out > 0) v.addScaledVector(_offset, -out);
+        }
       }
       // He hangs on for as long as the button is held (it's the release that flings him on); passing the bottom
       // is still noted for the swing pose
       const aheadOfPivot = (p.x - web.pivot.x) * dir.x + (p.z - web.pivot.z) * dir.z;
       if (aheadOfPivot > 0) web.passedBottom = true;
       if (web.passedBottom && v.y > 3) web.rising = true;
+      // Hanging on past the top of the arc: once he's really moving back, that's his new way forward, and he
+      // turns round to face it (not before: slowing to a stop at the top doesn't spin him)
+      if (v.x * web.dirX + v.z * web.dirZ < -SWING_TURN_SPEED) {
+        web.dirX = -web.dirX;
+        web.dirZ = -web.dirZ;
+        web.passedBottom = web.rising = false;
+        web.turned = true;
+      }
     }
 
-    // Facing follows the momentum (but swinging back on a web he stays facing the way he was going)
-    if (hs > 2 && !(ent.state === 'swing' && v.x * web.dirX + v.z * web.dirZ < 0)) {
+    // Facing follows the momentum. On a web, only while he's clearly moving along the swing: near the top of an arc
+    // the sideways drift would otherwise swing him about
+    const along = ent.state === 'swing' ? v.x * web.dirX + v.z * web.dirZ : hs;
+    if (hs > 2 && along > SWING_TURN_SPEED) {
       const want = Math.atan2(v.x, v.z);
       let diff = want - ent.heading;
       diff -= Math.round(diff / (Math.PI * 2)) * Math.PI * 2;
-      ent.heading += diff * (1 - Math.exp(-dt * 8));
+      ent.heading += diff * (1 - Math.exp(-dt * (ent.state === 'swing' ? 5 : 8)));
     }
 
     // Landing (street, sidewalk or rooftop)
@@ -1440,8 +1487,7 @@ function bodyOrientation(ent, out) {
     if (_bz.lengthSq() < 1e-4) _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
   } else if (ent.state === 'swing' && web.phase === 'attached') {
     _by.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
-    // (Swinging back he still faces the way he was going)
-    if (v.lengthSq() > 4) _bz.copy(v).normalize().multiplyScalar(v.x * web.dirX + v.z * web.dirZ < 0 ? -1 : 1);
+    // Facing his heading, square to the rope: always along the arc, however the velocity jumps about
   } else if (ent.state === 'air' || ent.state === 'swing') {
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
     // Zipping: flat out along the web

@@ -55,7 +55,10 @@ looks in the films.
 
 **3. The pendulum is real.** Gravity (a snappy 22 m/s²) pulls you down. The web is an inextensible rope: whenever
 you're farther from the pivot than its length, you're projected back onto the sphere and the outward part of your
-velocity is removed. That one constraint is what makes a natural arc, fast at the bottom and slow at the ends. A
+velocity is removed. That one constraint is what makes a natural arc, fast at the bottom and slow at the ends.
+Only the catch is soft: for its first half second the web is a damped spring that firms up, so a fast fall eases
+onto the arc instead of kinking into it in one frame. Hang on past the top and he swings back, turning round only
+once he's really moving the other way, and the swing slowly dies down. A
 gentle reel-in keeps the bottom of the arc ~4.5 m above the street.
 
 **4. Easy mode is built in.** Letting go on the way up adds a small forward and upward fling, and each new web is
