@@ -223,7 +223,7 @@ class CameraSystem {
         const tilt = entity.cameraPitch || 0;
         desiredPos.set(
           entity.position.x - Math.sin(totalYaw) * horizDist,
-          Math.max(0.65, entity.position.y + height - tilt * dist * 0.5),
+          Math.max(0.65, entity.position.y + height - tilt * dist * 1.1),
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
@@ -233,7 +233,7 @@ class CameraSystem {
         const lookYaw = entity.type === 'spider' ? totalYaw : entity.heading;
         desiredLook.set(
           entity.position.x + Math.sin(lookYaw) * 5.2,
-          entity.position.y + entity.cameraTargetOffset.y + lookUpBias + (entity.cameraPitch || 0) * 7,
+          entity.position.y + entity.cameraTargetOffset.y + lookUpBias + (entity.cameraPitch || 0) * 3.5,
           entity.position.z + Math.cos(lookYaw) * 5.2
         );
         if (this.activePresetId === 'swing') this.swingFraming(entity, dt, dist, desiredPos, desiredLook);

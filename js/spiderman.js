@@ -36,12 +36,12 @@ const CRAWL_DOWN_SPEED = 3.2;
 const CRAWL_SIDE_SPEED = 3.6;
 const WALL_RUN_MIN_SPEED = 9;    // hitting a wall faster than this runs along / up it
 const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
-const ZIP_PUSH = 10;             // m/s forward per zip
-const ZIP_MAX_SPEED = 38;
+const ZIP_PUSH = 14;             // m/s forward per zip
+const ZIP_MAX_SPEED = 44;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
 const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravity's 22): a small hop up, as if he hauled
                                  // himself up the web; a fall is softened, never stopped dead
-const ZIP_RISE = 7;              // m/s: the upward speed the pull lifts him to (about 2 m of height)
+const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)
 const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
 const ZIP_BELOW = 30;            // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
