@@ -216,14 +216,13 @@ class CameraSystem {
       case 'chase': {
         const dist = entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
         const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
-        const horizDist = Math.cos(this.orbitPitchOffset) * dist + speedLag;
-
-        // Spider-Man on a wall: the camera drops below him to look up the wall as he climbs, and rises to look down
-        // it as he crawls down
+        // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
+        // sky as he climbs, and rises above him to look down it at the street as he crawls down
         const tilt = entity.cameraPitch || 0;
+        const horizDist = (Math.cos(this.orbitPitchOffset) * dist + speedLag) * (1 - 0.35 * Math.abs(tilt));
         desiredPos.set(
           entity.position.x - Math.sin(totalYaw) * horizDist,
-          Math.max(0.65, entity.position.y + height - tilt * dist * 1.1),
+          Math.max(0.65, entity.position.y + height - tilt * dist * 1.25),
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
@@ -231,10 +230,11 @@ class CameraSystem {
         // Spider-Man: look past him along the camera's own direction, so orbiting the view turns around him and
         // keeps him centred (the vehicles look ahead along their heading)
         const lookYaw = entity.type === 'spider' ? totalYaw : entity.heading;
+        const lookAhead = 5.2 * (1 - 0.85 * Math.abs(tilt));
         desiredLook.set(
-          entity.position.x + Math.sin(lookYaw) * 5.2,
-          entity.position.y + entity.cameraTargetOffset.y + lookUpBias + (entity.cameraPitch || 0) * 3.5,
-          entity.position.z + Math.cos(lookYaw) * 5.2
+          entity.position.x + Math.sin(lookYaw) * lookAhead,
+          entity.position.y + entity.cameraTargetOffset.y + lookUpBias + tilt * 9,
+          entity.position.z + Math.cos(lookYaw) * lookAhead
         );
         if (this.activePresetId === 'swing') this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
         break;
