@@ -392,6 +392,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     onWebShot: null,
     // Tilt for the follow camera (-1 look down .. 1 look up): up or down the wall he's crawling or running
     cameraPitch: 0,
+    cameraSide: 0,
     // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
     swingUp: new THREE.Vector3(0, 1, 0),
     diving: false,
@@ -1105,10 +1106,17 @@ function updateSpiderMan(controllers, ent, dt) {
   }
 
   // The follow camera looks up the wall as he climbs it and down it as he crawls down (and up a run up a wall)
-  let pitch = 0;
-  if (ent.state === 'wall') pitch = Math.cos(ent.wall.angle) * 0.8;
-  else if (ent.state === 'wallrun' && ent.wallRun.dy > 0.7) pitch = 0.8;
-  ent.cameraPitch += (pitch - ent.cameraPitch) * (1 - Math.exp(-dt * 3));
+  // ...and along it, to the side he's crawling (positive: his left)
+  let pitch = 0, side = 0;
+  if (ent.state === 'wall') {
+    pitch = Math.cos(ent.wall.angle) * 0.8;
+    side = Math.sin(ent.wall.angle) * 0.8;
+  } else if (ent.state === 'wallrun' && ent.wallRun.dy > 0.7) {
+    pitch = 0.8;
+  }
+  const ease = 1 - Math.exp(-dt * 3);
+  ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
+  ent.cameraSide += (side - ent.cameraSide) * ease;
 
   // Never below the street (tunnels, piers or a teleport onto a roof edge)
   const floor = controllers.getGroundHeight(p.x, p.z, 'person');

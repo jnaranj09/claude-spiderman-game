@@ -480,3 +480,16 @@ test('clicking the stick dives head first, until a web, a second click or the gr
   step(controllers, standing, 0.2);
   assert.equal(standing.diving, false);
 });
+
+test('crawling sideways turns the camera along the wall the way he goes', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(0, 0, 0, Math.PI / 2);
+  step(controllers, ent, 2, { forward: 0.6 });
+  step(controllers, ent, 0.5, { forward: 1 });
+  step(controllers, ent, 2, { forward: 0, left: 1 });
+  assert.equal(ent.state, 'wall');
+  assert.ok(ent.cameraSide > 0.5, `looks to his left (${ent.cameraSide.toFixed(2)})`);
+  assert.ok(Math.abs(ent.cameraPitch) < 0.3, 'level');
+  step(controllers, ent, 2, { left: 0, right: 1 });
+  assert.ok(ent.cameraSide < -0.5, `looks to his right (${ent.cameraSide.toFixed(2)})`);
+});

@@ -218,23 +218,27 @@ class CameraSystem {
         const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
         // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
         // sky as he climbs, and rises above him to look down it at the street as he crawls down
+        // ...and likewise slides the other way along the wall to look ahead as he crawls sideways
         const tilt = entity.cameraPitch || 0;
-        const horizDist = (Math.cos(this.orbitPitchOffset) * dist + speedLag) * (1 - 0.35 * Math.abs(tilt));
+        const side = entity.cameraSide || 0;
+        const lean = Math.min(1, Math.hypot(tilt, side));
+        const sideX = Math.cos(totalYaw) * side, sideZ = -Math.sin(totalYaw) * side; // towards his left, scaled
+        const horizDist = (Math.cos(this.orbitPitchOffset) * dist + speedLag) * (1 - 0.35 * lean);
         desiredPos.set(
-          entity.position.x - Math.sin(totalYaw) * horizDist,
+          entity.position.x - Math.sin(totalYaw) * horizDist - sideX * dist * 1.25,
           Math.max(0.65, entity.position.y + height - tilt * dist * 1.25),
-          entity.position.z - Math.cos(totalYaw) * horizDist
+          entity.position.z - Math.cos(totalYaw) * horizDist - sideZ * dist * 1.25
         );
 
         const lookUpBias = entity.type === 'helicopter' ? 0.2 : (entity.type === 'car' ? 0.52 : entity.type === 'spider' ? 0.75 : 1.55);
         // Spider-Man: look past him along the camera's own direction, so orbiting the view turns around him and
         // keeps him centred (the vehicles look ahead along their heading)
         const lookYaw = entity.type === 'spider' ? totalYaw : entity.heading;
-        const lookAhead = 5.2 * (1 - 0.85 * Math.abs(tilt));
+        const lookAhead = 5.2 * (1 - 0.85 * lean);
         desiredLook.set(
-          entity.position.x + Math.sin(lookYaw) * lookAhead,
+          entity.position.x + Math.sin(lookYaw) * lookAhead + sideX * 9,
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias + tilt * 9,
-          entity.position.z + Math.cos(lookYaw) * lookAhead
+          entity.position.z + Math.cos(lookYaw) * lookAhead + sideZ * 9
         );
         if (this.activePresetId === 'swing') this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
         break;
