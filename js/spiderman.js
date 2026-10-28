@@ -12,8 +12,9 @@ import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial } from './pede
 //     facade or roof edge. The pendulum's pivot, though, is that anchor pulled most of the way back over the
 //     player's line of travel: the rope still visibly ends on the building, but the swing carries along the
 //     street instead of slamming sideways into the wall the web hit.
-//  2. Holding the web button chains swings: each swing lets go on its own on the way up and fires the next web,
-//     so one thumb is enough to cross Midtown. The stick (or W/A/S/D) only steers and pumps.
+//  2. One press, one web: he stays on it for as long as the button is held, swinging back and forth like a real
+//     pendulum, and lets go when it is released (best on the way up the far side). The next swing takes a new
+//     press. The stick (or W/A/S/D) only steers and pumps.
 // A quick tap of the button zips a web straight ahead and yanks him forward (it works over open ground too); flying
 // into a wall at speed runs along it (or up it) instead of stopping dead, and a slow touch sticks to it to crawl.
 
@@ -373,6 +374,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0, pull: 0, targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
+    webSpent: false, // this press already threw its web
     pressTime: 0,
     webCooldown: 0,
     webRetry: 0,
@@ -493,6 +495,7 @@ function shootWeb(controllers, ent) {
   web.dirX = dir.x;
   web.dirZ = dir.z;
   web.phase = 'shooting';
+  ent.webSpent = true;
   web.anchor.set(anchor.x, anchor.y, anchor.z);
   web.normal.set(anchor.nx, anchor.ny, anchor.nz);
   web.distance = web.anchor.distanceTo(_center.set(p.x, cy, p.z));
@@ -765,7 +768,7 @@ function updateSpiderMan(controllers, ent, dt) {
   const pressed = held && !ent.webHeld;
   const released = !held && ent.webHeld;
   const tap = released && ent.pressTime < TAP_TIME;
-  if (pressed) ent.pressTime = 0;
+  if (pressed) { ent.pressTime = 0; ent.webSpent = false; }
   else if (held) ent.pressTime += dt;
   ent.webHeld = held;
   ent.webCooldown = Math.max(0, ent.webCooldown - dt);
@@ -782,7 +785,9 @@ function updateSpiderMan(controllers, ent, dt) {
     if (!held) web.phase = 'none';
     else if (web.travelled >= web.distance) attachWeb(controllers, ent);
   }
-  if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2 && !tap);
+  if (web.phase === 'attached' && !held) {
+    releaseWeb(controllers, ent, v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0 && !tap);
+  }
 
   // Clicking the stick (L3, a tap on the touch stick, X) starts or ends a dive in the air
   const diveClicks = controllers.diveRequests || 0;
@@ -801,8 +806,8 @@ function updateSpiderMan(controllers, ent, dt) {
 
   if (ent.state === 'ground') {
     ent.groundTime += dt;
-    // Holding the button through a landing launches straight into the next swing
-    if (pressed || (held && ent.groundTime > 0.25)) {
+    // A press jumps (and, held, fires a web on the way up)
+    if (pressed) {
       // Jump, and fire a web on the way up if the button stays down (a tap leaps on into a zip)
       v.y = 12.5;
       const dir = { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
@@ -815,9 +820,9 @@ function updateSpiderMan(controllers, ent, dt) {
   } else {
     ent.groundTime = 0;
   }
-  // In the air a held button fires the swing web (after a moment, so that a tap stays a zip)
-  if (ent.state === 'air' && held && ent.pressTime >= 0.08 && web.phase === 'none' && ent.webCooldown <= 0
-    && ent.webRetry <= 0) {
+  // In the air a held button fires the swing web (after a moment, so that a tap stays a zip): one per press
+  if (ent.state === 'air' && held && !ent.webSpent && ent.pressTime >= 0.08 && web.phase === 'none'
+    && ent.webCooldown <= 0 && ent.webRetry <= 0) {
     shootWeb(controllers, ent);
   }
 
@@ -884,10 +889,17 @@ function updateSpiderMan(controllers, ent, dt) {
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
       v.y = Math.max(v.y, ent.diving ? -DIVE_MAX_FALL : -42);
     } else {
-      // A gentle push along the swing (more with the stick held forward) keeps chained swings flowing
-      const push = 4.5 + 6 * pump;
-      v.x += dir.x * push * dt;
-      v.z += dir.z * push * dt;
+      // A gentle push on the down stroke (more with the stick held forward) keeps chained swings flowing; on a
+      // swing back he only coasts, with a little drag, so hanging on settles into a dangle
+      if (v.x * web.dirX + v.z * web.dirZ > 0) {
+        if (v.y <= 0) {
+          const push = 4.5 + 6 * pump;
+          v.x += dir.x * push * dt;
+          v.z += dir.z * push * dt;
+        }
+      } else {
+        v.multiplyScalar(1 - Math.min(1, 0.35 * dt));
+      }
     }
     clampSpeed(v);
     p.addScaledVector(v, dt);
@@ -906,23 +918,15 @@ function updateSpiderMan(controllers, ent, dt) {
         const radial = v.dot(_offset);
         if (radial > 0) v.addScaledVector(_offset, -radial);
       }
-      // Auto-release on the way up, past the bottom of the arc: the next web follows while the button is held
+      // He hangs on for as long as the button is held (it's the release that flings him on); passing the bottom
+      // is still noted for the swing pose
       const aheadOfPivot = (p.x - web.pivot.x) * dir.x + (p.z - web.pivot.z) * dir.z;
       if (aheadOfPivot > 0) web.passedBottom = true;
       if (web.passedBottom && v.y > 3) web.rising = true;
-      const rise = (p.y + 1.0 - web.pivot.y) / Math.max(1, web.length);
-      // (~60 degrees up the far side: late enough to carry real height out of the swing, early enough to keep
-      // some speed)
-      if ((web.rising && v.y < 2) || (web.passedBottom && rise > -RELEASE_RISE) || web.swingTime > 3.5 || p.y + 1.0 > web.pivot.y - 1) {
-        releaseWeb(controllers, ent, true);
-        ent.webCooldown = 0.12;
-      } else if (web.swingTime > 0.5 && (v.x * web.dirX + v.z * web.dirZ < 1 || v.length() < 4)) {
-        // Knocked back or dangling: let go rather than swing backwards, and web on afresh
-        releaseWeb(controllers, ent, false);
-      }
     }
 
-    if (hs > 2) {
+    // Facing follows the momentum (but swinging back on a web he stays facing the way he was going)
+    if (hs > 2 && !(ent.state === 'swing' && v.x * web.dirX + v.z * web.dirZ < 0)) {
       const want = Math.atan2(v.x, v.z);
       let diff = want - ent.heading;
       diff -= Math.round(diff / (Math.PI * 2)) * Math.PI * 2;
@@ -1335,7 +1339,8 @@ function bodyOrientation(ent, out) {
     if (_bz.lengthSq() < 1e-4) _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
   } else if (ent.state === 'swing' && web.phase === 'attached') {
     _by.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
-    if (v.lengthSq() > 4) _bz.copy(v).normalize();
+    // (Swinging back he still faces the way he was going)
+    if (v.lengthSq() > 4) _bz.copy(v).normalize().multiplyScalar(v.x * web.dirX + v.z * web.dirZ < 0 ? -1 : 1);
   } else if (ent.state === 'air' || ent.state === 'swing') {
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
     // Zipping: flat out along the web

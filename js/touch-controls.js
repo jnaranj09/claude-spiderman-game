@@ -107,7 +107,7 @@ class TouchControls {
     this.mode = mode;
     const labels = { up: mode === 'helicopter' ? 'Ascend' : mode === 'spider' ? 'Web' : 'Jump', down: 'Descend' };
     const hint = this.root.querySelector('[data-touch-hint="look"]');
-    if (hint) hint.textContent = mode === 'spider' ? 'Hold WEB to swing · Tap the stick to dive' : 'Drag to look · Pinch to zoom';
+    if (hint) hint.textContent = mode === 'spider' ? 'Hold WEB to swing, release to fly · Tap the stick to dive' : 'Drag to look · Pinch to zoom';
     for (const button of this.buttons) {
       const action = button.getAttribute('data-touch-action');
       button.hidden = (action === 'up' && mode !== 'person' && mode !== 'helicopter' && mode !== 'spider') || (action === 'down' && mode !== 'helicopter');

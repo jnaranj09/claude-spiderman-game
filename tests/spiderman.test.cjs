@@ -143,13 +143,51 @@ test('over open ground the web finds nothing to stick to', () => {
   assert.ok(ent.position.y >= 0);
 });
 
-test('holding the web button chains swings straight down the avenue', () => {
+test('holding keeps him on one web, swinging to and fro, until the button is let go', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(-6, 0, 0, 0);
+  controllers.keys.up = true;
+  let i = 0;
+  while (ent.web.phase !== 'attached' && i++ < 600) spider.updateSpiderMan(controllers, ent, 1 / 60);
+  const anchor = ent.web.anchor.toArray();
+  let swungBack = false;
+  for (let k = 0; k < 60 * 8; k++) {
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+    assert.equal(ent.web.phase, 'attached', 'still on the web');
+    swungBack ||= ent.velocity.z < -1;
+  }
+  assert.deepEqual(ent.web.anchor.toArray(), anchor, 'the same web throughout');
+  assert.ok(swungBack, 'it swings back like a pendulum');
+  assert.ok(Math.abs(Math.sin(ent.heading)) < 0.2 && Math.cos(ent.heading) > 0, 'still facing down the avenue');
+  // If the web goes some other way (a wall in the way), holding on throws no other one
+  const held = spiderEntity(-6, 30, 0, 0);
+  held.state = 'air';
+  held.webHeld = true;
+  held.webSpent = true;
+  held.pressTime = 1;
+  for (let k = 0; k < 60; k++) spider.updateSpiderMan(controllers, held, 1 / 60);
+  assert.equal(held.web.phase, 'none', 'no new web without a new press');
+  controllers.keys.up = false;
+  spider.updateSpiderMan(controllers, ent, 1 / 60);
+  assert.equal(ent.web.phase, 'none', 'let go');
+});
+
+test('press, swing, release on the way up and press again: swings chain straight down the avenue', () => {
   const colliders = avenue();
   const controllers = world(colliders);
   const ent = spiderEntity(-6, 0, 0, 0);
   controllers.keys.up = true;
-  let swings = 0, last = 'none', maxRopeError = 0, minY = Infinity, maxY = 0;
+  let swings = 0, last = 'none', maxRopeError = 0, minY = Infinity, maxY = 0, offTime = 0;
   for (let i = 0; i < 60 * 20; i++) {
+    // The player: lets go once the swing is climbing the far side, presses again a moment later
+    const web = ent.web;
+    if (controllers.keys.up && web.phase === 'attached' && web.passedBottom
+      && (ent.velocity.y < 2 && web.rising || ent.position.y + 1 - web.pivot.y > -0.5 * web.length)) {
+      controllers.keys.up = false;
+      offTime = 0;
+    } else if (!controllers.keys.up && (offTime += 1 / 60) > 0.15) {
+      controllers.keys.up = true;
+    }
     spider.updateSpiderMan(controllers, ent, 1 / 60);
     if (ent.web.phase === 'attached') {
       if (last !== 'attached') swings++;
@@ -162,7 +200,7 @@ test('holding the web button chains swings straight down the avenue', () => {
     assert.ok(Math.abs(ent.position.x) < 15, 'stays in the street');
     if (i > 120) { minY = Math.min(minY, ent.position.y); maxY = Math.max(maxY, ent.position.y); }
   }
-  assert.ok(swings >= 6, `${swings} swings`);
+  assert.ok(swings >= 5, `${swings} swings`);
   assert.ok(ent.position.z > 300, `travelled ${ent.position.z.toFixed(0)} m`);
   assert.ok(maxRopeError < 0.6, 'the web never stretches (beyond one step of a reel-in)');
   assert.ok(minY > 1 && maxY < 60, `stays in the canyon (${minY.toFixed(1)}-${maxY.toFixed(1)} m)`);

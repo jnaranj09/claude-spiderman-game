@@ -17,8 +17,9 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Dive (in the air) | tap the stick | X | click the left stick |
 | Look around | drag the screen | drag | right stick |
 
-Hold **WEB** and Spider-Man jumps, fires a web at the nearest building and keeps chaining swings on his own. Steer
-with the stick. Let go to fly, and press again to catch the next building. **Tap** WEB to zip a web at the
+Press and hold **WEB** and Spider-Man jumps and fires a web at the nearest building. One press is one web: he stays
+on it as long as you hold, swinging to and fro like a pendulum. Steer with the stick. Let go (best on the way up the
+far side) to fly on, and press again to catch the next building. **Tap** WEB to zip a web at the
 building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) for a smooth push forward and a small hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
@@ -57,9 +58,8 @@ you're farther from the pivot than its length, you're projected back onto the sp
 velocity is removed. That one constraint is what makes a natural arc, fast at the bottom and slow at the ends. A
 gentle reel-in keeps the bottom of the arc ~4.5 m above the street.
 
-**4. Easy mode is built in.** While WEB is held, each swing lets go on its own about 45° up the far side (where
-there's still speed to carry), adds a small forward and upward fling, and fires the next web. The upward fling
-fades out above ~55 m so chains stay among the buildings instead of climbing over them. With no steering input,
+**4. Easy mode is built in.** Letting go on the way up adds a small forward and upward fling, and each new web is
+aimed along your line of travel. The upward fling fades out above ~55 m so chains stay among the buildings instead of climbing over them. With no steering input,
 momentum within 25° of an avenue eases onto it (the city's axes follow Manhattan's grid).
 
 **5. The body is the city's pedestrian, in a suit.** Spider-Man is the same skinned, lofted person the sidewalks
@@ -78,7 +78,7 @@ Add `?debug` to the URL to expose the simulation as `window.spiderDebug` (the pl
 node --test tests/*.cjs tests/*.mjs
 ```
 
-`tests/spiderman.test.cjs` covers the ray casts, anchor choice, the rope constraint, chained swinging down a
+`tests/spiderman.test.cjs` covers the ray casts, anchor choice, the rope constraint, press-by-press swinging down a
 synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, rooftop spawning and camera
 clipping.
 
