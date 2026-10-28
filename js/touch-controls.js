@@ -27,6 +27,8 @@ class TouchControls {
       this.stickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       this.stickRadius = Math.min(MAX_RADIUS, Math.min(rect.width, rect.height) / 2) || MAX_RADIUS;
       this.stickPointer = event.pointerId;
+      // A quick tap on the stick (no real drag) is a click: Spider-Man's dive
+      this.stickDown = { time: event.timeStamp, x: event.clientX, y: event.clientY, moved: false };
       this.stick.setPointerCapture(event.pointerId);
       this.stick.classList.add('is-pressed');
       this.moveStick(event);
@@ -35,10 +37,15 @@ class TouchControls {
       if (event.pointerId !== this.stickPointer) return;
       event.preventDefault();
       event.stopPropagation();
+      if (this.stickDown && Math.hypot(event.clientX - this.stickDown.x, event.clientY - this.stickDown.y) > 14) this.stickDown.moved = true;
       this.moveStick(event);
     });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      this.stick.addEventListener(type, (event) => this.releaseStick(event.pointerId));
+      this.stick.addEventListener(type, (event) => {
+        const down = event.pointerId === this.stickPointer ? this.stickDown : null;
+        if (type === 'pointerup' && down && !down.moved && event.timeStamp - down.time < 250) this.controller.requestDive?.();
+        this.releaseStick(event.pointerId);
+      });
     }
 
     for (const button of this.buttons) {
@@ -100,7 +107,7 @@ class TouchControls {
     this.mode = mode;
     const labels = { up: mode === 'helicopter' ? 'Ascend' : mode === 'spider' ? 'Web' : 'Jump', down: 'Descend' };
     const hint = this.root.querySelector('[data-touch-hint="look"]');
-    if (hint) hint.textContent = mode === 'spider' ? 'Hold WEB to swing · Drag to look' : 'Drag to look · Pinch to zoom';
+    if (hint) hint.textContent = mode === 'spider' ? 'Hold WEB to swing · Tap the stick to dive' : 'Drag to look · Pinch to zoom';
     for (const button of this.buttons) {
       const action = button.getAttribute('data-touch-action');
       button.hidden = (action === 'up' && mode !== 'person' && mode !== 'helicopter' && mode !== 'spider') || (action === 'down' && mode !== 'helicopter');

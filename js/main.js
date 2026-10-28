@@ -258,7 +258,7 @@ async function initApp() {
 
   // Keyboard guide for each mode: [keys, action]
   const controlHints = {
-    spider: [[['Space'], 'Hold: Swing'], [['W'], 'Run / Pump'], [['A', 'D'], 'Steer'], [['Drag'], 'Orbit']],
+    spider: [[['Space'], 'Hold: Swing'], [['X'], 'Dive'], [['W'], 'Run / Pump'], [['A', 'D'], 'Steer'], [['Drag'], 'Orbit']],
     person: [[['W', 'S'], 'Walk / Run'], [['A', 'D'], 'Turn'], [['Space'], 'Jump'], [['Drag'], 'Orbit']],
     car: [[['W', 'S'], 'Drive / Reverse'], [['A', 'D'], 'Steer'], [['B'], 'Horn'], [['Drag'], 'Orbit']],
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Drag'], 'Orbit']],
@@ -455,8 +455,9 @@ async function initApp() {
     const destination = controllerManager.teleportActiveTo(x, z, heading);
     touchControls.reset();
     gamepadControls.reset();
+    const keepSwingCam = cameraSystem.activePresetId === 'swing';
     cameraSystem.resetForTeleport();
-    selectCamera('chase', true);
+    selectCamera(keepSwingCam ? 'swing' : 'chase', true);
     mapSystem.waypoint = {
       x: destination.x,
       z: destination.z,
@@ -549,6 +550,9 @@ async function initApp() {
         break;
       case 'KeyN':
         if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) audioSystem.setEnabled(!audioSystem.enabled);
+        break;
+      case 'KeyX':
+        if (!e.repeat && !mapSystem.isFullMapOpen) controllerManager.requestDive();
         break;
       case 'KeyB':
         if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && !mapSystem.isFullMapOpen) audioSystem.honk(controllerManager.getActiveEntity());

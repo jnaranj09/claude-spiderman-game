@@ -14,6 +14,7 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Swing (hold) / let go (release) | big red **WEB** button | Space | A or RT |
 | Zip forward (quick tap) | tap **WEB** | tap Space | tap A |
 | Run / steer (relative to the camera: up is away from it) | left stick | W A S D / arrows | left stick |
+| Dive (in the air) | tap the stick | X | click the left stick |
 | Look around | drag the screen | drag | right stick |
 
 Hold **WEB** and Spider-Man jumps, fires a web at the nearest building and keeps chaining swings on his own. Steer
@@ -26,6 +27,10 @@ off and swings on; running up to the top launches him over the roof. Touching a 
 Then the stick crawls him: up climbs head-first with long alternating reaches, down goes head-first down the
 wall, slower and splayed, and the sides crawl sideways. Let go of the stick and he holds still. Climbing to the
 top vaults onto the roof, crawling down to the street stands him up, and pressing WEB kicks off.
+
+**Dive:** in the air, click the stick to dive head-first, falling fast. Click again, fire a web or land to stop. A
+web fired out of a dive turns that speed into a big swing. **Swing Cam** (next to 3rd-Person Chase in the camera
+menu) rides the arc with him: it leans gently with the swing and looks where he's flying.
 
 The other vehicles (taxi, bike, helicopter) are still in the mode bar, and the time-of-day, teleport and map
 controls work as in the original.

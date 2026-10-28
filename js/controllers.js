@@ -317,6 +317,12 @@ class ThirdPersonControllerManager {
     for (const action of Object.keys(this.keys)) this._blendInput(action);
   }
 
+  // A click of the stick (gamepad L3, a tap on the touch stick, X on a keyboard): Spider-Man dives (or stops). Counted,
+  // so that a click between two updates is never lost
+  requestDive() {
+    this.diveRequests = (this.diveRequests || 0) + 1;
+  }
+
   resetInput() {
     this._pressedCodes.clear();
     this._keyboardKeys = {};

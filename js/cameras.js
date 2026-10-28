@@ -7,6 +7,7 @@ import { bryantParkLawn } from './landmarks.js';
 
 const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
+  { id: 'swing',       name: 'Swing Cam',                short: 'Swing',       category: 'follow', fov: 58 },
   { id: 'action',      name: 'Low-Angle Action',         short: 'Action',      category: 'follow', fov: 60 },
   { id: 'pov',         name: 'First-Person / Cockpit',   short: 'POV / Dash',  category: 'follow', fov: 68 },
   { id: 'centralPark', name: 'Central Park Oasis',       short: 'Central Pk',  category: 'scenic', fov: 52 },
@@ -211,6 +212,7 @@ class CameraSystem {
     const totalYaw = entity.heading + this.orbitYawOffset;
 
     switch (this.activePresetId) {
+      case 'swing':
       case 'chase': {
         const dist = entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
         const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
@@ -234,6 +236,7 @@ class CameraSystem {
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias + (entity.cameraPitch || 0) * 7,
           entity.position.z + Math.cos(lookYaw) * 5.2
         );
+        if (this.activePresetId === 'swing') this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
         break;
       }
 
@@ -359,7 +362,7 @@ class CameraSystem {
       this.currentLookAt.copy(desiredLook);
       this.initialized = true;
       this.followEntity = null; // the follow cameras re-anchor from here
-    } else if (this.activePresetId === 'chase' || this.activePresetId === 'action') {
+    } else if (this.activePresetId === 'chase' || this.activePresetId === 'action' || this.activePresetId === 'swing') {
       // Smoothed in the followed entity's frame rather than in world space. A world-space follower trails a moving
       // target by a distance that depends on the frame time (about speed x dt), so with uneven frame times the camera
       // surged back and forth behind an accelerating or fast car. Relative to the entity a steady drive keeps the
@@ -372,8 +375,12 @@ class CameraSystem {
         this.followOffset.subVectors(this.currentPos, entity.position);
         this.followLookOffset.subVectors(this.currentLookAt, entity.position);
       }
-      const k = 1 - Math.exp(-dt * 8.5);
-      this.followBaseY += (entity.position.y - this.followBaseY) * k;
+      // The swing cam eases more softly: it floats with the swing rather than locking on
+      const k = 1 - Math.exp(-dt * (this.activePresetId === 'swing' ? 4.5 : 8.5));
+      // Spider-Man drops and climbs far faster than any vehicle (a dive tops 60 m/s): his height is followed
+      // tightly, or he'd fall out of the bottom of the frame
+      const ky = entity.type === 'spider' ? 1 - Math.exp(-dt * 16) : k;
+      this.followBaseY += (entity.position.y - this.followBaseY) * ky;
       this.followOffset.lerp(desiredPos.sub(entity.position), k);
       this.followLookOffset.lerp(desiredLook.sub(entity.position), k);
       this.currentPos.set(entity.position.x, this.followBaseY, entity.position.z).add(this.followOffset);
@@ -387,7 +394,42 @@ class CameraSystem {
     }
 
     this.camera.position.copy(this.currentPos);
+    // The swing cam rolls a little with the swing; every other view stays level
+    if (this.activePresetId === 'swing' && this.swingRoll) {
+      this.camera.up.copy(this.swingRoll);
+      this._rolled = true;
+    } else if (this._rolled) {
+      this.camera.up.set(0, 1, 0);
+      this._rolled = false;
+    }
     this.camera.lookAt(this.currentLookAt);
+  }
+
+  /**
+   * Swing cam: the chase framing, moved along with the swing. The camera rides part of the way round the arc with
+   * him (his up along the web, `entity.swingUp`), looks along where he's flying (down the drop, up the rise, down a
+   * dive) and rolls gently with the swing. Everything is smoothed, so it moves with the pendulum without jolting.
+   */
+  swingFraming(entity, dt, dist, desiredPos, desiredLook) {
+    const k = 1 - Math.exp(-dt * 3);
+    this._swingUp ??= new THREE.Vector3(0, 1, 0);
+    this._flight ??= new THREE.Vector3(0, 0, 0);
+    this.swingRoll ??= new THREE.Vector3(0, 1, 0);
+    if (entity.swingUp) this._swingUp.lerp(entity.swingUp, k).normalize();
+    const v = entity.velocity;
+    const speed = v ? v.length() : 0;
+    // Flight direction's climb or drop (-1 .. 1), only once he's really moving
+    const climb = speed > 4 ? Math.max(-1, Math.min(1, v.y / speed)) : 0;
+    this._flight.y += (climb - this._flight.y) * k;
+    // Ride the arc: offset along how far his up leans from vertical
+    desiredPos.x += (this._swingUp.x) * dist * 0.45;
+    desiredPos.y += (this._swingUp.y - 1) * dist * 0.45 - this._flight.y * dist * 0.25;
+    desiredPos.z += (this._swingUp.z) * dist * 0.45;
+    desiredPos.y = Math.max(0.65, desiredPos.y);
+    // Look where he's going
+    desiredLook.y += this._flight.y * 6;
+    // A gentle roll: a quarter of the way from level towards his lean
+    this.swingRoll.set(0, 1, 0).lerp(this._swingUp, 0.25).normalize();
   }
 }
 

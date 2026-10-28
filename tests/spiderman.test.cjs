@@ -450,3 +450,33 @@ test('on a wall the camera tilts up the wall climbing, and down it crawling down
   step(controllers, ent, 1.5, { forward: 0, backward: 1 });
   assert.ok(ent.cameraPitch < -0.5, `looks down (${ent.cameraPitch.toFixed(2)})`);
 });
+
+test('clicking the stick dives head first, until a web, a second click or the ground', () => {
+  const controllers = world([]);
+  const diver = spiderEntity(0, 80, 0);
+  const faller = spiderEntity(0, 80, 0);
+  for (const e of [diver, faller]) { e.state = 'air'; e.velocity.set(0, 0, 15); }
+  controllers.requestDive = function () { this.diveRequests = (this.diveRequests || 0) + 1; };
+  controllers.requestDive();
+  step(controllers, diver, 1);
+  assert.equal(diver.diving, true);
+  faller.diveClicks = controllers.diveRequests; // the click was the diver's
+  step(controllers, faller, 1);
+  assert.equal(faller.diving, false);
+  assert.ok(diver.velocity.y < faller.velocity.y - 15, 'falls much faster');
+  assert.ok(diver.velocity.z > 14, 'keeps going forward');
+  controllers.requestDive();
+  step(controllers, diver, 1 / 60);
+  assert.equal(diver.diving, false, 'a second click ends it');
+  controllers.requestDive();
+  step(controllers, diver, 1 / 60);
+  assert.equal(diver.diving, true);
+  step(controllers, diver, 1 / 60, { up: true });
+  assert.equal(diver.diving, false, 'the web button ends it');
+  step(controllers, diver, 0, { up: false });
+  // On the ground a click does nothing
+  const standing = spiderEntity(0, 0, 0);
+  controllers.requestDive();
+  step(controllers, standing, 0.2);
+  assert.equal(standing.diving, false);
+});

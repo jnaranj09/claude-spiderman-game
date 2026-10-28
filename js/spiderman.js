@@ -27,6 +27,10 @@ const WEB_RANGE = 115;           // m
 const PIVOT_PULL = 0.95;         // share of the anchor's sideways offset the pendulum pivot moves back over the path
 const RELEASE_BOOST_UP = 5.5;
 const RELEASE_BOOST_FWD = 5.0;
+const RELEASE_RISE = 0.5;        // a held swing lets go once he's up past this (cosine of ~60 degrees) on the far side
+const RELEASE_LIFT_CEILING = 68; // m above the street: the release's upward fling fades out towards this height
+const DIVE_GRAVITY = 2.2;        // gravity multiplier while diving
+const DIVE_MAX_FALL = 60;        // m/s
 const CRAWL_UP_SPEED = 4.2;      // m/s on a wall, only while the stick is held
 const CRAWL_DOWN_SPEED = 3.2;
 const CRAWL_SIDE_SPEED = 3.6;
@@ -388,6 +392,10 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     onWebShot: null,
     // Tilt for the follow camera (-1 look down .. 1 look up): up or down the wall he's crawling or running
     cameraPitch: 0,
+    // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
+    swingUp: new THREE.Vector3(0, 1, 0),
+    diving: false,
+    diveClicks: 0,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
     chaseDistance: 4.6,
     chaseHeight: 1.7
@@ -521,7 +529,7 @@ function releaseWeb(controllers, ent, boost) {
     // Letting go on the way up flings you on: an upward & forward kick, and a flip at speed. The kick fades out
     // high above the street so that chained swings stay among the buildings instead of climbing over them
     const height = p.y - controllers.getGroundHeight(p.x, p.z, 'person');
-    const lift = Math.max(0, Math.min(1, (55 - height) / 30));
+    const lift = Math.max(0, Math.min(1, (RELEASE_LIFT_CEILING - height) / 32));
     v.y = Math.min(Math.max(v.y, 0) * (0.55 + 0.45 * lift) + RELEASE_BOOST_UP * lift, 15);
     v.x += dir.x * RELEASE_BOOST_FWD;
     v.z += dir.z * RELEASE_BOOST_FWD;
@@ -769,6 +777,15 @@ function updateSpiderMan(controllers, ent, dt) {
   }
   if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2 && !tap);
 
+  // Clicking the stick (L3, a tap on the touch stick, X) starts or ends a dive in the air
+  const diveClicks = controllers.diveRequests || 0;
+  if (diveClicks !== ent.diveClicks) {
+    ent.diveClicks = diveClicks;
+    if (ent.state === 'air' && zip.pull <= 0) ent.diving = !ent.diving;
+  }
+  // A web (or a zip) ends a dive
+  if (held || tap) ent.diving = false;
+
   // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
   if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
     web.phase = 'none';
@@ -827,7 +844,13 @@ function updateSpiderMan(controllers, ent, dt) {
     v.y -= GRAVITY * dt;
     // Steer the momentum towards where the stick points; ahead it pumps, against it brakes
     let pump = 0, brake = 0;
-    if (wantYaw !== null) {
+    // Diving (clicked on with the stick): head first, falling fast, still steering a little with the sides. A web
+    // fired out of a dive turns all that speed into a huge swing
+    if (ent.state !== 'air') ent.diving = false;
+    if (ent.diving) {
+      v.y -= GRAVITY * (DIVE_GRAVITY - 1) * dt;
+      steerVelocity(ent, turn * 0.6, dt);
+    } else if (wantYaw !== null) {
       const travel = travelDirection(ent);
       const diff = angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
       steerVelocity(ent, Math.max(-1, Math.min(1, diff * 1.5)) * stickMag, dt);
@@ -852,7 +875,7 @@ function updateSpiderMan(controllers, ent, dt) {
       // Light air control and drag; terminal velocity keeps long falls readable
       if (pump && hs < 16) { v.x += dir.x * 7 * pump * dt; v.z += dir.z * 7 * pump * dt; }
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
-      v.y = Math.max(v.y, -42);
+      v.y = Math.max(v.y, ent.diving ? -DIVE_MAX_FALL : -42);
     } else {
       // A gentle push along the swing (more with the stick held forward) keeps chained swings flowing
       const push = 4.5 + 6 * pump;
@@ -881,8 +904,9 @@ function updateSpiderMan(controllers, ent, dt) {
       if (aheadOfPivot > 0) web.passedBottom = true;
       if (web.passedBottom && v.y > 3) web.rising = true;
       const rise = (p.y + 1.0 - web.pivot.y) / Math.max(1, web.length);
-      // (~45 degrees up the far side, while there is still plenty of speed to carry on with)
-      if ((web.rising && v.y < 2) || (web.passedBottom && rise > -0.7) || web.swingTime > 3.5 || p.y + 1.0 > web.pivot.y - 1) {
+      // (~60 degrees up the far side: late enough to carry real height out of the swing, early enough to keep
+      // some speed)
+      if ((web.rising && v.y < 2) || (web.passedBottom && rise > -RELEASE_RISE) || web.swingTime > 3.5 || p.y + 1.0 > web.pivot.y - 1) {
         releaseWeb(controllers, ent, true);
         ent.webCooldown = 0.12;
       } else if (web.swingTime > 0.5 && (v.x * web.dirX + v.z * web.dirZ < 1 || v.length() < 4)) {
@@ -1075,6 +1099,7 @@ function updateSpiderMan(controllers, ent, dt) {
 
   // A zip's pull only carries him through the air: landing, a new swing or a wall ends it (and lets him zip again)
   if (ent.state !== 'air') {
+    ent.diving = false;
     zip.pull = 0;
     zip.chain = 0;
   }
@@ -1170,6 +1195,20 @@ function targetPose(ent, t) {
     runPose(t, ent, 1, 0.15);
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
+  } else if (ent.diving) {
+    // Diving head first: arms swept back along the sides, legs together and straight, toes pointed
+    setPose(t, 'spine', 0.05, 0, 0);
+    setPose(t, 'neck', -0.6, 0, 0);
+    setPose(t, 'shL', 0.35, 0, 0.3);
+    setPose(t, 'shR', 0.35, 0, -0.3);
+    setPose(t, 'elL', -0.15, 0, 0);
+    setPose(t, 'elR', -0.15, 0, 0);
+    setPose(t, 'hipL', 0.08, 0, 0.03);
+    setPose(t, 'hipR', 0.12, 0, -0.03);
+    setPose(t, 'knL', 0.1, 0, 0);
+    setPose(t, 'knR', 0.25, 0, 0);
+    setPose(t, 'ftL', 0.7, 0, 0);
+    setPose(t, 'ftR', 0.7, 0, 0);
   } else if (ent.zip.time >= 0) {
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
     const s = ent.zip.side;
@@ -1276,6 +1315,10 @@ function bodyOrientation(ent, out) {
     const r = ent.wallRun;
     _by.set(w.nx, 0, w.nz);
     _bz.set(r.dx, r.dy, r.dz);
+  } else if (ent.diving && v.lengthSq() > 4) {
+    _by.copy(v).normalize();
+    _bz.set(0, -1, 0).addScaledVector(_by, _by.y);
+    if (_bz.lengthSq() < 1e-4) _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
   } else if (ent.state === 'swing' && web.phase === 'attached') {
     _by.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
     if (v.lengthSq() > 4) _bz.copy(v).normalize();
@@ -1327,6 +1370,13 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   bodyOrientation(ent, _qWant);
   ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * 10));
+  // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
+  if (ent.state === 'swing' && web.phase === 'attached') {
+    _axis.set(web.anchor.x - ent.position.x, web.anchor.y - ent.position.y - 1, web.anchor.z - ent.position.z).normalize();
+  } else {
+    _axis.set(0, 1, 0);
+  }
+  ent.swingUp.lerp(_axis, 1 - Math.exp(-dt * 2.5)).normalize();
   pelvisOffset(ent, _pelvisWant);
   ent.pelvisOffset.lerp(_pelvisWant, 1 - Math.exp(-dt * 12));
   _pelvis.copy(ent.position).add(ent.pelvisOffset);

@@ -113,7 +113,7 @@ class GamepadControls {
     // Capture edges before callbacks: changing mode or opening the map may synchronously call reset().
     const toggleMap = edge(9), closeMap = edge(1);
     const cycleMode = Number(Boolean(edge(5))) - Number(Boolean(edge(4)));
-    const cycleCamera = edge(3), recenter = edge(11);
+    const cycleCamera = edge(3), recenter = edge(11), stickClick = edge(10);
     this.previousButtons = pressed;
 
     const target = document.activeElement;
@@ -141,6 +141,8 @@ class GamepadControls {
     if (cycleCamera) this.callbacks.onCycleCamera?.(1);
     if (revision !== this.revision) return;
     if (recenter) this.camera.resetOrbit();
+    // Left stick click: Spider-Man's dive
+    if (stickClick && this.controller.activeMode === 'spider') this.controller.requestDive?.();
 
     const movement = stick(pad, 0), look = stick(pad, 2);
     const mode = this.controller.activeMode;
