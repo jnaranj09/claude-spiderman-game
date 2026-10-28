@@ -146,6 +146,12 @@ class CameraSystem {
     this.userOrbitTimer = 0;
   }
 
+  // Which way the camera looks, as a heading (radians, 0 = +Z): Spider-Man's stick is relative to it
+  get yaw() {
+    const d = this.camera.getWorldDirection(this._yawDir ??= new THREE.Vector3());
+    return Math.atan2(d.x, d.z);
+  }
+
   resetForTeleport() {
     // Arrive with a fresh chase view, without carrying a previous drive or gesture into the destination.
     this._clearPointers();
@@ -177,9 +183,24 @@ class CameraSystem {
       this.userOrbitTimer = Math.max(0, this.userOrbitTimer - dt);
     }
 
-    if (!this.isDragging && this.userOrbitTimer <= 0 && Math.abs(entity.speed) > 0.5) {
+    // Spider-Man turns to wherever the stick points relative to the camera, so the camera must not swing round with
+    // his heading (that would turn "away from the camera" as he turns, and he'd run in circles): it holds its
+    // direction as he turns, then drifts back behind him
+    const spider = entity.type === 'spider';
+    if (spider) {
+      if (this._headingEntity !== entity) {
+        this._headingEntity = entity;
+        this._lastHeading = entity.heading;
+      }
+      let turned = entity.heading - this._lastHeading;
+      turned -= Math.round(turned / (Math.PI * 2)) * (Math.PI * 2);
+      this._lastHeading = entity.heading;
+      this.orbitYawOffset -= turned;
+    }
+
+    if (!this.isDragging && this.userOrbitTimer <= 0 && (spider || Math.abs(entity.speed) > 0.5)) {
       this.orbitYawOffset -= Math.round(this.orbitYawOffset / (Math.PI * 2)) * (Math.PI * 2);
-      this.orbitYawOffset += (0.0 - this.orbitYawOffset) * (1 - Math.exp(-dt * 2.2));
+      this.orbitYawOffset += (0.0 - this.orbitYawOffset) * (1 - Math.exp(-dt * (spider ? 1.3 : 2.2)));
     }
 
     // The follow cameras pull back with speed, eased so that they drift back as the entity speeds up (and in as it
@@ -195,9 +216,12 @@ class CameraSystem {
         const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
         const horizDist = Math.cos(this.orbitPitchOffset) * dist + speedLag;
 
+        // Spider-Man on a wall: the camera drops below him to look up the wall as he climbs, and rises to look down
+        // it as he crawls down
+        const tilt = entity.cameraPitch || 0;
         desiredPos.set(
           entity.position.x - Math.sin(totalYaw) * horizDist,
-          Math.max(0.65, entity.position.y + height),
+          Math.max(0.65, entity.position.y + height - tilt * dist * 0.5),
           entity.position.z - Math.cos(totalYaw) * horizDist
         );
 
@@ -207,7 +231,7 @@ class CameraSystem {
         const lookYaw = entity.type === 'spider' ? totalYaw : entity.heading;
         desiredLook.set(
           entity.position.x + Math.sin(lookYaw) * 5.2,
-          entity.position.y + entity.cameraTargetOffset.y + lookUpBias,
+          entity.position.y + entity.cameraTargetOffset.y + lookUpBias + (entity.cameraPitch || 0) * 7,
           entity.position.z + Math.cos(lookYaw) * 5.2
         );
         break;

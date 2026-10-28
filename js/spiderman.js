@@ -20,7 +20,7 @@ import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial } from './pede
 const GRAVITY = 22;              // m/s². Stronger than real gravity: a 40 m swing takes ~3 s instead of ~6 s
 const MAX_SPEED = 48;            // m/s
 const RUN_SPEED = 13;
-const TURN_RATE = 3.0;           // rad/s on the ground
+const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the ground (an about-face in ~0.3 s)
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
@@ -35,7 +35,10 @@ const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web z
 const ZIP_PUSH = 10;             // m/s forward per zip
 const ZIP_MAX_SPEED = 38;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
-const ZIP_LIFT = 38;             // m/s² upward during the pull (against gravity's 22): softens a fall, never stops it dead
+const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravity's 22): a small hop up, as if he hauled
+                                 // himself up the web; a fall is softened, never stopped dead
+const ZIP_RISE = 7;              // m/s: the upward speed the pull lifts him to (about 2 m of height)
+const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
 const ZIP_BELOW = 30;            // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
@@ -363,7 +366,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0, pull: 0, targetSpeed: 0 },
+    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), cooldown: 0, pull: 0, targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
     pressTime: 0,
@@ -383,6 +386,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     bodyQuat: new THREE.Quaternion(),
     pelvisOffset: new THREE.Vector3(0, PELVIS_HEIGHT, 0),
     onWebShot: null,
+    // Tilt for the follow camera (-1 look down .. 1 look up): up or down the wall he's crawling or running
+    cameraPitch: 0,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
     chaseDistance: 4.6,
     chaseHeight: 1.7
@@ -533,6 +538,13 @@ function clampSpeed(v) {
   if (s > MAX_SPEED) v.multiplyScalar(MAX_SPEED / s);
 }
 
+// Signed shortest angle from b to a
+function angleDiff(a, b) {
+  let d = a - b;
+  d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+  return d;
+}
+
 // Rotates the horizontal velocity (and the facing) for steering in the air
 function steerVelocity(ent, turn, dt) {
   if (!turn) return;
@@ -663,6 +675,7 @@ function webZip(controllers, ent) {
   zip.side = ent.nextSide;
   ent.nextSide = -zip.side;
   zip.cooldown = 0.28;
+  zip.chain++;
   // The yank never changes his direction (not quite physics, but it keeps the flight readable): over the next
   // quarter second it builds his speed along the way he's already going and lifts against gravity (see the air
   // update), never cutting speed or stopping a fall dead
@@ -723,6 +736,16 @@ function updateSpiderMan(controllers, ent, dt) {
   const fwdIn = +keys.forward || 0;
   const backIn = +keys.backward || 0;
   const turn = (+keys.left || 0) - (+keys.right || 0);
+  // The stick, relative to the camera (on the ground and in the air): up moves him away from the camera, whichever
+  // way he faces. wantYaw is the heading it asks for (null with the stick centred). Walls use the stick as it is
+  const stickMag = Math.min(1, Math.hypot(turn, fwdIn - backIn));
+  let wantYaw = null;
+  if (stickMag > 0.12) {
+    const camYaw = Number.isFinite(controllers.cameraYaw) ? controllers.cameraYaw : ent.heading;
+    const c = Math.cos(camYaw), sn = Math.sin(camYaw);
+    const sx = -turn, sy = fwdIn - backIn; // stick right, stick up
+    wantYaw = Math.atan2(sn * sy - c * sx, c * sy + sn * sx);
+  }
   const held = Boolean(keys.up);
   const pressed = held && !ent.webHeld;
   const released = !held && ent.webHeld;
@@ -746,8 +769,8 @@ function updateSpiderMan(controllers, ent, dt) {
   }
   if (web.phase === 'attached' && !held) releaseWeb(controllers, ent, v.y > -2 && !tap);
 
-  // A tap in the air zips forward instead
-  if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0) {
+  // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
+  if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
     web.phase = 'none';
     webZip(controllers, ent);
   }
@@ -777,15 +800,21 @@ function updateSpiderMan(controllers, ent, dt) {
   // --- Movement per state ------------------------------------------------------------------------------------
   _before.copy(p);
   if (ent.state === 'ground') {
-    ent.heading += turn * TURN_RATE * dt;
-    const target = fwdIn ? RUN_SPEED * fwdIn : backIn ? -RUN_SPEED * 0.45 * backIn : 0;
+    // Turn to face where the stick points (quickly: a full about-face takes a third of a second), easing off the
+    // pace while turning round
+    let target = 0;
+    if (wantYaw !== null) {
+      const diff = angleDiff(wantYaw, ent.heading);
+      ent.heading += Math.sign(diff) * Math.min(Math.abs(diff), GROUND_TURN_RATE * dt);
+      target = RUN_SPEED * stickMag * (Math.abs(diff) < 1.2 ? 1 : 0.3);
+    }
     const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
     let along = v.x * fx + v.z * fz;
     // Landing from a swing keeps its momentum for a moment, then settles into a run
     const rate = Math.abs(along) > RUN_SPEED ? 16 : 30;
     along += Math.max(-rate * dt, Math.min(rate * dt, target - along));
     v.set(fx * along, 0, fz * along);
-    if (fwdIn > 0.1 || Math.abs(along) > 0.5) ent.runPhase += dt * (4 + Math.abs(along) * 0.75);
+    if (target > 0.1 || Math.abs(along) > 0.5) ent.runPhase += dt * (4 + Math.abs(along) * 0.75);
     p.x += v.x * dt;
     p.z += v.z * dt;
     const ground = groundAt(controllers, p.x, p.z, p.y);
@@ -796,8 +825,17 @@ function updateSpiderMan(controllers, ent, dt) {
     }
   } else if (ent.state === 'air' || ent.state === 'swing') {
     v.y -= GRAVITY * dt;
-    steerVelocity(ent, turn, dt);
-    if (Math.abs(turn) < 0.05) alignToGrid(ent, dt);
+    // Steer the momentum towards where the stick points; ahead it pumps, against it brakes
+    let pump = 0, brake = 0;
+    if (wantYaw !== null) {
+      const travel = travelDirection(ent);
+      const diff = angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
+      steerVelocity(ent, Math.max(-1, Math.min(1, diff * 1.5)) * stickMag, dt);
+      pump = stickMag * Math.max(0, Math.cos(diff));
+      brake = stickMag * Math.max(0, -Math.cos(diff)) * 0.5;
+    } else {
+      alignToGrid(ent, dt);
+    }
     const dir = travelDirection(ent);
     const hs = Math.hypot(v.x, v.z);
     if (ent.state === 'air' && zip.pull > 0) {
@@ -808,18 +846,18 @@ function updateSpiderMan(controllers, ent, dt) {
       const gain = Math.min(accel * step, Math.max(0, zip.targetSpeed - hs));
       v.x += dir.x * gain;
       v.z += dir.z * gain;
-      if (v.y < 4) v.y = Math.min(4, v.y + ZIP_LIFT * step);
+      if (v.y < ZIP_RISE) v.y = Math.min(ZIP_RISE, v.y + ZIP_LIFT * step);
     }
     if (ent.state === 'air') {
       // Light air control and drag; terminal velocity keeps long falls readable
-      if (fwdIn && hs < 16) { v.x += dir.x * 7 * fwdIn * dt; v.z += dir.z * 7 * fwdIn * dt; }
-      if (backIn) { v.x *= 1 - Math.min(1, 1.5 * backIn * dt); v.z *= 1 - Math.min(1, 1.5 * backIn * dt); }
+      if (pump && hs < 16) { v.x += dir.x * 7 * pump * dt; v.z += dir.z * 7 * pump * dt; }
+      if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
       v.y = Math.max(v.y, -42);
     } else {
       // A gentle push along the swing (more with the stick held forward) keeps chained swings flowing
-      const pump = 4.5 + 6 * fwdIn;
-      v.x += dir.x * pump * dt;
-      v.z += dir.z * pump * dt;
+      const push = 4.5 + 6 * pump;
+      v.x += dir.x * push * dt;
+      v.z += dir.z * push * dt;
     }
     clampSpeed(v);
     p.addScaledVector(v, dt);
@@ -991,8 +1029,8 @@ function updateSpiderMan(controllers, ent, dt) {
       let mode = null;
       if (ent.state === 'air') mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : !held || -into > 6 ? 'crawl' : null;
       else if (ent.state === 'swing') mode = -into > 4 ? (hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl') : hs < 5 ? 'crawl' : null;
-      else if (ent.state === 'ground' && fwdIn > 0.5 && -into > 1) mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl';
-      const reaching = ent.state === 'air' || (ent.state === 'ground' && fwdIn > 0.5);
+      else if (ent.state === 'ground' && stickMag > 0.5 && -into > 1) mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl';
+      const reaching = ent.state === 'air' || (ent.state === 'ground' && stickMag > 0.5);
       const top = mode || (reaching && -into > 0.5) ? wallTopAt(controllers, p.x - nx * 0.6, p.y + 0.5, p.z - nz * 0.6) : -Infinity;
       if (reaching && top > p.y + 0.3 && top <= p.y + 2.2) {
         // A ledge within reach (a parapet, a step in the roof): pull himself up onto it
@@ -1035,8 +1073,17 @@ function updateSpiderMan(controllers, ent, dt) {
     ent.state = 'air';
   }
 
-  // A zip's pull only carries him through the air: landing, a new swing or a wall ends it
-  if (ent.state !== 'air') zip.pull = 0;
+  // A zip's pull only carries him through the air: landing, a new swing or a wall ends it (and lets him zip again)
+  if (ent.state !== 'air') {
+    zip.pull = 0;
+    zip.chain = 0;
+  }
+
+  // The follow camera looks up the wall as he climbs it and down it as he crawls down (and up a run up a wall)
+  let pitch = 0;
+  if (ent.state === 'wall') pitch = Math.cos(ent.wall.angle) * 0.8;
+  else if (ent.state === 'wallrun' && ent.wallRun.dy > 0.7) pitch = 0.8;
+  ent.cameraPitch += (pitch - ent.cameraPitch) * (1 - Math.exp(-dt * 3));
 
   // Never below the street (tunnels, piers or a teleport onto a roof edge)
   const floor = controllers.getGroundHeight(p.x, p.z, 'person');

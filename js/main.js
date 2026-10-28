@@ -687,6 +687,8 @@ async function initApp() {
     gamepadControls.update(dt);
     controllerManager.update(dt, elapsed);
     cameraSystem.update(dt, elapsed);
+    // The direction Spider-Man's stick is relative to (read on the next update)
+    controllerManager.cameraYaw = cameraSystem.yaw;
     // Spider-Man: the follow cameras widen with speed, for a sense of rush on a small screen
     if (cameraSystem.getActivePreset().category === 'follow') {
       const preset = cameraSystem.getActivePreset();

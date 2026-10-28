@@ -392,3 +392,61 @@ test('a zip can stick to a street light ahead', () => {
   step(controllers, ent, 0.3);
   assert.ok(Math.abs(Math.atan2(ent.velocity.x, ent.velocity.z)) < 1e-9, 'still on his line');
 });
+
+test('the stick is relative to the camera: pushing up from in front turns him round', () => {
+  const controllers = world([]);
+  const ent = spiderEntity(0, 0, 0, 0); // facing +Z
+  controllers.cameraYaw = Math.PI;      // the camera is in front of him, looking back at him (towards -Z)
+  step(controllers, ent, 1, { forward: 1 });
+  assert.ok(Math.abs(Math.abs(ent.heading) - Math.PI) < 0.05, `turned round (heading ${ent.heading.toFixed(2)})`);
+  assert.ok(ent.position.z < -5, 'and ran away from the camera');
+  // Stick right with the camera behind him: he turns to the camera's right (-X) and runs that way
+  const side = spiderEntity(0, 0, 0, 0);
+  controllers.cameraYaw = 0;
+  step(controllers, side, 1, { forward: 0, right: 1 });
+  assert.ok(side.position.x < -5 && Math.abs(side.position.z) < 2, 'ran to the right of the screen');
+  // Letting go: he stops
+  step(controllers, side, 1, { right: 0 });
+  assert.ok(side.speed < 0.5);
+});
+
+test('zips: a little hop up each time, and at most three in a row', () => {
+  const colliders = avenue(120);
+  const controllers = world(colliders);
+  const ent = spiderEntity(0, 40, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 18);
+  const tap = () => {
+    step(controllers, ent, 3 / 60, { up: true });
+    step(controllers, ent, 1 / 60, { up: false });
+  };
+  tap();
+  assert.ok(ent.zip.time >= 0);
+  const y0 = ent.position.y;
+  let peak = y0;
+  for (let i = 0; i < 24; i++) { step(controllers, ent, 1 / 60); peak = Math.max(peak, ent.position.y); }
+  assert.ok(peak > y0 + 1, `rose ${(peak - y0).toFixed(2)} m`);
+  let zips = 1;
+  for (let i = 0; i < 4; i++) {
+    const before = ent.zip.chain;
+    tap();
+    if (ent.zip.chain > before) zips++;
+    step(controllers, ent, 0.3);
+  }
+  assert.equal(zips, 3, 'only three zips in a row');
+  // Touching down resets the count
+  step(controllers, ent, 10);
+  assert.equal(ent.state, 'ground');
+  assert.equal(ent.zip.chain, 0);
+});
+
+test('on a wall the camera tilts up the wall climbing, and down it crawling down', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(0, 0, 0, Math.PI / 2);
+  step(controllers, ent, 2, { forward: 0.6 });
+  step(controllers, ent, 1.5, { forward: 1 });
+  assert.equal(ent.state, 'wall');
+  assert.ok(ent.cameraPitch > 0.5, `looks up (${ent.cameraPitch.toFixed(2)})`);
+  step(controllers, ent, 1.5, { forward: 0, backward: 1 });
+  assert.ok(ent.cameraPitch < -0.5, `looks down (${ent.cameraPitch.toFixed(2)})`);
+});
