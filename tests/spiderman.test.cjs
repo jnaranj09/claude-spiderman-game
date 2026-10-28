@@ -358,21 +358,33 @@ test('a zip can stick to a roof a little below him, and softens a fall without s
   assert.ok(ent.velocity.y < -8, 'still falling the frame after (no sudden stop)');
   step(controllers, ent, 0.25);
   assert.ok(ent.velocity.y > -12, 'the fall is softened');
-  // Far below (25 m under the feet) is still in reach; 40 m is not
-  const below = world([{ ...roof, minZ: 30, maxZ: 90, maxY: 20 }]);
+  // A roof 6 m under the feet is still in reach; 15 m down is not
+  const below = world([{ ...roof, minZ: 30, maxZ: 90, maxY: 39 }]);
   const high = spiderEntity(0, 45, 0);
   high.state = 'air';
   high.velocity.set(0, 0, 18);
   step(below, high, 3 / 60, { up: true });
   step(below, high, 1 / 60, { up: false });
-  assert.ok(high.zip.time >= 0, 'zipped to a roof 25 m down');
-  const deep = world([{ ...roof, maxY: 6 }]);
-  const low = spiderEntity(0, 46, 0);
+  assert.ok(high.zip.time >= 0, 'zipped to a roof 6 m down');
+  const deep = world([{ ...roof, maxY: 30 }]);
+  const low = spiderEntity(0, 45, 0);
   low.state = 'air';
   low.velocity.set(0, 0, 18);
   step(deep, low, 3 / 60, { up: true });
   step(deep, low, 1 / 60, { up: false });
   assert.equal(low.zip.time, -1);
+});
+
+test('a zip prefers a building over a street light', () => {
+  const controllers = world([{ minX: -20, maxX: 20, minZ: 50, maxZ: 70, minY: 0, maxY: 40 }]);
+  controllers.lampSites = [{ x: 0, y: 8.02, z: 25 }];
+  const ent = spiderEntity(0, 12, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 16);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.ok(ent.zip.time >= 0, 'zipped');
+  assert.ok(ent.zip.anchor.z >= 50 - 1e-6, 'to the building, not the lamp');
 });
 
 test('a zip can stick to a street light ahead', () => {

@@ -43,7 +43,7 @@ const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravit
                                  // himself up the web; a fall is softened, never stopped dead
 const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)
 const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
-const ZIP_BELOW = 30;            // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
+const ZIP_BELOW = 8;             // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
@@ -615,8 +615,14 @@ function nearLamps(controllers, x, z, r) {
 }
 
 // A tap: a web shot ahead that yanks him on, stuck to something real. A fan of rays (straight ahead first, then
-// up, down and wider) looks within ~90 m for a building face, roof or ledge (as far as 30 m under his feet), and
-// the street lights ahead count too; with nothing in reach the tap does nothing (a web never sticks to thin air).
+// up, down and wider) looks within ~90 m for a building face, roof or ledge (no more than a few metres under his
+// feet: aiming down costs more than aiming up). Buildings and rooftops win; a street light ahead is only the
+// fallback when there's no building in reach. With nothing at all the tap does nothing (never sticks to thin air).
+// Straight ahead and level reads best, a little up beats down, nearer is snappier
+function zipScore(lat, elev, dist) {
+  return -Math.abs(lat) * 20 - (elev < 0 ? -elev * 22 : elev * 8) - dist * 0.05;
+}
+
 function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
   const lx = fz, lz = -fx;
   const lowest = feetY - ZIP_BELOW;
@@ -630,8 +636,8 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
     const lat = (dx * lx + dz * lz) / ahead;
     const elev = dy / ahead;
     const dist = Math.hypot(dx, dy, dz);
-    if (Math.abs(lat) > 0.5 || elev < -1.2 || elev > 0.9 || dist > ZIP_RANGE) continue;
-    const score = -Math.abs(lat) * 20 - Math.abs(elev) * 8 - dist * 0.05;
+    if (Math.abs(lat) > 0.5 || elev < -0.7 || elev > 0.9 || dist > ZIP_RANGE) continue;
+    const score = zipScore(lat, elev, dist) - 30;
     if (score > bestScore) {
       bestScore = score;
       best = out;
@@ -640,7 +646,7 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
       out.lamp = true;
     }
   }
-  for (const elev of [-1.0, -0.7, -0.45, -0.3, -0.15, -0.05, 0.08, 0.25, 0.5, 0.85]) {
+  for (const elev of [-0.7, -0.45, -0.3, -0.15, -0.05, 0.08, 0.25, 0.5, 0.85]) {
     for (const lat of [0, 0.25, -0.25, 0.5, -0.5]) {
       _dir.set(fx + lx * lat, elev, fz + lz * lat).normalize();
       let t = ZIP_RANGE, found = false;
@@ -652,8 +658,8 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
         }
       }
       if (!found || t < 6 || cy + _dir.y * t < lowest) continue;
-      // Straight ahead and level reads best; nearer is snappier
-      const score = -Math.abs(lat) * 20 - Math.abs(elev) * 8 - t * 0.05;
+      // A roof top is the best perch to pull towards
+      const score = zipScore(lat, elev, t) + (out.ny > 0.5 ? 3 : 0);
       if (score > bestScore) {
         bestScore = score;
         best = out;
