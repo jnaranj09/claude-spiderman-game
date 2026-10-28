@@ -1023,6 +1023,13 @@ function updateSpiderMan(controllers, ent, dt) {
       _offset.subVectors(_center, web.pivot);
       let d = _offset.length();
       if (d > 1e-4) _offset.multiplyScalar(1 / d);
+      // The web never hangs slack: moving in towards the anchor, it's taken in. A slack web lets him fall free
+      // until it snaps tight again somewhere down the arc, turning a dive into a climb in an instant (the swing
+      // looks cut); taken in, it's always taut and the arc stays one smooth curve
+      if (d < web.length) {
+        web.length = Math.max(6, d);
+        web.targetLength = Math.min(web.targetLength, web.length);
+      }
       // (it locks only while taut and no longer stretching, so it never snaps tight)
       if (!web.caught && web.swingTime >= ROPE_CATCH && d >= web.length && v.dot(_offset) < 0.5) {
         web.caught = true;

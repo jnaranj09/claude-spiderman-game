@@ -200,6 +200,36 @@ test('the web catches a fall smoothly, without a hard kink', () => {
   }
 });
 
+test('mid swing the web stays taut: no sudden kink from diving to climbing', () => {
+  // All sorts of rhythms of pressing and letting go, with some steering: the swing never jerks (a slack web that
+  // snaps tight again down the arc turned a 20 m/s dive into a climb within a frame or two: 500-700 m/s²)
+  for (let seed = 0; seed < 12; seed++) {
+    const controllers = world(avenue(40 + seed * 5));
+    const ent = spiderEntity(-6 + seed % 3 * 4, 0, 0, 0);
+    controllers.keys.up = true;
+    let off = 0, worst = 0;
+    for (let i = 0; i < 60 * 25; i++) {
+      const web = ent.web;
+      if (controllers.keys.up && web.phase === 'attached' && web.passedBottom && web.swingTime > 0.8 + (seed % 4) * 0.4) {
+        controllers.keys.up = false;
+        off = 0;
+      } else if (!controllers.keys.up && (off += 1 / 60) > 0.1 + (seed % 5) * 0.15) {
+        controllers.keys.up = true;
+      }
+      controllers.keys.left = seed % 2 && i % 200 < 60 ? 1 : 0;
+      const [x, y, z] = ent.velocity.toArray();
+      const was = ent.state;
+      spider.updateSpiderMan(controllers, ent, 1 / 60);
+      const v = ent.velocity;
+      // (skipping a web pulled right in to its shortest, where a tight whip round the anchor is fair)
+      if (was === 'swing' && ent.state === 'swing' && web.length > 6.5) {
+        worst = Math.max(worst, Math.hypot(v.x - x, v.y - y, v.z - z) * 60);
+      }
+    }
+    assert.ok(worst < 250, `seed ${seed}: ${worst.toFixed(0)} m/s² at worst`);
+  }
+});
+
 test('press, swing, release on the way up and press again: swings chain straight down the avenue', () => {
   const colliders = avenue();
   const controllers = world(colliders);
