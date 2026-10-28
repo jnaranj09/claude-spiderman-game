@@ -230,6 +230,40 @@ test('mid swing the web stays taut: no sudden kink from diving to climbing', () 
   }
 });
 
+test('a low roof under the swing is cleared in good time, not scraped', () => {
+  // Low blocks down the middle of the avenue, right under the swing's path
+  const colliders = avenue();
+  for (let z = 20; z < 600; z += 45) colliders.push({ minX: -12, maxX: 12, minZ: z, maxZ: z + 25, minY: 0, maxY: 14 });
+  const controllers = world(colliders);
+  const ent = spiderEntity(-6, 22, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 16);
+  controllers.keys.up = true;
+  let off = 0, scrapes = 0, worst = 0, swings = 0, last = 'none';
+  for (let i = 0; i < 60 * 15; i++) {
+    const web = ent.web;
+    if (controllers.keys.up && web.phase === 'attached' && web.passedBottom && web.rising && ent.velocity.y < 3) {
+      controllers.keys.up = false;
+      off = 0;
+    } else if (!controllers.keys.up && (off += 1 / 60) > 0.15) {
+      controllers.keys.up = true;
+    }
+    const [x, y, z] = ent.velocity.toArray();
+    const was = ent.state;
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+    if (web.phase === 'attached' && last !== 'attached') swings++;
+    last = web.phase;
+    const v = ent.velocity;
+    if (was === 'swing' && ent.state === 'swing') {
+      if (y < -3 && v.y === 0) scrapes++;
+      if (web.length > 6.5) worst = Math.max(worst, Math.hypot(v.x - x, v.y - y, v.z - z) * 60);
+    }
+  }
+  assert.ok(swings >= 4, `${swings} swings`);
+  assert.equal(scrapes, 0, 'never dragged over a roof');
+  assert.ok(worst < 250, `${worst.toFixed(0)} m/s² at worst`);
+});
+
 test('press, swing, release on the way up and press again: swings chain straight down the avenue', () => {
   const colliders = avenue();
   const controllers = world(colliders);

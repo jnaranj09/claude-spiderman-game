@@ -350,6 +350,28 @@ function groundAt(controllers, x, z, fromY) {
   return ground;
 }
 
+// The longest web whose arc still clears every roof, ledge and the street ahead of him along the swing (dir), with
+// the hips CLEAR above them. The arc is sampled from where he is to well up the far side.
+const ARC_CLEAR = 2.2;
+function clearRopeLength(controllers, web, p, dx, dz) {
+  const piv = web.pivot;
+  const ox = p.x - piv.x, oz = p.z - piv.z;
+  const now = ox * dx + oz * dz;
+  const latX = ox - dx * now, latZ = oz - dz * now;
+  const lat2 = latX * latX + latZ * latZ;
+  const far = web.length * 0.75;
+  let best = Infinity;
+  for (let k = 0; k <= 8; k++) {
+    const s = now + (far - now) * k / 8;
+    const x = piv.x + dx * s + latX, z = piv.z + dz * s + latZ;
+    const g = groundAt(controllers, x, z, p.y);
+    const room = piv.y - g - ARC_CLEAR;
+    if (room < 2) continue; // as high as the anchor: a wall to run into, not a roof to clear
+    best = Math.min(best, Math.sqrt(room * room + s * s + lat2));
+  }
+  return best;
+}
+
 // The building in front of a wall contact, to find how high the wall goes
 function wallTopAt(controllers, x, y, z) {
   let top = -Infinity;
@@ -1018,6 +1040,12 @@ function updateSpiderMan(controllers, ent, dt) {
     // him onto the arc. Then the rope locks at whatever length it has stretched to, and reels back in from there.
     if (ent.state === 'swing') {
       web.swingTime += dt;
+      // Roofs and ledges coming up under the arc: shorten the web in good time so the swing passes over them,
+      // instead of scraping them (which stopped the dive dead and threw him upwards)
+      if (v.x * web.dirX + v.z * web.dirZ > 0) {
+        const clear = clearRopeLength(controllers, web, p, web.dirX, web.dirZ);
+        if (clear < web.targetLength) web.targetLength = Math.max(6, clear);
+      }
       const reel = (web.targetLength - web.length) * (1 - Math.exp(-dt * 6));
       _center.set(p.x, p.y + 1.0, p.z);
       _offset.subVectors(_center, web.pivot);
@@ -1093,8 +1121,8 @@ function updateSpiderMan(controllers, ent, dt) {
     if (p.y <= ground) {
       p.y = ground;
       if (ent.state === 'swing') {
-        // Dragged along the street: shorten the web so the swing lifts off again
-        web.targetLength = Math.max(6, web.targetLength - 4);
+        // Scraping the ground or a roof anyway: slide over it, and take the web in a little to lift off again
+        web.targetLength = Math.max(6, web.targetLength - 1);
         v.y = Math.max(0, v.y);
       } else {
         ent.crouch = Math.min(1, -v.y / 22);
