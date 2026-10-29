@@ -25,11 +25,14 @@ const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the groun
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
+const ARC_WEB = 60;              // m: the web length a swing prefers...
+const ARC_RISE = 38;             // ...and how far above him it likes the anchor
 const ROPE_CATCH = 0.45;         // s: the web is springy this long as it catches, then rigid
 const ROPE_SOFT = 80;            // 1/s²: its springiness as it starts to take his weight...
 const ROPE_STIFF = 600;          // ...firming up to this
 const ROPE_MAX_STRETCH = 3;      // m
 const SWING_TURN_SPEED = 1.5;    // m/s back along the swing before he turns to face the other way
+const AIR_LEAN = 0.45;           // rad: how far forward he leans flying at speed
 const PIVOT_PULL = 0.95;         // share of the anchor's sideways offset the pendulum pivot moves back over the path
 const RELEASE_BOOST_UP = 5.5;
 const RELEASE_BOOST_FWD = 5.0;
@@ -425,8 +428,8 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
         // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
         // swinging looks best, rather than climbing a little higher with every web until the buildings run out
         const bottom = hy - tBest * 0.94;
-        const score = -Math.abs(tBest - 40) * 0.25 - Math.abs(rise - 26) * 0.2 - Math.abs(bottom - ground - 12) * 0.3
-          + ahead * 0.2 + (s === side ? 5 : 0)
+        const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
+          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.2 + (s === side ? 5 : 0)
           - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
         if (score > bestScore) {
           bestScore = score;
@@ -645,7 +648,7 @@ function attachWeb(controllers, ent) {
   // Keep the bottom of the arc clear of the street: a short web reels the player up instead of dragging them
   const ground = controllers.getGroundHeight(p.x, p.z, 'person');
   web.length = dist;
-  web.targetLength = Math.max(6, Math.min(dist * 0.94, web.pivot.y - ground - 4.5));
+  web.targetLength = Math.max(6, Math.min(dist * 0.97, web.pivot.y - ground - 4.5));
   web.phase = 'attached';
   ent.state = 'swing';
   // The splat stays on the wall while the web holds, then fades
@@ -1520,14 +1523,24 @@ function bodyOrientation(ent, out) {
     _by.copy(v).normalize();
     _bz.set(0, -1, 0).addScaledVector(_by, _by.y);
     if (_bz.lengthSq() < 1e-4) _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
-  } else if (ent.state === 'swing' && web.phase === 'attached') {
-    _by.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
-    // Facing his heading, square to the rope: always along the arc, however the velocity jumps about
   } else if (ent.state === 'air' || ent.state === 'swing') {
+    // In flight he leans into the way he's going: head first and body stretched out at speed (more so falling,
+    // less on the way up, when he tips back a little); zipping, flat out along the web
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
-    // Zipping: flat out along the web
-    const dive = ent.zip.time >= 0 ? 0.9 : Math.sin(pitch) * 0.8;
-    _by.set(0, 1, 0).addScaledVector(_bz, -dive).normalize();
+    const lean = ent.zip.time >= 0 ? 0.9
+      : Math.max(-0.35, Math.min(0.95, AIR_LEAN * Math.min(1, h / 25) - Math.sin(pitch) * 0.8));
+    _by.set(0, Math.cos(lean), 0).addScaledVector(_bz, Math.sin(lean));
+    // On a web his up turns to the line of the web (facing his heading, square to it, so always along the arc),
+    // eased in over the first half second; a web still flying out draws him a little towards it already
+    let toWeb = 0;
+    if (web.phase === 'attached') toWeb = Math.min(1, web.swingTime / 0.55);
+    else if (web.phase === 'shooting') toWeb = 0.3 * Math.min(1, web.travelled / Math.max(1, web.distance));
+    if (toWeb > 0) {
+      toWeb = toWeb * toWeb * (3 - 2 * toWeb);
+      _axis.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
+      _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
+    }
+    _by.normalize();
   } else {
     _by.set(0, 1, 0);
   }
@@ -1570,7 +1583,9 @@ function updateSpiderManVisuals(ent, dt, active) {
   }
 
   bodyOrientation(ent, _qWant);
-  ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * 10));
+  // (gentler in the air and on the web, where the body flows from one attitude to the next)
+  const turnRate = ent.state === 'air' || ent.state === 'swing' ? 6 : 10;
+  ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
   // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
   if (ent.state === 'swing' && web.phase === 'attached') {
     _axis.set(web.anchor.x - ent.position.x, web.anchor.y - ent.position.y - 1, web.anchor.z - ent.position.z).normalize();
