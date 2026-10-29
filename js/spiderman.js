@@ -424,7 +424,8 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, stri
   if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
   const elevations = [0.35, 0.45, 0.55, 0.7, 0.85, 1.2, 1.7];
-  const laterals = [0.15, 0.4, 0.7, 1.05];
+  // (0.05: almost along a wall he's right up against, to a point on it ahead)
+  const laterals = [0.05, 0.15, 0.4, 0.7, 1.05];
   for (const pass of strict ? [true, false] : [false]) {
     if (strict && !pass && best) break;
     for (const s of [side, -side]) {
@@ -443,7 +444,7 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, stri
           const ahead = (hx - cx) * fx + (hz - cz) * fz;
           if (rise < 7 || ahead < 5) continue;
           // (strict, first pass: only hits on the chosen side of the screen)
-          if (pass && ((hx - cx) * sideZ - (hz - cz) * sideX) * side < 2) continue;
+          if (pass && ((hx - cx) * sideZ - (hz - cz) * sideX) * side < 0.5) continue;
           // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
           // swinging looks best, rather than climbing a little higher with every web until the buildings run out
           const bottom = hy - tBest * 0.94;
