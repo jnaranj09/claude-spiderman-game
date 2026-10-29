@@ -25,7 +25,12 @@ const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the groun
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
-const ARC_WEB = 60;              // m: the web length a swing prefers...
+const ARC_WEB = 60;              // m: the web length a swing prefers high up...
+const ARC_WEB_SHORT = 30;        // ...and low down
+const ARC_FLAT = 0.55;           // rad above level the web prefers high up (~32 degrees)...
+const ARC_STEEP = 1.1;           // ...and low down (~63 degrees)
+const ARC_LOW = 4;               // m above the street where he's "low"...
+const ARC_HIGH = 40;             // ...and where he's "high" (between the two, everything slides)
 const ZIG_MARGIN = 4;            // m: a chosen-hand swing ends at least this far short of the facade...
 const ZIG_REACH = 9;             // m: ...and carries him at most this far across
 const ZIG_SHARE = 0.33;          // the pivot's share of that: the swing and the flight after it carry him the rest
@@ -34,7 +39,6 @@ const SCRAPE_PENALTY = 1.2;       // score lost per metre an anchor's arc would 
 const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
 const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
-const ARC_RISE = 32;             // ...and how far above him it likes the anchor
 const ROPE_CATCH = 0.45;         // s: the web is springy this long as it catches, then rigid
 const ROPE_SOFT = 80;            // 1/s²: its springiness as it starts to take his weight...
 const ROPE_STIFF = 600;          // ...firming up to this
@@ -58,7 +62,10 @@ const ZIP_MAX_SPEED = 44;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
 const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravity's 22): a small hop up, as if he hauled
                                  // himself up the web; a fall is softened, never stopped dead
-const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)
+const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)...
+const ZIP_RISE_UP = 6;           // ...and up to this much more for a web aimed steeply up
+const ZIP_AIM_LOW = 0.7;         // how far up (rise per metre ahead) a zip aims from the street...
+const ZIP_AIM_HEIGHT = 30;       // ...levelling out by this height
 const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
 const ZIP_BELOW = 8;             // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
@@ -425,7 +432,13 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, stri
   const candidates = controllers.nearColliders(cx + fx * 40, cz + fz * 40, 85).filter((c) => c.maxY > cy + 7);
   if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
-  const elevations = [0.35, 0.45, 0.55, 0.7, 0.85, 1.2, 1.7];
+  // What sort of web suits his height, sliding smoothly from one to the other: low down there's no room for a long
+  // arc (it would swing him through the street), so a short web, steeply up and only a little ahead, to climb;
+  // high up, a long one far ahead and low, for a long arc
+  const reach = Math.max(0, Math.min(1, (cy - 1.3 - ground - ARC_LOW) / (ARC_HIGH - ARC_LOW)));
+  const wantLength = ARC_WEB_SHORT + (ARC_WEB - ARC_WEB_SHORT) * reach;
+  const wantAngle = ARC_STEEP + (ARC_FLAT - ARC_STEEP) * reach;
+  const elevations = [0.35, 0.45, 0.55, 0.7, 0.85, 1.2, 1.7, 2.4];
   // (0.05: almost along a wall he's right up against, to a point on it ahead)
   const laterals = [0.05, 0.15, 0.4, 0.7, 1.05];
   for (const pass of strict ? [true, false] : [false]) {
@@ -457,8 +470,9 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, stri
           const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
           // ...and the near side of the street beats the far one (alternating hands only tips an even choice)
           const across = Math.abs((hx - cx) * lx + (hz - cz) * lz);
-          const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
-            - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 2 : 0) - facing * FACING_PENALTY
+          const angle = Math.atan2(rise, Math.hypot(hx - cx, hz - cz));
+          const score = -Math.abs(tBest - wantLength) * 0.25 - Math.abs(angle - wantAngle) * 12
+            - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 * reach + (s === side ? 2 : 0) - facing * FACING_PENALTY
             - (strict ? 0 : across * NEAR_SIDE) - scrape * SCRAPE_PENALTY
             - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
           if (score > bestScore) {
@@ -545,13 +559,14 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0,
+    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0, rise: ZIP_RISE,
       targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
     webSpent: false, // this press already threw its web
     wantL: false,    // the hands asked for since the press (L, R, or both: a double web)
     wantR: false,
+    pressAir: false, // whether this press began in the air (only then can a tap zip)
     pressTime: 0,
     webCooldown: 0,
     webRetry: 0,
@@ -852,13 +867,17 @@ function nearLamps(controllers, x, z, r) {
 // up, down and wider) looks within ~90 m for a building face, roof or ledge (no more than a few metres under his
 // feet: aiming down costs more than aiming up). Buildings and rooftops win; a street light ahead is only the
 // fallback when there's no building in reach. With nothing at all the tap does nothing (never sticks to thin air).
-// Straight ahead and level reads best, a little up beats down, nearer is snappier
-function zipScore(lat, elev, dist) {
-  return -Math.abs(lat) * 20 - (elev < 0 ? -elev * 22 : elev * 8) - dist * 0.05;
+// Straight ahead reads best, at the height `want` (above level low down, to climb; level high up); below it is
+// worse than above; nearer is snappier
+function zipScore(lat, elev, dist, want = 0) {
+  const off = elev - want;
+  return -Math.abs(lat) * 20 - (off < 0 ? -off * 22 : off * 8) - dist * 0.05;
 }
 
-function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
+function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3, ground = -Infinity) {
   const lx = fz, lz = -fx;
+  // Low down a zip aims well up (still ahead), to help him gain height; high up it aims level
+  const want = ZIP_AIM_LOW * (1 - Math.max(0, Math.min(1, (feetY - ground) / ZIP_AIM_HEIGHT)));
   const lowest = feetY - ZIP_BELOW;
   const candidates = controllers.nearColliders(cx + fx * 45, cz + fz * 45, 60).filter((c) => c.maxY > lowest);
   let best = null, bestScore = -Infinity;
@@ -871,7 +890,7 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
     const elev = dy / ahead;
     const dist = Math.hypot(dx, dy, dz);
     if (Math.abs(lat) > 0.5 || elev < -0.7 || elev > 0.9 || dist > ZIP_RANGE) continue;
-    const score = zipScore(lat, elev, dist) - 30;
+    const score = zipScore(lat, elev, dist, want) - 30;
     if (score > bestScore) {
       bestScore = score;
       best = out;
@@ -893,7 +912,7 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3) {
       }
       if (!found || t < 6 || cy + _dir.y * t < lowest) continue;
       // A roof top is the best perch to pull towards
-      const score = zipScore(lat, elev, t) + (out.ny > 0.5 ? 3 : 0);
+      const score = zipScore(lat, elev, t, want) + (out.ny > 0.5 ? 3 : 0);
       if (score > bestScore) {
         bestScore = score;
         best = out;
@@ -915,7 +934,8 @@ function webZip(controllers, ent) {
   const zip = ent.zip;
   const dir = travelDirection(ent);
   const cy = p.y + 1.3;
-  const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y);
+  const ground = controllers.getGroundHeight(p.x, p.z, 'person');
+  const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y, ground);
   if (!target) return false;
   zip.anchor.set(target.x, target.y, target.z);
   if (target.lamp) zip.normal.set(0, 0, 0);
@@ -932,6 +952,9 @@ function webZip(controllers, ent) {
   // update), never cutting speed or stopping a fall dead
   const hs = Math.hypot(v.x, v.z);
   zip.targetSpeed = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
+  // ...and a web aimed up lifts him higher
+  const up = (target.y - cy) / Math.max(1, Math.hypot(target.x - p.x, target.z - p.z));
+  zip.rise = ZIP_RISE + ZIP_RISE_UP * Math.max(0, Math.min(1, up));
   zip.pull = ZIP_PULL_TIME;
   if (hs < 3) {
     // From a near standstill there's no line yet: start one along his facing
@@ -1003,7 +1026,11 @@ function updateSpiderMan(controllers, ent, dt) {
   const pressed = held && !ent.webHeld;
   const released = !held && ent.webHeld;
   const tap = released && ent.pressTime < TAP_TIME;
-  if (pressed) { ent.pressTime = 0; ent.webSpent = false; ent.wantL = ent.wantR = false; }
+  if (pressed) {
+    ent.pressTime = 0; ent.webSpent = false; ent.wantL = ent.wantR = false;
+    // (from the ground a press always jumps first: a tap there is just a jump, and only a tap begun in the air zips)
+    ent.pressAir = ent.state === 'air' || ent.state === 'swing';
+  }
   else if (held) ent.pressTime += dt;
   // (the hands pressed in the moment before the web flies count: the second of a double needn't be exact)
   if (held && !ent.webSpent) { ent.wantL ||= btnL; ent.wantR ||= btnR; }
@@ -1037,7 +1064,7 @@ function updateSpiderMan(controllers, ent, dt) {
   if (held || tap) ent.diving = false;
 
   // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
-  if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
+  if (tap && ent.pressAir && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
     web.phase = 'none';
     if (request === 1 || request === -1) ent.nextSide = request; // from the hand tapped
     webZip(controllers, ent);
@@ -1121,7 +1148,7 @@ function updateSpiderMan(controllers, ent, dt) {
       const gain = Math.min(accel * step, Math.max(0, zip.targetSpeed - hs));
       v.x += dir.x * gain;
       v.z += dir.z * gain;
-      if (v.y < ZIP_RISE) v.y = Math.min(ZIP_RISE, v.y + ZIP_LIFT * step);
+      if (v.y < zip.rise) v.y = Math.min(zip.rise, v.y + ZIP_LIFT * step);
     }
     if (ent.state === 'air') {
       // Light air control and drag; terminal velocity keeps long falls readable

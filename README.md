@@ -29,8 +29,10 @@ and never reaches more than ~9 m across, so in a narrow street the zigzag goes f
 avenue it stays a weave down the middle. Choose a side that fights where you're going and the swing shows it.
 **Both hands at once** fire a **double web**, one to each side, for a dead-straight swing down the middle of the
 street and a harder fling when you let go. (The keyboard's Space and the gamepad's A keep the automatic web, which
-picks the near side and keeps the swing down the middle for you.) **Tap** a web button to zip a web at the
-building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) for a smooth push forward and a small hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
+picks the near side and keeps the swing down the middle for you.) Webs suit his height: low down there's no room for a long arc, so he throws short ones, steeply up and only a
+little ahead, to climb; high up, long ones far ahead and low, for long arcs; and everything in between.
+From the ground a press always jumps first (a tap there is just a jump). **Tap** a web button in the air to zip a web at the
+building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) (aimed well up when he's low, to help him climb; level higher up) for a smooth push forward and a hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
 Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding a web button kicks

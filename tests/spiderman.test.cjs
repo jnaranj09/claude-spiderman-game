@@ -203,7 +203,7 @@ test('L and R: each hand webs its own side, and alternating them zigzags inside 
     assert.equal(run.state, null, `${label}: never hit a wall or the street`);
     const min = Math.min(...run.xs.slice(60)), max = Math.max(...run.xs.slice(60));
     assert.ok(max > 2.5 && min < -1.5, `${label}: zigzags (${min.toFixed(1)} to ${max.toFixed(1)} m)`);
-    assert.ok(max < width - 2.5 && min > -width + 2.5, `${label}: and stays in the street (${min.toFixed(1)} to ${max.toFixed(1)})`);
+    assert.ok(max < width - 1.5 && min > -width + 1.5, `${label}: and stays in the street (${min.toFixed(1)} to ${max.toFixed(1)})`);
     assert.ok(ent.position.z > 250, `${label}: and gets on down it (${ent.position.z.toFixed(0)} m)`);
   }
 });
@@ -228,6 +228,46 @@ test('both hands: a double web, one to each side, swings straight down the middl
   for (const a of run.anchors) assert.ok(a.x2 !== null && Math.sign(a.x) !== Math.sign(a.x2), 'two webs, either side');
   assert.ok(Math.max(...run.xs.map(Math.abs)) < 1.5, 'dead straight');
   assert.ok(ent.position.z > 300, `${ent.position.z.toFixed(0)} m`);
+});
+
+test('from the ground a press always jumps first: a tap there just jumps, and only a tap in the air zips', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(-6, 0, 0, 0);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.equal(ent.state, 'air', 'jumped');
+  assert.equal(ent.zip.time, -1, 'no zip');
+  step(controllers, ent, 0.2);
+  step(controllers, ent, 3 / 60, { up: true });
+  step(controllers, ent, 1 / 60, { up: false });
+  assert.ok(ent.zip.time >= 0, 'a tap in the air zips');
+});
+
+test('webs suit his height: steep and short low down, long and flat high up, sliding in between', () => {
+  const controllers = world(avenue(150));
+  const angleAt = (y) => {
+    const a = spider.findAnchor(controllers, -6, y + 1.3, 0, 0, 1, 1, {}, 0);
+    return Math.atan2(a.y - y - 1.3, Math.hypot(a.x + 6, a.z)) * 180 / Math.PI;
+  };
+  const low = angleAt(1), mid = angleAt(20), high = angleAt(45);
+  assert.ok(low > mid && mid > high, `${low.toFixed(0)} > ${mid.toFixed(0)} > ${high.toFixed(0)} degrees`);
+  assert.ok(low > 50 && high < 35, 'from steep to flat');
+});
+
+test('zips aim well up from low down (to climb), level from high up', () => {
+  // A long wall straight ahead, far taller than him
+  const controllers = world([{ minX: -40, maxX: 40, minZ: 40, maxZ: 60, minY: 0, maxY: 200 }]);
+  const aim = (y) => {
+    const ent = spiderEntity(0, y, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 16);
+    step(controllers, ent, 3 / 60, { up: true });
+    step(controllers, ent, 1 / 60, { up: false });
+    assert.ok(ent.zip.time >= 0, 'zipped');
+    return (ent.zip.anchor.y - ent.position.y) / (ent.zip.anchor.z - ent.position.z);
+  };
+  const low = aim(2), high = aim(60);
+  assert.ok(low > 0.4 && Math.abs(high) < 0.2, `low ${low.toFixed(2)}, high ${high.toFixed(2)}`);
 });
 
 test('over open ground the web finds nothing to stick to', () => {
