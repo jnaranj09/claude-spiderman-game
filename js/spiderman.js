@@ -36,6 +36,8 @@ const ZIG_REACH = 9;             // m: ...and carries him at most this far acros
 const ZIG_SHARE = 0.33;          // the pivot's share of that: the swing and the flight after it carry him the rest
 const DOUBLE_BOOST = 1.4;        // the release fling of a double web, against a single one
 const SCRAPE_PENALTY = 1.2;       // score lost per metre an anchor's arc would dip below the street
+const COURSE_RATE = 0.9;         // 1/s: how fast that smoothed line of travel follows the real one
+const COURSE_SNAP = 0.6;          // rad: a line of travel this close to the grid counts as along the street
 const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
 const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
@@ -62,6 +64,7 @@ const ZIP_MAX_SPEED = 44;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
 const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravity's 22): a small hop up, as if he hauled
                                  // himself up the web; a fall is softened, never stopped dead
+const ZIP_SOFT_CAP = 32;          // m/s: the speed by which a zip's push has faded to almost nothing
 const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)...
 const ZIP_RISE_UP = 6;           // ...and up to this much more for a web aimed steeply up
 const ZIP_AIM_LOW = 0.7;         // how far up (rise per metre ahead) a zip aims from the street...
@@ -424,9 +427,9 @@ function canyonCentreOffset(controllers, cx, cy, cz, fx, fz) {
 // Ray casts a fan of candidate web directions, ahead and up, favouring the side the next hand swings from.
 // Returns the best anchor on a real building surface, or null over open ground (parks, rivers, low rooftops).
 // `strict`: the player chose this hand, so only that side counts (the other one only if there's nothing at all on
-// it), and no preference for the near side. Which side is which is then the screen's: left of (sideX, sideZ), the
-// way the camera looks, not of his line of travel (after a swing out to the left he's still flying a little
-// leftwards, and a fan of rays to the right of that would find the left side of the street ahead)
+// it), and no preference for the near side. Which side is which is then the left of (sideX, sideZ), the course he's
+// on, not of his exact line of travel (after a swing out to the left he's still flying a little leftwards, and a fan
+// of rays to the right of that would find the left side of the street ahead)
 function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, strict = false, sideX = fx, sideZ = fz) {
   const lx = fz, lz = -fx; // the figure's left, for a heading (fx, fz)
   const candidates = controllers.nearColliders(cx + fx * 40, cz + fz * 40, 85).filter((c) => c.maxY > cy + 7);
@@ -567,6 +570,9 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     wantL: false,    // the hands asked for since the press (L, R, or both: a double web)
     wantR: false,
     pressAir: false, // whether this press began in the air (only then can a tap zip)
+    stickYaw: null,  // where the stick points (camera-relative), while it's pushed
+    courseX: Math.sin(heading), // his line of travel, smoothed
+    courseZ: Math.cos(heading),
     pressTime: 0,
     webCooldown: 0,
     webRetry: 0,
@@ -678,11 +684,21 @@ function shootWeb(controllers, ent, request = 0) {
   const web = ent.web;
   const ground = controllers.getGroundHeight(p.x, p.z, 'person');
   const chosen = request !== 0;
-  // (a chosen hand's side is the screen's: see findAnchor)
-  const camYaw = Number.isFinite(controllers.cameraYaw) ? controllers.cameraYaw : ent.heading;
-  const sideX = Math.sin(camYaw), sideZ = Math.cos(camYaw);
-  // (and a chosen hand looks for its anchor between his line of travel and the screen's forward, the street's
-  // axis: flying diagonally after a swing out, a fan round his line alone hardly reaches across to the other side)
+  // A chosen hand's left and right (see findAnchor) are those of where he's headed, never the camera's: while the
+  // stick is held, where it points (the way the player means by forward, whatever angle the camera sees him
+  // from); with it centred, the street he's travelling along, his line of travel snapped to the city's grid, so
+  // the diagonal he flies after swinging out to one side still reads as straight down the avenue (his line of
+  // travel smoothed over a second or so, too, so a sideways burst doesn't turn it; a real turn does)
+  let courseYaw = Math.atan2(ent.courseX, ent.courseZ);
+  if (ent.stickYaw !== null) {
+    courseYaw = ent.stickYaw;
+  } else {
+    const grid = Math.round(courseYaw / (Math.PI / 2)) * (Math.PI / 2);
+    if (Math.abs(angleDiff(grid, courseYaw)) < COURSE_SNAP) courseYaw = grid;
+  }
+  const sideX = Math.sin(courseYaw), sideZ = Math.cos(courseYaw);
+  // (and a chosen hand looks for its anchor between his line of travel and that course: flying diagonally after
+  // a swing out, a fan round his line alone hardly reaches across to the other side)
   let fanX = dir.x, fanZ = dir.z;
   if (chosen && dir.x * sideX + dir.z * sideZ > 0) {
     fanX += sideX; fanZ += sideZ;
@@ -733,7 +749,7 @@ function shootWeb(controllers, ent, request = 0) {
     // starts short of it (and flies on a little after), so the pivot sits only far enough over that he ends ZIG_MARGIN short of the
     // facade, and never more than ZIG_REACH across. That's the zigzag: each swing carries him over to its side,
     // and the next, from the other hand, back. In a narrow street it reaches across; in a wide one it's a weave
-    // (across measured square to the screen's forward, the street's axis, not to his line of travel: flying
+    // (across measured square to his course, the street's axis, not to his line of travel: flying
     // diagonally, "over his path" would land the pivot far ahead on that line, in the buildings opposite)
     const leftX = sideZ, leftZ = -sideX;
     const acrossSigned = ox * leftX + oz * leftZ;
@@ -951,7 +967,9 @@ function webZip(controllers, ent) {
   // quarter second it builds his speed along the way he's already going and lifts against gravity (see the air
   // update), never cutting speed or stopping a fall dead
   const hs = Math.hypot(v.x, v.z);
-  zip.targetSpeed = Math.max(hs, Math.min(ZIP_MAX_SPEED, Math.max(hs, 12) + ZIP_PUSH));
+  // (the push fades as he gets faster: from a standstill a few zips get him going, but real speed takes swings)
+  const start = Math.max(hs, 6);
+  zip.targetSpeed = Math.max(hs, Math.min(ZIP_MAX_SPEED, start + ZIP_PUSH * Math.max(0.15, 1 - start / ZIP_SOFT_CAP)));
   // ...and a web aimed up lifts him higher
   const up = (target.y - cy) / Math.max(1, Math.hypot(target.x - p.x, target.z - p.z));
   zip.rise = ZIP_RISE + ZIP_RISE_UP * Math.max(0, Math.min(1, up));
@@ -1019,6 +1037,18 @@ function updateSpiderMan(controllers, ent, dt) {
     const c = Math.cos(camYaw), sn = Math.sin(camYaw);
     const sx = -turn, sy = fwdIn - backIn; // stick right, stick up
     wantYaw = Math.atan2(sn * sy - c * sx, c * sy + sn * sx);
+  }
+  ent.stickYaw = stickMag > 0.3 ? wantYaw : null;
+  {
+    const hs = Math.hypot(v.x, v.z);
+    if (hs > 3) {
+      const k = 1 - Math.exp(-dt * COURSE_RATE);
+      ent.courseX += (v.x / hs - ent.courseX) * k;
+      ent.courseZ += (v.z / hs - ent.courseZ) * k;
+      const n = Math.hypot(ent.courseX, ent.courseZ) || 1;
+      ent.courseX /= n;
+      ent.courseZ /= n;
+    }
   }
   // The web buttons: L and R (that hand), both (a double web), or the automatic one (keyboard and gamepad)
   const btnL = Boolean(keys.webLeft), btnR = Boolean(keys.webRight);

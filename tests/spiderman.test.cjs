@@ -270,6 +270,36 @@ test('zips aim well up from low down (to climb), level from high up', () => {
   assert.ok(low > 0.4 && Math.abs(high) < 0.2, `low ${low.toFixed(2)}, high ${high.toFixed(2)}`);
 });
 
+test('zips from a standstill get him going, but real speed takes swings', () => {
+  const controllers = world([{ minX: -40, maxX: 40, minZ: 70, maxZ: 90, minY: 0, maxY: 200 }]);
+  const ent = spiderEntity(0, 10, 0, 0);
+  ent.state = 'air';
+  for (let n = 0; n < 2; n++) {
+    step(controllers, ent, 3 / 60, { up: true });
+    step(controllers, ent, 1 / 60, { up: false });
+    step(controllers, ent, 0.4);
+  }
+  const hs = Math.hypot(ent.velocity.x, ent.velocity.z);
+  assert.equal(ent.zip.chain, 2, 'two zips');
+  assert.ok(hs > 12 && hs < 26, `${hs.toFixed(1)} m/s after two zips from rest`);
+});
+
+test('a hand web goes to his side, not the screen\'s: the camera at his side changes nothing', () => {
+  const controllers = world(avenue(90));
+  // The camera off to his right, looking across the avenue (towards +X); he's swinging down it (+Z)
+  controllers.cameraYaw = Math.PI / 2;
+  for (const stick of [{}, { right: 1 }]) { // centred, and pushed to the screen's right: his front
+    const ent = spiderEntity(0, 20, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 18);
+    step(controllers, ent, 0.15, { ...stick, webLeft: true });
+    assert.ok(ent.web.phase !== 'none', 'a web flew');
+    assert.ok(ent.web.anchor.x > 0, `his left hand webbed his left (x=${ent.web.anchor.x.toFixed(1)})`);
+    // ...and swings him out that way, across the street (in the screen's frame the pivot sat on the facade)
+    assert.ok(ent.web.pivot.x > 0.5 && ent.web.pivot.x < 10, `pivot over the street (x=${ent.web.pivot.x.toFixed(1)})`);
+  }
+});
+
 test('over open ground the web finds nothing to stick to', () => {
   const controllers = world([{ minX: -5, maxX: 5, minZ: 30, maxZ: 40, minY: 0, maxY: 3 }]); // a bus shelter
   assert.equal(spider.findAnchor(controllers, 0, 10, 0, 0, 1, 1, {}), null);

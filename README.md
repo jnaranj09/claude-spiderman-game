@@ -19,8 +19,8 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Dive (in the air) | tap the stick | X | click the left stick |
 | Look around | drag the screen | drag | right stick |
 
-Press and hold **L** or **R** and Spider-Man jumps and fires a web from that hand, at a building on that side of the
-screen. One press is one web: he stays on it as long as you hold, swinging to and fro like a pendulum. Steer with the
+Press and hold **L** or **R** and Spider-Man jumps and fires a web from that hand, at a building on that side of him
+(his left and right as he heads where the stick points, or down the street he's on: never the camera's). One press is one web: he stays on it as long as you hold, swinging to and fro like a pendulum. Steer with the
 stick. Let go (best on the way up the far side) to fly on, and press again to catch the next building.
 
 A web from one hand swings him out towards its side of the street, so **alternating L and R zigzags** down it:
