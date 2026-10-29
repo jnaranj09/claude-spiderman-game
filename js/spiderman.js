@@ -26,7 +26,9 @@ const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
 const ARC_WEB = 60;              // m: the web length a swing prefers...
-const ARC_RISE = 38;             // ...and how far above him it likes the anchor
+const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
+const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
+const ARC_RISE = 32;             // ...and how far above him it likes the anchor
 const ROPE_CATCH = 0.45;         // s: the web is springy this long as it catches, then rigid
 const ROPE_SOFT = 80;            // 1/s²: its springiness as it starts to take his weight...
 const ROPE_STIFF = 600;          // ...firming up to this
@@ -408,7 +410,7 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
   const candidates = controllers.nearColliders(cx + fx * 40, cz + fz * 40, 85).filter((c) => c.maxY > cy + 7);
   if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
-  const elevations = [0.55, 0.85, 1.2, 1.7];
+  const elevations = [0.35, 0.45, 0.55, 0.7, 0.85, 1.2, 1.7];
   const laterals = [0.15, 0.4, 0.7, 1.05];
   for (const s of [side, -side]) {
     for (const lat of laterals) {
@@ -428,8 +430,10 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
         // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
         // swinging looks best, rather than climbing a little higher with every web until the buildings run out
         const bottom = hy - tBest * 0.94;
+        // Facades along his way (an avenue's sides) beat ones turned towards him (the end of a block ahead)
+        const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
         const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
-          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.2 + (s === side ? 5 : 0)
+          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 5 : 0) - facing * FACING_PENALTY
           - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
         if (score > bestScore) {
           bestScore = score;
@@ -1054,10 +1058,18 @@ function updateSpiderMan(controllers, ent, dt) {
       _offset.subVectors(_center, web.pivot);
       let d = _offset.length();
       if (d > 1e-4) _offset.multiplyScalar(1 / d);
-      // The web never hangs slack: moving in towards the anchor, it's taken in. A slack web lets him fall free
-      // until it snaps tight again somewhere down the arc, turning a dive into a climb in an instant (the swing
-      // looks cut); taken in, it's always taut and the arc stays one smooth curve
+      // The web never hangs slack. A slack web lets him fall free until it snaps tight again somewhere down the
+      // arc, turning a dive into a climb in an instant (the swing looks cut). As it catches, moving in towards the
+      // anchor turns into swinging along the arc instead (keeping his speed: arcade, but it's what makes a web
+      // shot far ahead a long swooping arc, rather than one he drifts in under); any slack left is taken in
       if (d < web.length) {
+        const radial = v.dot(_offset);
+        if (!web.caught && radial < 0) {
+          const speed = v.length();
+          v.addScaledVector(_offset, -radial * Math.min(1, dt * ROD_RATE));
+          const now = v.length();
+          if (now > 1e-4) v.multiplyScalar(speed / now);
+        }
         web.length = Math.max(6, d);
         web.targetLength = Math.min(web.targetLength, web.length);
       }

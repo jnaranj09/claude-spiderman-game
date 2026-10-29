@@ -129,6 +129,22 @@ test('anchors land on a facade ahead and above, preferring the requested side', 
   }
 });
 
+test('anchors prefer the facades lining the avenue over a block end facing him', () => {
+  // Towers either side of the avenue, and a block straight ahead across its end
+  const colliders = [
+    { minX: 15, maxX: 45, minZ: 10, maxZ: 120, minY: 0, maxY: 60 },
+    { minX: -45, maxX: -15, minZ: 10, maxZ: 120, minY: 0, maxY: 60 },
+    { minX: -15, maxX: 15, minZ: 45, maxZ: 75, minY: 0, maxY: 60 }
+  ];
+  const controllers = world(colliders);
+  for (const side of [1, -1]) {
+    const out = {};
+    const a = spider.findAnchor(controllers, 0, 21.3, 0, 0, 1, side, out, 0);
+    assert.ok(a, 'found one');
+    assert.ok(Math.abs(a.nz) < 0.5, `on a side facade (normal ${a.nx}, ${a.nz})`);
+  }
+});
+
 test('over open ground the web finds nothing to stick to', () => {
   const controllers = world([{ minX: -5, maxX: 5, minZ: 30, maxZ: 40, minY: 0, maxY: 3 }]); // a bus shelter
   assert.equal(spider.findAnchor(controllers, 0, 10, 0, 0, 1, 1, {}), null);
