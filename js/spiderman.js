@@ -26,6 +26,7 @@ const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
 const ARC_WEB = 60;              // m: the web length a swing prefers...
+const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
 const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
 const ARC_RISE = 32;             // ...and how far above him it likes the anchor
@@ -432,8 +433,11 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
         const bottom = hy - tBest * 0.94;
         // Facades along his way (an avenue's sides) beat ones turned towards him (the end of a block ahead)
         const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
+        // ...and the near side of the street beats the far one (alternating hands only tips an even choice)
+        const across = Math.abs((hx - cx) * lx + (hz - cz) * lz);
         const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
-          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 5 : 0) - facing * FACING_PENALTY
+          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 2 : 0) - facing * FACING_PENALTY
+          - across * NEAR_SIDE
           - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
         if (score > bestScore) {
           bestScore = score;

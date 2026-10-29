@@ -145,6 +145,17 @@ test('anchors prefer the facades lining the avenue over a block end facing him',
   }
 });
 
+test('anchors prefer the near side of the street, whichever hand is next', () => {
+  const controllers = world(avenue());
+  for (const [x, wantPositive] of [[-8, false], [8, true]]) {
+    for (const side of [1, -1]) {
+      const a = spider.findAnchor(controllers, x, 21.3, 0, 0, 1, side, {}, 0);
+      assert.ok(a, 'found one');
+      assert.equal(a.x > 0, wantPositive, `from x=${x} (hand ${side}) the web went to x=${a.x.toFixed(1)}`);
+    }
+  }
+});
+
 test('over open ground the web finds nothing to stick to', () => {
   const controllers = world([{ minX: -5, maxX: 5, minZ: 30, maxZ: 40, minY: 0, maxY: 3 }]); // a bus shelter
   assert.equal(spider.findAnchor(controllers, 0, 10, 0, 0, 1, 1, {}), null);
