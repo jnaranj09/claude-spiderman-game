@@ -11,23 +11,33 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 
 | | Touch | Keyboard | Gamepad |
 |---|---|---|---|
-| Swing (hold) / let go (release) | big red **WEB** button | Space | A or RT |
-| Zip forward (quick tap) | tap **WEB** | tap Space | tap A |
+| Swing from the left / right hand (hold), let go (release) | **L** / **R** buttons | Q / E | LT / RT |
+| Double web (both hands) | both at once (or a thumb on the seam between them) | Q + E | LT + RT |
+| Automatic web (picks the side for you) | | Space | A |
+| Zip forward (quick tap) | tap **L** or **R** | tap Q, E or Space | tap a trigger or A |
 | Run / steer (relative to the camera: up is away from it) | left stick | W A S D / arrows | left stick |
 | Dive (in the air) | tap the stick | X | click the left stick |
 | Look around | drag the screen | drag | right stick |
 
-Press and hold **WEB** and Spider-Man jumps and fires a web at the nearest building. One press is one web: he stays
-on it as long as you hold, swinging to and fro like a pendulum. Steer with the stick. Let go (best on the way up the
-far side) to fly on, and press again to catch the next building. **Tap** WEB to zip a web at the
+Press and hold **L** or **R** and Spider-Man jumps and fires a web from that hand, at a building on that side of the
+screen. One press is one web: he stays on it as long as you hold, swinging to and fro like a pendulum. Steer with the
+stick. Let go (best on the way up the far side) to fly on, and press again to catch the next building.
+
+A web from one hand swings him out towards its side of the street, so **alternating L and R zigzags** down it:
+finish a swing out to the left, web to the right, and back again. Each swing ends a few metres short of the facade
+and never reaches more than ~9 m across, so in a narrow street the zigzag goes from side to side, and in a wide
+avenue it stays a weave down the middle. Choose a side that fights where you're going and the swing shows it.
+**Both hands at once** fire a **double web**, one to each side, for a dead-straight swing down the middle of the
+street and a harder fling when you let go. (The keyboard's Space and the gamepad's A keep the automatic web, which
+picks the near side and keeps the swing down the middle for you.) **Tap** a web button to zip a web at the
 building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) for a smooth push forward and a small hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
-Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding WEB kicks
+Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding a web button kicks
 off and swings on; running up to the top launches him over the roof. Touching a wall slowly makes him **cling**.
 Then the stick crawls him: up climbs head-first with long alternating reaches, down goes head-first down the
 wall, slower and splayed, and the sides crawl sideways. Let go of the stick and he holds still. Climbing to the
-top vaults onto the roof, crawling down to the street stands him up, and pressing WEB kicks off.
+top vaults onto the roof, crawling down to the street stands him up, and pressing a web button kicks off.
 
 **Dive:** in the air, click the stick to dive head-first, falling fast. Click again, fire a web or land to stop. A
 web fired out of a dive turns that speed into a big swing. **Swing Cam** (next to 3rd-Person Chase in the camera
@@ -41,7 +51,7 @@ controls work as in the original.
 All of the swinging lives in [`js/spiderman.js`](js/spiderman.js).
 
 **1. The web sticks to real buildings.** Every building in the city has a box collider (some are rotated to follow
-Broadway and other off-grid streets). Pressing WEB casts a fan of rays (ahead, upward, left and right) against
+Broadway and other off-grid streets). Pressing a web button casts a fan of rays (ahead, upward, left and right) against
 those boxes with a slab test. Each hit is scored on distance, height, how far ahead it is, which hand's turn it
 is, and how low the resulting arc would dip. The winner is a point *on an actual facade*, with that face's
 normal, so the white strand ends exactly on the wall and a web splat is stuck flat onto it.

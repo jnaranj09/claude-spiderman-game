@@ -258,7 +258,7 @@ async function initApp() {
 
   // Keyboard guide for each mode: [keys, action]
   const controlHints = {
-    spider: [[['Space'], 'Hold: Swing'], [['X'], 'Dive'], [['W'], 'Run / Pump'], [['A', 'D'], 'Steer'], [['Drag'], 'Orbit']],
+    spider: [[['Q'], 'Left web'], [['E'], 'Right web'], [['Q', 'E'], 'Both: double web'], [['Space'], 'Auto web'], [['X'], 'Dive'], [['W'], 'Run / Pump'], [['A', 'D'], 'Steer'], [['Drag'], 'Orbit']],
     person: [[['W', 'S'], 'Walk / Run'], [['A', 'D'], 'Turn'], [['Space'], 'Jump'], [['Drag'], 'Orbit']],
     car: [[['W', 'S'], 'Drive / Reverse'], [['A', 'D'], 'Steer'], [['B'], 'Horn'], [['Drag'], 'Orbit']],
     cyclist: [[['W', 'S'], 'Pedal / Brake'], [['A', 'D'], 'Lean & Turn'], [['Drag'], 'Orbit']],

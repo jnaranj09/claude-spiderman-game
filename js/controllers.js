@@ -202,7 +202,9 @@ class ThirdPersonControllerManager {
       left: false,
       right: false,
       up: false,
-      down: false
+      down: false,
+      webLeft: false, // Spider-Man's two hands (L and R)
+      webRight: false
     };
 
     this.entities = {
@@ -257,22 +259,30 @@ class ThirdPersonControllerManager {
       left: ['KeyA', 'ArrowLeft'],
       right: ['KeyD', 'ArrowRight'],
       up: ['Space', 'KeyE'],
-      down: ['KeyQ', 'KeyC']
+      down: ['KeyQ', 'KeyC'],
+      webLeft: ['KeyQ'],
+      webRight: ['KeyE']
     };
-    const actionsByCode = new Map(Object.entries(bindings).flatMap(([action, codes]) => codes.map((code) => [code, action])));
+    // (a key can drive more than one action: Q and E are also the helicopter's descend and ascend)
+    const actionsByCode = new Map();
+    for (const [action, codes] of Object.entries(bindings)) {
+      for (const code of codes) actionsByCode.set(code, [...(actionsByCode.get(code) || []), action]);
+    }
     this._pressedCodes = new Set();
     this._keyboardKeys = {};
     this._touchKeys = {};
     this._gamepadKeys = {};
 
     const onKey = (e, isDown) => {
-      const action = actionsByCode.get(e.code);
-      if (!action || (isDown && isTypingInField(e))) return;
+      const actions = actionsByCode.get(e.code);
+      if (!actions || (isDown && isTypingInField(e))) return;
       if (isDown) this._pressedCodes.add(e.code);
       else this._pressedCodes.delete(e.code);
-      // Releasing one binding must not cancel another key held for the same action.
-      this._keyboardKeys[action] = bindings[action].some((code) => this._pressedCodes.has(code));
-      this._blendInput(action);
+      for (const action of actions) {
+        // Releasing one binding must not cancel another key held for the same action.
+        this._keyboardKeys[action] = bindings[action].some((code) => this._pressedCodes.has(code));
+        this._blendInput(action);
+      }
     };
 
     window.addEventListener('keydown', (e) => onKey(e, true));

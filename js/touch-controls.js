@@ -1,6 +1,8 @@
 // Touch input stays separate from the keyboard, so releasing a finger never releases a held key.
 const DEAD_ZONE = 0.15;
 const MAX_RADIUS = 44;
+// A thumb this close (px) to the inner edge of a web button, where the two meet, presses both: a double web
+const WEB_SEAM = 20;
 
 class TouchControls {
   constructor(controllerManager) {
@@ -54,9 +56,16 @@ class TouchControls {
         if (!this.canInteract() || button.hidden || event.button !== 0 || this.buttonPointers.has(event.pointerId) || event.pointerId === this.stickPointer) return;
         event.preventDefault();
         event.stopPropagation();
-        this.buttonPointers.set(event.pointerId, { button, action });
+        const pointer = { button, action, alsoButton: null, also: null };
+        const rect = button.getBoundingClientRect();
+        if (action === 'webLeft' && rect.right - event.clientX < WEB_SEAM) pointer.also = 'webRight';
+        if (action === 'webRight' && event.clientX - rect.left < WEB_SEAM) pointer.also = 'webLeft';
+        if (pointer.also) pointer.alsoButton = this.buttons.find((b) => b.getAttribute('data-touch-action') === pointer.also) || null;
+        if (!pointer.alsoButton) pointer.also = null;
+        this.buttonPointers.set(event.pointerId, pointer);
         button.setPointerCapture(event.pointerId);
         this.updateButton(button, action);
+        if (pointer.alsoButton) this.updateButton(pointer.alsoButton, pointer.also);
       });
       for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
         button.addEventListener(type, (event) => this.releaseButton(event.pointerId));
@@ -105,15 +114,22 @@ class TouchControls {
     this.reset();
     if (!this.root) return;
     this.mode = mode;
-    const labels = { up: mode === 'helicopter' ? 'Ascend' : mode === 'spider' ? 'Web' : 'Jump', down: 'Descend' };
+    const labels = { up: mode === 'helicopter' ? 'Ascend' : 'Jump', down: 'Descend', webLeft: 'Left web', webRight: 'Right web' };
+    const captions = { ...labels, webLeft: 'L', webRight: 'R' };
     const hint = this.root.querySelector('[data-touch-hint="look"]');
-    if (hint) hint.textContent = mode === 'spider' ? 'Hold WEB to swing, release to fly · Tap the stick to dive' : 'Drag to look · Pinch to zoom';
+    if (hint) {
+      hint.textContent = mode === 'spider' ? 'Hold L or R to swing from that hand · both for a double web · Tap the stick to dive'
+        : 'Drag to look · Pinch to zoom';
+    }
     for (const button of this.buttons) {
       const action = button.getAttribute('data-touch-action');
-      button.hidden = (action === 'up' && mode !== 'person' && mode !== 'helicopter' && mode !== 'spider') || (action === 'down' && mode !== 'helicopter');
+      // Spider-Man has his two web buttons (L and R) in place of the one action button
+      const web = action === 'webLeft' || action === 'webRight';
+      button.hidden = web ? mode !== 'spider'
+        : (action === 'up' && mode !== 'person' && mode !== 'helicopter') || (action === 'down' && mode !== 'helicopter');
       button.setAttribute('aria-label', labels[action]);
       const label = this.root.querySelector(`[data-touch-label="${action}"]`);
-      if (label) label.textContent = labels[action];
+      if (label) label.textContent = captions[action];
     }
   }
 
@@ -149,10 +165,10 @@ class TouchControls {
 
   updateButton(button, action) {
     const held = [...this.buttonPointers.values()];
-    const pressed = held.some((pointer) => pointer.button === button);
+    const pressed = held.some((pointer) => pointer.button === button || pointer.alsoButton === button);
     button.classList.toggle('is-pressed', pressed);
     button.setAttribute('aria-pressed', String(pressed));
-    this.controller.setTouchInput(action, held.some((pointer) => pointer.action === action) ? 1 : 0);
+    this.controller.setTouchInput(action, held.some((pointer) => pointer.action === action || pointer.also === action) ? 1 : 0);
   }
 
   releaseButton(pointerId) {
@@ -161,6 +177,7 @@ class TouchControls {
     this.buttonPointers.delete(pointerId);
     this.releaseCapture(pointer.button, pointerId);
     this.updateButton(pointer.button, pointer.action);
+    if (pointer.alsoButton) this.updateButton(pointer.alsoButton, pointer.also);
   }
 
   reset() {

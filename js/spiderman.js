@@ -26,6 +26,10 @@ const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
 const ARC_WEB = 60;              // m: the web length a swing prefers...
+const ZIG_MARGIN = 3;            // m: a chosen-hand swing ends at least this far short of the facade...
+const ZIG_REACH = 9;             // m: ...and carries him at most this far across
+const ZIG_SHARE = 0.33;          // the pivot's share of that: the swing and the flight after it carry him the rest
+const DOUBLE_BOOST = 1.4;        // the release fling of a double web, against a single one
 const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
 const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
@@ -278,6 +282,10 @@ function buildWebs(scene) {
   // Parked out of sight (rather than hidden) so its pipeline compiles behind the loading screen
   strand.position.set(0, -500, 0);
   group.add(strand);
+  // The other hand's, for a double web
+  const strand2 = buildStrand();
+  strand2.position.set(0, -500, 0);
+  group.add(strand2);
 
   const splatTex = createWebSplatTexture();
   const splatGeo = new THREE.PlaneGeometry(1.9, 1.9);
@@ -293,7 +301,7 @@ function buildWebs(scene) {
     splats.push({ mesh, life: 0, held: false });
   }
   scene.add(group);
-  return { group, strand, splats, next: 0 };
+  return { group, strand, strand2, splats, next: 0 };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -406,45 +414,54 @@ function canyonCentreOffset(controllers, cx, cy, cz, fx, fz) {
 
 // Ray casts a fan of candidate web directions, ahead and up, favouring the side the next hand swings from.
 // Returns the best anchor on a real building surface, or null over open ground (parks, rivers, low rooftops).
-function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0) {
+// `strict`: the player chose this hand, so only that side counts (the other one only if there's nothing at all on
+// it), and no preference for the near side. Which side is which is then the screen's: left of (sideX, sideZ), the
+// way the camera looks, not of his line of travel (after a swing out to the left he's still flying a little
+// leftwards, and a fan of rays to the right of that would find the left side of the street ahead)
+function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, strict = false, sideX = fx, sideZ = fz) {
   const lx = fz, lz = -fx; // the figure's left, for a heading (fx, fz)
   const candidates = controllers.nearColliders(cx + fx * 40, cz + fz * 40, 85).filter((c) => c.maxY > cy + 7);
   if (!candidates.length) return null;
   let best = null, bestScore = -Infinity;
   const elevations = [0.35, 0.45, 0.55, 0.7, 0.85, 1.2, 1.7];
   const laterals = [0.15, 0.4, 0.7, 1.05];
-  for (const s of [side, -side]) {
-    for (const lat of laterals) {
-      for (const elev of elevations) {
-        _dir.set(fx + lx * lat * s, elev, fz + lz * lat * s).normalize();
-        let tBest = WEB_RANGE, found = false, nx = 0, ny = 0, nz = 0;
-        for (const c of candidates) {
-          if (rayBox(c, cx, cy, cz, _dir.x, _dir.y, _dir.z, tBest, _hit)) {
-            tBest = _hit.t; nx = _hit.nx; ny = _hit.ny; nz = _hit.nz; found = true;
+  for (const pass of strict ? [true, false] : [false]) {
+    if (strict && !pass && best) break;
+    for (const s of [side, -side]) {
+      for (const lat of laterals) {
+        for (const elev of elevations) {
+          _dir.set(fx + lx * lat * s, elev, fz + lz * lat * s).normalize();
+          let tBest = WEB_RANGE, found = false, nx = 0, ny = 0, nz = 0;
+          for (const c of candidates) {
+            if (rayBox(c, cx, cy, cz, _dir.x, _dir.y, _dir.z, tBest, _hit)) {
+              tBest = _hit.t; nx = _hit.nx; ny = _hit.ny; nz = _hit.nz; found = true;
+            }
           }
-        }
-        if (!found) continue;
-        const hx = cx + _dir.x * tBest, hy = cy + _dir.y * tBest, hz = cz + _dir.z * tBest;
-        const rise = hy - cy;
-        const ahead = (hx - cx) * fx + (hz - cz) * fz;
-        if (rise < 7 || ahead < 5) continue;
-        // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
-        // swinging looks best, rather than climbing a little higher with every web until the buildings run out
-        const bottom = hy - tBest * 0.94;
-        // Facades along his way (an avenue's sides) beat ones turned towards him (the end of a block ahead)
-        const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
-        // ...and the near side of the street beats the far one (alternating hands only tips an even choice)
-        const across = Math.abs((hx - cx) * lx + (hz - cz) * lz);
-        const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
-          - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 2 : 0) - facing * FACING_PENALTY
-          - across * NEAR_SIDE
-          - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
-        if (score > bestScore) {
-          bestScore = score;
-          best = out;
-          out.x = hx; out.y = hy; out.z = hz;
-          out.nx = nx; out.ny = ny; out.nz = nz;
-          out.side = s;
+          if (!found) continue;
+          const hx = cx + _dir.x * tBest, hy = cy + _dir.y * tBest, hz = cz + _dir.z * tBest;
+          const rise = hy - cy;
+          const ahead = (hx - cx) * fx + (hz - cz) * fz;
+          if (rise < 7 || ahead < 5) continue;
+          // (strict, first pass: only hits on the chosen side of the screen)
+          if (pass && ((hx - cx) * sideZ - (hz - cz) * sideX) * side < 2) continue;
+          // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
+          // swinging looks best, rather than climbing a little higher with every web until the buildings run out
+          const bottom = hy - tBest * 0.94;
+          // Facades along his way (an avenue's sides) beat ones turned towards him (the end of a block ahead)
+          const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
+          // ...and the near side of the street beats the far one (alternating hands only tips an even choice)
+          const across = Math.abs((hx - cx) * lx + (hz - cz) * lz);
+          const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
+            - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 2 : 0) - facing * FACING_PENALTY
+            - (strict ? 0 : across * NEAR_SIDE)
+            - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
+          if (score > bestScore) {
+            bestScore = score;
+            best = out;
+            out.x = hx; out.y = hy; out.z = hz;
+            out.nx = nx; out.ny = ny; out.nz = nz;
+            out.side = pass ? side : s;
+          }
         }
       }
     }
@@ -492,6 +509,19 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       phase: 'none', // 'none' | 'shooting' | 'attached'
       anchor: new THREE.Vector3(),
       normal: new THREE.Vector3(),
+      // A double web (both buttons): the second anchor, on the other side of the street
+      double: false,
+      anchor2: new THREE.Vector3(),
+      normal2: new THREE.Vector3(),
+      tip2: new THREE.Vector3(),
+      distance2: 0,
+      splat2: null,
+      // Where the body hangs towards: the anchor, or between the two of a double web
+      aim: new THREE.Vector3(),
+      // Fired from a chosen hand (L or R) rather than the automatic web: swings out towards that side
+      chosen: false,
+      towardX: 0, // (across the street, towards that side)
+      towardZ: 0,
       pivot: new THREE.Vector3(),
       tip: new THREE.Vector3(),
       length: 0,
@@ -514,6 +544,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     nextSide: 1,
     webHeld: false,
     webSpent: false, // this press already threw its web
+    wantL: false,    // the hands asked for since the press (L, R, or both: a double web)
+    wantR: false,
     pressTime: 0,
     webCooldown: 0,
     webRetry: 0,
@@ -595,7 +627,8 @@ function perchOnRooftop(controllers, ent) {
 
 function releaseSplat(ent) {
   if (ent.web.splat) ent.web.splat.held = false;
-  ent.web.splat = null;
+  if (ent.web.splat2) ent.web.splat2.held = false;
+  ent.web.splat = ent.web.splat2 = null;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -605,6 +638,7 @@ function releaseSplat(ent) {
 const _center = new THREE.Vector3();
 const _offset = new THREE.Vector3();
 const _anchorOut = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, side: 1 };
+const _anchorOut2 = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, side: 1 };
 const _before = new THREE.Vector3();
 
 function travelDirection(ent) {
@@ -614,13 +648,28 @@ function travelDirection(ent) {
   return h > 3 ? { x: v.x / h, z: v.z / h } : { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
 }
 
-function shootWeb(controllers, ent) {
+// `request`: 0 for the automatic web (near side, alternating hands, an assisted swing down the middle of the
+// street), +1 / -1 for the left / right hand (a real swing out towards that side), 2 for both (a double web)
+function shootWeb(controllers, ent, request = 0) {
   const p = ent.position;
   const dir = travelDirection(ent);
   const cy = p.y + 1.3;
   const web = ent.web;
-  const anchor = findAnchor(controllers, p.x, cy, p.z, dir.x, dir.z, ent.nextSide, _anchorOut,
-    controllers.getGroundHeight(p.x, p.z, 'person'));
+  const ground = controllers.getGroundHeight(p.x, p.z, 'person');
+  const chosen = request !== 0;
+  // (a chosen hand's side is the screen's: see findAnchor)
+  const camYaw = Number.isFinite(controllers.cameraYaw) ? controllers.cameraYaw : ent.heading;
+  const sideX = Math.sin(camYaw), sideZ = Math.cos(camYaw);
+  // (and a chosen hand looks for its anchor between his line of travel and the screen's forward, the street's
+  // axis: flying diagonally after a swing out, a fan round his line alone hardly reaches across to the other side)
+  let fanX = dir.x, fanZ = dir.z;
+  if (chosen && dir.x * sideX + dir.z * sideZ > 0) {
+    fanX += sideX; fanZ += sideZ;
+    const n = Math.hypot(fanX, fanZ);
+    fanX /= n; fanZ /= n;
+  }
+  const anchor = findAnchor(controllers, p.x, cy, p.z, fanX, fanZ, request === 1 || request === -1 ? request : ent.nextSide,
+    _anchorOut, ground, chosen, sideX, sideZ);
   if (!anchor) {
     // Nothing to stick to: no web at all (a web only ever leaves his wrist to hit something); look again shortly
     ent.webRetry = 0.15;
@@ -634,17 +683,51 @@ function shootWeb(controllers, ent) {
   web.dirX = dir.x;
   web.dirZ = dir.z;
   web.phase = 'shooting';
+  web.chosen = chosen;
   ent.webSpent = true;
   web.anchor.set(anchor.x, anchor.y, anchor.z);
   web.normal.set(anchor.nx, anchor.ny, anchor.nz);
   web.distance = web.anchor.distanceTo(_center.set(p.x, cy, p.z));
-  // The pendulum pivot: the anchor, brought most of the way back over the line of travel (see the header)
+  web.aim.copy(web.anchor);
+  // A double web: the other hand to the other side of the street, if there's something there too
+  web.double = false;
+  if (request === 2) {
+    const other = findAnchor(controllers, p.x, cy, p.z, fanX, fanZ, -web.side, _anchorOut2, ground, true, sideX, sideZ);
+    if (other && other.side === -web.side) {
+      web.double = true;
+      web.anchor2.set(other.x, other.y, other.z);
+      web.normal2.set(other.nx, other.ny, other.nz);
+      web.distance2 = web.anchor2.distanceTo(_center);
+      web.aim.set((web.anchor.x + web.anchor2.x) * 0.5, (web.anchor.y + web.anchor2.y) * 0.5, (web.anchor.z + web.anchor2.z) * 0.5);
+    }
+  }
   const ox = anchor.x - p.x, oz = anchor.z - p.z;
   const ahead = ox * dir.x + oz * dir.z;
   const latX = ox - dir.x * ahead, latZ = oz - dir.z * ahead;
-  // ...and eased towards the middle of the street, so a chain of swings settles into the centre of the canyon
-  const centre = canyonCentreOffset(controllers, p.x, cy, p.z, dir.x, dir.z) * 0.6;
-  web.pivot.set(anchor.x - latX * PIVOT_PULL + dir.z * centre, anchor.y, anchor.z - latZ * PIVOT_PULL - dir.x * centre);
+  if (web.double) {
+    // Hanging between the two: a dead straight swing down the middle
+    web.pivot.copy(web.aim);
+  } else if (chosen) {
+    // A chosen hand swings for real towards its side. A pendulum carries him about as far past its pivot as he
+    // starts short of it (and flies on a little after), so the pivot sits only far enough over that he ends ZIG_MARGIN short of the
+    // facade, and never more than ZIG_REACH across. That's the zigzag: each swing carries him over to its side,
+    // and the next, from the other hand, back. In a narrow street it reaches across; in a wide one it's a weave
+    // (across measured square to the screen's forward, the street's axis, not to his line of travel: flying
+    // diagonally, "over his path" would land the pivot far ahead on that line, in the buildings opposite)
+    const leftX = sideZ, leftZ = -sideX;
+    const acrossSigned = ox * leftX + oz * leftZ;
+    const across = Math.abs(acrossSigned);
+    const shift = Math.max(0, Math.min(ZIG_REACH, across - ZIG_MARGIN) * ZIG_SHARE) * Math.sign(acrossSigned);
+    web.pivot.set(anchor.x - leftX * (acrossSigned - shift), anchor.y, anchor.z - leftZ * (acrossSigned - shift));
+    web.towardX = leftX * Math.sign(acrossSigned);
+    web.towardZ = leftZ * Math.sign(acrossSigned);
+  } else {
+    // The automatic web: the pendulum pivot is the anchor, brought most of the way back over the line of travel
+    // (see the header), and eased towards the middle of the street, so a chain of swings settles into the centre
+    // of the canyon
+    const centre = canyonCentreOffset(controllers, p.x, cy, p.z, dir.x, dir.z) * 0.6;
+    web.pivot.set(anchor.x - latX * PIVOT_PULL + dir.z * centre, anchor.y, anchor.z - latZ * PIVOT_PULL - dir.x * centre);
+  }
   if (typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
 }
 
@@ -661,6 +744,7 @@ function attachWeb(controllers, ent) {
   ent.state = 'swing';
   // The splat stays on the wall while the web holds, then fades
   web.splat = ent.webs ? stickSplat(ent, web.anchor, web.normal, true) : null;
+  web.splat2 = ent.webs && web.double ? stickSplat(ent, web.anchor2, web.normal2, true) : null;
 }
 
 function releaseWeb(controllers, ent, boost) {
@@ -674,8 +758,10 @@ function releaseWeb(controllers, ent, boost) {
     const height = p.y - controllers.getGroundHeight(p.x, p.z, 'person');
     const lift = Math.max(0, Math.min(1, (RELEASE_LIFT_CEILING - height) / 32));
     v.y = Math.min(Math.max(v.y, 0) * (0.55 + 0.45 * lift) + RELEASE_BOOST_UP * lift, 15);
-    v.x += dir.x * RELEASE_BOOST_FWD;
-    v.z += dir.z * RELEASE_BOOST_FWD;
+    // (a double web flings harder)
+    const fwd = RELEASE_BOOST_FWD * (web.double ? DOUBLE_BOOST : 1);
+    v.x += dir.x * fwd;
+    v.z += dir.z * fwd;
     if (v.length() > 20 && Math.random() < 0.55) ent.flip = 0;
   }
   web.phase = 'none';
@@ -905,12 +991,17 @@ function updateSpiderMan(controllers, ent, dt) {
     const sx = -turn, sy = fwdIn - backIn; // stick right, stick up
     wantYaw = Math.atan2(sn * sy - c * sx, c * sy + sn * sx);
   }
-  const held = Boolean(keys.up);
+  // The web buttons: L and R (that hand), both (a double web), or the automatic one (keyboard and gamepad)
+  const btnL = Boolean(keys.webLeft), btnR = Boolean(keys.webRight);
+  const held = btnL || btnR || Boolean(keys.up);
   const pressed = held && !ent.webHeld;
   const released = !held && ent.webHeld;
   const tap = released && ent.pressTime < TAP_TIME;
-  if (pressed) { ent.pressTime = 0; ent.webSpent = false; }
+  if (pressed) { ent.pressTime = 0; ent.webSpent = false; ent.wantL = ent.wantR = false; }
   else if (held) ent.pressTime += dt;
+  // (the hands pressed in the moment before the web flies count: the second of a double needn't be exact)
+  if (held && !ent.webSpent) { ent.wantL ||= btnL; ent.wantR ||= btnR; }
+  const request = ent.wantL && ent.wantR ? 2 : ent.wantL ? 1 : ent.wantR ? -1 : 0;
   ent.webHeld = held;
   ent.webCooldown = Math.max(0, ent.webCooldown - dt);
   ent.webRetry = Math.max(0, ent.webRetry - dt);
@@ -924,7 +1015,7 @@ function updateSpiderMan(controllers, ent, dt) {
   if (web.phase === 'shooting') {
     web.travelled += WEB_SPEED * dt;
     if (!held) web.phase = 'none';
-    else if (web.travelled >= web.distance) attachWeb(controllers, ent);
+    else if (web.travelled >= (web.double ? Math.max(web.distance, web.distance2) : web.distance)) attachWeb(controllers, ent);
   }
   if (web.phase === 'attached' && !held) {
     releaseWeb(controllers, ent, v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0 && !tap);
@@ -942,6 +1033,7 @@ function updateSpiderMan(controllers, ent, dt) {
   // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
   if (tap && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
     web.phase = 'none';
+    if (request === 1 || request === -1) ent.nextSide = request; // from the hand tapped
     webZip(controllers, ent);
   }
 
@@ -964,7 +1056,7 @@ function updateSpiderMan(controllers, ent, dt) {
   // In the air a held button fires the swing web (after a moment, so that a tap stays a zip): one per press
   if (ent.state === 'air' && held && !ent.webSpent && ent.pressTime >= 0.08 && web.phase === 'none'
     && ent.webCooldown <= 0 && ent.webRetry <= 0) {
-    shootWeb(controllers, ent);
+    shootWeb(controllers, ent, request);
   }
 
   // --- Movement per state ------------------------------------------------------------------------------------
@@ -1009,7 +1101,8 @@ function updateSpiderMan(controllers, ent, dt) {
       steerVelocity(ent, Math.max(-1, Math.min(1, diff * 1.5)) * stickMag, dt);
       pump = stickMag * Math.max(0, Math.cos(diff));
       brake = stickMag * Math.max(0, -Math.cos(diff)) * 0.5;
-    } else {
+    } else if (!web.chosen) {
+      // (not after a web from a chosen hand: then the line he takes is the player's, zigzag and all)
       alignToGrid(ent, dt);
     }
     const dir = travelDirection(ent);
@@ -1066,6 +1159,20 @@ function updateSpiderMan(controllers, ent, dt) {
       // arc, turning a dive into a climb in an instant (the swing looks cut). As it catches, moving in towards the
       // anchor turns into swinging along the arc instead (keeping his speed: arcade, but it's what makes a web
       // shot far ahead a long swooping arc, rather than one he drifts in under); any slack left is taken in
+      // A chosen hand's swing, as it catches: drifting across the street away from that side (left over from the
+      // last swing) turns into speed along the street, as moving in does above, so the swing goes where he chose
+      // instead of first carrying him on into the wall behind
+      if (web.chosen && !web.double && !web.caught) {
+        const away = -(v.x * web.towardX + v.z * web.towardZ);
+        if (away > 0) {
+          const speed = v.length();
+          const k = away * Math.min(1, dt * ROD_RATE);
+          v.x += web.towardX * k;
+          v.z += web.towardZ * k;
+          const now = v.length();
+          if (now > 1e-4) v.multiplyScalar(speed / now);
+        }
+      }
       if (d < web.length) {
         const radial = v.dot(_offset);
         if (!web.caught && radial < 0) {
@@ -1454,8 +1561,14 @@ function targetPose(ent, t) {
     setPose(t, 'neck', 0.15, 0, 0);
     setPose(t, `sh${up}`, -0.05, 0, s * 2.95);
     setPose(t, `el${up}`, -0.06, 0, 0);
-    setPose(t, `sh${free}`, -0.6, 0, -s * 1.0);
-    setPose(t, `el${free}`, -0.9, 0, 0);
+    if (web.double) {
+      // A double web: both arms up, one to each side of the street
+      setPose(t, `sh${free}`, -0.05, 0, -s * 2.95);
+      setPose(t, `el${free}`, -0.06, 0, 0);
+    } else {
+      setPose(t, `sh${free}`, -0.6, 0, -s * 1.0);
+      setPose(t, `el${free}`, -0.9, 0, 0);
+    }
     setPose(t, 'hipL', -0.75 - swingLift * 0.25, 0, 0.12);
     setPose(t, 'hipR', -0.25 + swingLift * 0.35, 0, -0.12);
     setPose(t, 'knL', 1.25, 0, 0);
@@ -1553,7 +1666,7 @@ function bodyOrientation(ent, out) {
     else if (web.phase === 'shooting') toWeb = 0.3 * Math.min(1, web.travelled / Math.max(1, web.distance));
     if (toWeb > 0) {
       toWeb = toWeb * toWeb * (3 - 2 * toWeb);
-      _axis.set(web.anchor.x - p.x, web.anchor.y - p.y - 1.0, web.anchor.z - p.z).normalize();
+      _axis.set(web.aim.x - p.x, web.aim.y - p.y - 1.0, web.aim.z - p.z).normalize();
       _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
     }
     _by.normalize();
@@ -1604,7 +1717,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
   // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
   if (ent.state === 'swing' && web.phase === 'attached') {
-    _axis.set(web.anchor.x - ent.position.x, web.anchor.y - ent.position.y - 1, web.anchor.z - ent.position.z).normalize();
+    _axis.set(web.aim.x - ent.position.x, web.aim.y - ent.position.y - 1, web.aim.z - ent.position.z).normalize();
   } else {
     _axis.set(0, 1, 0);
   }
@@ -1642,6 +1755,20 @@ function updateSpiderManVisuals(ent, dt, active) {
     layStrand(strand, from, to, fray, normal);
   } else {
     strand.position.set(0, -500, 0);
+  }
+  // A double web's second strand, from the other hand
+  if (active && web.double && web.phase !== 'none') {
+    const from2 = model.hands[web.side > 0 ? 1 : 0];
+    if (web.phase === 'attached') {
+      web.tip2.copy(web.anchor2);
+    } else {
+      const t = Math.min(1, web.travelled / Math.max(1, web.distance2));
+      web.tip2.lerpVectors(from2, web.anchor2, t);
+      web.tip2.y += Math.sin(t * Math.PI) * 1.2;
+    }
+    layStrand(webs.strand2, from2, web.tip2, web.phase === 'attached' ? 1 : 0, web.normal2);
+  } else {
+    webs.strand2.position.set(0, -500, 0);
   }
 
   for (const splat of webs.splats) {

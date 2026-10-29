@@ -156,6 +156,80 @@ test('anchors prefer the near side of the street, whichever hand is next', () =>
   }
 });
 
+// A player swinging with the hand buttons: holds `hands()` from each press, lets go on the way up the far side,
+// presses again a moment later. Records where each web stuck and where he went
+function playHands(controllers, ent, hands, seconds = 20) {
+  let holding = true, off = 0, presses = 0, last = 'none', state = null;
+  const anchors = [], xs = [];
+  const press = (on) => {
+    controllers.keys.webLeft = controllers.keys.webRight = false;
+    if (on) for (const k of hands(presses)) controllers.keys[k] = true;
+  };
+  press(true);
+  for (let i = 0; i < 60 * seconds; i++) {
+    const web = ent.web;
+    if (holding && web.phase === 'attached' && web.passedBottom && web.rising && ent.velocity.y < 3) {
+      holding = false;
+      off = 0;
+      presses++;
+      press(false);
+    } else if (!holding && (off += 1 / 60) > 0.2) {
+      holding = true;
+      press(true);
+    }
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+    if (web.phase === 'attached' && last !== 'attached') {
+      anchors.push({ x: web.anchor.x, x2: web.double ? web.anchor2.x : null, at: ent.position.x });
+    }
+    last = web.phase;
+    if (ent.state === 'wall' || ent.state === 'wallrun' || ent.state === 'ground') state ||= ent.state;
+    xs.push(ent.position.x);
+  }
+  return { anchors, xs, state };
+}
+
+test('L and R: each hand webs its own side, and alternating them zigzags inside the street', () => {
+  // (tall enough that he never climbs out of them)
+  for (const [label, colliders, half] of [['30 m avenue', avenue(90), 15], ['20 m street', avenue(90).map((c) => ({ ...c,
+    minX: c.minX > 0 ? 10 : c.minX, maxX: c.maxX < 0 ? -10 : c.maxX }))]]) {
+    const controllers = world(colliders);
+    controllers.cameraYaw = 0; // the camera looking down the street
+    const ent = spiderEntity(0, 0, 0, 0);
+    const run = playHands(controllers, ent, (n) => [n % 2 ? 'webRight' : 'webLeft']);
+    const width = half ?? 10;
+    assert.ok(run.anchors.length >= 4, `${label}: ${run.anchors.length} swings`);
+    // Left is +X looking down +Z: every web on its own hand's side
+    run.anchors.forEach((a, n) => assert.equal(a.x > 0, n % 2 === 0, `${label}: web ${n} stuck at x=${a.x.toFixed(1)}`));
+    assert.equal(run.state, null, `${label}: never hit a wall or the street`);
+    const min = Math.min(...run.xs.slice(60)), max = Math.max(...run.xs.slice(60));
+    assert.ok(max > 2.5 && min < -1.5, `${label}: zigzags (${min.toFixed(1)} to ${max.toFixed(1)} m)`);
+    assert.ok(max < width - 2.5 && min > -width + 2.5, `${label}: and stays in the street (${min.toFixed(1)} to ${max.toFixed(1)})`);
+    assert.ok(ent.position.z > 250, `${label}: and gets on down it (${ent.position.z.toFixed(0)} m)`);
+  }
+});
+
+test('a chosen hand picks its side of the screen, even flying diagonally across the street', () => {
+  const controllers = world(avenue());
+  const n = Math.hypot(0.5, 1);
+  for (const side of [1, -1]) {
+    // Flying left (towards +X) at 27 degrees off the avenue, the camera looking straight down it
+    const a = spider.findAnchor(controllers, 6, 21.3, 0, 0.5 / n, 1 / n, side, {}, 0, true, 0, 1);
+    assert.ok(a, 'found one');
+    assert.equal(a.x > 0, side > 0, `hand ${side}: x=${a.x.toFixed(1)}`);
+  }
+});
+
+test('both hands: a double web, one to each side, swings straight down the middle', () => {
+  const controllers = world(avenue());
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 0, 0, 0);
+  const run = playHands(controllers, ent, () => ['webLeft', 'webRight']);
+  assert.ok(run.anchors.length >= 4, `${run.anchors.length} swings`);
+  for (const a of run.anchors) assert.ok(a.x2 !== null && Math.sign(a.x) !== Math.sign(a.x2), 'two webs, either side');
+  assert.ok(Math.max(...run.xs.map(Math.abs)) < 1.5, 'dead straight');
+  assert.ok(ent.position.z > 300, `${ent.position.z.toFixed(0)} m`);
+});
+
 test('over open ground the web finds nothing to stick to', () => {
   const controllers = world([{ minX: -5, maxX: 5, minZ: 30, maxZ: 40, minY: 0, maxY: 3 }]); // a bus shelter
   assert.equal(spider.findAnchor(controllers, 0, 10, 0, 0, 1, 1, {}), null);
