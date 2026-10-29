@@ -610,7 +610,9 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     diveClicks: 0,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
     chaseDistance: 4.6,
-    chaseHeight: 1.7
+    chaseHeight: 1.7,
+    // The follow view starts well back (about 11 m), with the street and the buildings either side in view
+    chaseZoom: 2.4
   };
 }
 

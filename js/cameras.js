@@ -214,8 +214,10 @@ class CameraSystem {
     switch (this.activePresetId) {
       case 'swing':
       case 'chase': {
-        const dist = entity.chaseDistance * this.zoomMultiplier * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
-        const height = entity.chaseHeight * this.zoomMultiplier + Math.sin(this.orbitPitchOffset) * dist * 0.85;
+        // (chaseZoom: how far out this entity's view starts, which pinch / wheel zoom then scales)
+        const zoom = this.zoomMultiplier * (entity.chaseZoom ?? 1);
+        const dist = entity.chaseDistance * zoom * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
+        const height = entity.chaseHeight * zoom + Math.sin(this.orbitPitchOffset) * dist * 0.85;
         // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
         // sky as he climbs, and rises above him to look down it at the street as he crawls down
         // ...and likewise slides the other way along the wall to look ahead as he crawls sideways

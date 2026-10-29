@@ -112,9 +112,8 @@ async function initApp() {
         controllerManager.setMode(mode);
         controllerManager.teleportActiveTo(p.x, p.z, p.heading, p.y);
       }
-      // Walking has no button any more: Spider-Man took over that slot
-      const restored = Object.hasOwn(controllerManager.entities, saved.activeMode) && saved.activeMode !== 'person';
-      controllerManager.setMode(restored ? saved.activeMode : 'spider');
+      // Every visit starts as Spider-Man (the vehicles keep where they were left)
+      controllerManager.setMode('spider');
     }
   } catch { /* Missing or unavailable storage does not prevent playing. */ }
 
@@ -307,10 +306,10 @@ async function initApp() {
     if (elMode) elMode.textContent = ent.label;
     renderControlHints(mode);
 
-    // If currently on a static scenic camera, switch to 3rd-Person Chase so user sees their selected character/vehicle
+    // If currently on a static scenic camera, switch to a follow camera so user sees their selected character/vehicle
     const currentCam = cameraSystem.getActivePreset();
     if (currentCam.category !== 'follow') {
-      selectCamera('chase', false);
+      selectCamera(mode === 'spider' ? 'swing' : 'chase', false);
     }
   }
 
@@ -570,14 +569,14 @@ async function initApp() {
     }
   });
 
-  // Initialize the UI and chase camera around the restored player, or Spider-Man on a first visit.
+  // Initialize the UI and the swing camera around Spider-Man (where he was left, or on a first visit a rooftop).
   controllerManager.entities.spider.onWebShot = () => audioSystem.thwip?.();
   // ?debug exposes the simulation to the console (and to automated play tests)
   if (new URLSearchParams(location.search).has('debug')) {
     window.spiderDebug = { controllerManager, cameraSystem, renderer, scene, selectMode, teleportTo: (x, z, h) => teleportTo(x, z, h) };
   }
   selectMode(controllerManager.activeMode);
-  selectCamera('chase', true);
+  selectCamera('swing', true);
   selectTime('golden');
   // the web fonts change the buttons' widths once they arrive
   if (document.fonts) document.fonts.ready.then(placeModeIndicator);
