@@ -35,11 +35,17 @@ From the ground a press always jumps first (a tap there is just a jump). **Tap**
 building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) (aimed well up when he's low, to help him climb; level higher up) for a smooth push forward and a hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
-Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. Holding a web button kicks
-off and swings on; running up to the top launches him over the roof. Touching a wall slowly makes him **cling**.
+Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. The stick steers the
+run across the wall's face and keeps it going (relative to the camera, as everywhere: along the wall runs that way,
+into it runs up it, away from it runs down it, and back against the run brakes); let go of it and he slows to a
+stop and clings on. Holding a web button kicks off and swings on; running up to the top launches him over the
+roof. Touching a wall slowly makes him **cling**.
 Then the stick crawls him: up climbs head-first with long alternating reaches, down goes head-first down the
 wall, slower and splayed, and the sides crawl sideways. Let go of the stick and he holds still. Climbing to the
-top vaults onto the roof, crawling down to the street stands him up, and pressing a web button kicks off.
+top vaults onto the roof and crawling down to the street stands him up. A web button while crawling, with the
+stick the way he's crawling (or facing), shoots a web along the wall that pulls him on, much faster than he
+crawls; with the stick the other way he jumps off the building, out into the street; with the stick centred he
+kicks off and carries on.
 
 **Dive:** in the air, click the stick to dive head-first, falling fast. Click again, fire a web or land to stop. A
 web fired out of a dive turns that speed into a big swing. **Swing Cam** (next to 3rd-Person Chase in the camera

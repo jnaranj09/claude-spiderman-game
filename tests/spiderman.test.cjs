@@ -610,6 +610,71 @@ test('a head-on hit at speed runs up the wall instead of stopping dead', () => {
   assert.ok(ent.position.y > 13, `ran up to ${ent.position.y.toFixed(1)} m`);
 });
 
+test('the stick steers a wall run like a crawl, and letting go of it slows him to a stop on the wall', () => {
+  const controllers = world(tower());
+  const run = () => {
+    const ent = spiderEntity(8, 20, -30);
+    ent.state = 'air';
+    ent.velocity.set(8, 0, 25);
+    step(controllers, ent, 0.35, { forward: 0 });
+    assert.equal(ent.state, 'wallrun');
+    return ent;
+  };
+  // The camera looking along the wall (+Z), stick up: on along it, level and keeping its speed
+  controllers.cameraYaw = 0;
+  let ent = run();
+  step(controllers, ent, 1, { forward: 1 });
+  assert.equal(ent.state, 'wallrun');
+  assert.ok(Math.abs(ent.wallRun.dy) < 0.3 && ent.wallRun.dz > 0.9, 'along the wall');
+  assert.ok(ent.wallRun.speed > 22, `kept going (${ent.wallRun.speed.toFixed(1)} m/s)`);
+  // Stick into the wall: the run turns up it
+  controllers.cameraYaw = Math.PI / 2;
+  const y = ent.position.y;
+  step(controllers, ent, 0.6, { forward: 1 });
+  assert.ok(ent.wallRun.dy > 0.6, `turned up the wall (dy ${ent.wallRun.dy.toFixed(2)})`);
+  assert.ok(ent.position.y > y + 4, 'climbing');
+  // Let go of the stick: he slows down and clings on to crawl
+  controllers.cameraYaw = 0;
+  ent = run();
+  let crawled = 0;
+  for (let i = 0; i < 300 && !crawled; i++) {
+    step(controllers, ent, 1 / 60, { forward: 0 });
+    if (ent.state === 'wall') crawled = i / 60;
+  }
+  assert.ok(crawled > 1 && crawled < 4, `clung on after ${crawled.toFixed(1)} s`);
+  step(controllers, ent, 0.5);
+  assert.equal(ent.state, 'wall', 'and stays on it');
+  controllers.cameraYaw = undefined;
+});
+
+test('crawling, a web button zips him on along the wall, or with the stick the other way jumps him off it', () => {
+  const controllers = world(tower());
+  const climb = () => {
+    const ent = spiderEntity(0, 0, 0, Math.PI / 2);
+    step(controllers, ent, 2, { forward: 0.6 });
+    step(controllers, ent, 1, { forward: 1 });
+    assert.equal(ent.state, 'wall');
+    return ent;
+  };
+  // Stick the way he crawls (up): a web up the wall pulls him on, much faster than crawling, and he stays on it
+  let ent = climb();
+  let y = ent.position.y;
+  step(controllers, ent, 1 / 60, { forward: 1, webRight: true });
+  step(controllers, ent, 0.6, { forward: 1, webRight: true });
+  assert.equal(ent.state, 'wall', 'still on the wall (holding the button too)');
+  assert.ok(ent.position.y - y > 6, `zipped up ${(ent.position.y - y).toFixed(1)} m (crawling: 2.5 m)`);
+  step(controllers, ent, 0.5, { forward: 1, webRight: false });
+  assert.equal(ent.state, 'wall');
+  // Stick the other way (down, head up): he jumps off, out from the building
+  ent = climb();
+  y = ent.position.y;
+  step(controllers, ent, 1 / 60, { forward: 0, backward: 1, webLeft: true });
+  assert.equal(ent.state, 'air');
+  assert.ok(ent.velocity.x < -8, `out from the wall (${ent.velocity.x.toFixed(1)} m/s)`);
+  step(controllers, ent, 0.5, { backward: 0, webLeft: false });
+  assert.ok(ent.position.x < 5, `well clear of it (x ${ent.position.x.toFixed(1)})`);
+});
+
 test('a tap zips forward on a web stuck to a building ahead', () => {
   const colliders = avenue();
   const controllers = world(colliders);

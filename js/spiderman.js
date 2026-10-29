@@ -58,6 +58,14 @@ const CRAWL_UP_SPEED = 4.2;      // m/s on a wall, only while the stick is held
 const CRAWL_DOWN_SPEED = 3.2;
 const CRAWL_SIDE_SPEED = 3.6;
 const WALL_RUN_MIN_SPEED = 9;    // hitting a wall faster than this runs along / up it
+const WALL_RUN_STEER = 3.5;      // how fast the stick turns a run across the wall's face (1/s)
+const WALL_RUN_BRAKE = 7;        // m/s² a run loses with the stick let go (until he stops and clings on)
+const WALL_RUN_MAX = 30;         // m/s, running down a wall
+const WALL_ZIP_SPEED = 15;       // m/s a web pulled along the wall adds to a crawl...
+const WALL_ZIP_DECAY = 14;       // ...fading at this rate (m/s²)
+const WALL_ZIP_CONE = 1.75;      // rad: a stick within this of the way he's crawling zips along the wall; past it he jumps off
+const WALL_JUMP_OUT = 12;        // m/s away from the wall jumping off it...
+const WALL_JUMP_UP = 7;          // ...and upwards
 const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
 const ZIP_PUSH = 14;             // m/s forward per zip
 const ZIP_MAX_SPEED = 44;
@@ -579,7 +587,10 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     groundTime: 0,
     // Wall contact: outward normal, how high it goes, time on it, the direction of travel when it was hit, the
     // crawl direction in the wall's plane (the body's up while crawling) and how fast the stick is moving him
-    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0 },
+    // ...and a web pulled along it: speed (fading) and direction (the figure's left, up) of the pull, and whether
+    // this press has been used on the wall already
+    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0, dash: 0, dashS: 0, dashV: 1,
+      used: false },
     // Running along / up a wall: direction (in the wall's plane) and speed
     wallRun: { dx: 0, dy: 1, dz: 0, speed: 0 },
     flip: 1,
@@ -1001,6 +1012,8 @@ function startCrawl(ent, angle = 0) {
   ent.state = 'wall';
   ent.wall.angle = angle;
   ent.wall.move = 0;
+  ent.wall.dash = 0;
+  ent.wall.used = false;
   ent.velocity.set(0, 0, 0);
 }
 
@@ -1015,6 +1028,39 @@ function kickOffWall(ent, carry) {
   v.set(w.nx * 7 + tx * Math.max(14, carry), 9, w.nz * 7 + tz * Math.max(14, carry));
   ent.heading = Math.atan2(v.x, v.z);
   ent.state = 'air';
+  ent.webCooldown = 0.12;
+}
+
+// Crawling, a web shot along the wall the way he's crawling (`s` towards the figure's left, `u` up, a unit
+// direction in the wall's plane): it sticks a little way ahead and pulls him along it, faster than he can crawl
+function wallZip(ent, s, u, ground) {
+  const w = ent.wall;
+  const p = ent.position;
+  const zip = ent.zip;
+  const lx = -w.nz, lz = w.nx;
+  w.dash = WALL_ZIP_SPEED;
+  w.dashS = s;
+  w.dashV = u;
+  w.used = true;
+  const reach = 9;
+  zip.anchor.set(p.x + lx * s * reach - w.nx * 0.4, Math.max(ground + 0.3, Math.min(w.top, p.y + 1.2 + u * reach)), p.z + lz * s * reach - w.nz * 0.4);
+  zip.normal.set(w.nx, 0, w.nz);
+  if (ent.webs) stickSplat(ent, zip.anchor, _seg.set(w.nx, 0, w.nz), false);
+  zip.time = 0;
+  zip.side = s > 0.3 ? 1 : s < -0.3 ? -1 : ent.nextSide;
+  ent.nextSide = -zip.side;
+  zip.cooldown = 0.25;
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(reach);
+}
+
+// Pushes off the wall and out into the street, away from the building (the stick's sideways part carries over)
+function jumpOffWall(ent, s) {
+  const w = ent.wall;
+  const lx = -w.nz, lz = w.nx;
+  ent.velocity.set(w.nx * WALL_JUMP_OUT + lx * s * 5, WALL_JUMP_UP, w.nz * WALL_JUMP_OUT + lz * s * 5);
+  ent.heading = Math.atan2(ent.velocity.x, ent.velocity.z);
+  ent.state = 'air';
+  ent.flip = 0;
   ent.webCooldown = 0.12;
 }
 
@@ -1333,7 +1379,22 @@ function updateSpiderMan(controllers, ent, dt) {
     // sideways); let go of the stick and he holds still
     const w = ent.wall;
     w.time += dt;
-    const lx = -w.nz, lz = w.nx; // the figure's left as he faces the wall
+    const vert = fwdIn - backIn;
+    // The web buttons on a wall: with the stick the way he's crawling (or facing, holding still), a web along the
+    // wall that pulls him on faster; with it the other way, he jumps off the building; with it centred he kicks
+    // off and carries on (holding the button as he lands on the wall does the same, flowing on into a swing)
+    if (pressed && Math.hypot(vert, turn) > 0.3 && zip.cooldown <= 0) {
+      const aim = Math.atan2(turn, vert);
+      const n = Math.hypot(vert, turn);
+      if (Math.abs(angleDiff(aim, w.angle)) < WALL_ZIP_CONE) wallZip(ent, turn / n, vert / n, groundAt(controllers, p.x, p.z, p.y));
+      else jumpOffWall(ent, turn / n);
+    } else if (pressed || (held && !w.used && w.time > 0.35)) {
+      kickOffWall(ent, 0);
+    }
+  }
+  if (ent.state === 'wall') {
+    const w = ent.wall;
+    const lx = -w.nz, lz = w.nx;
     const vert = fwdIn - backIn;
     if (Math.hypot(vert, turn) > 0.12) {
       const vy = vert * (vert > 0 ? CRAWL_UP_SPEED : CRAWL_DOWN_SPEED);
@@ -1349,21 +1410,29 @@ function updateSpiderMan(controllers, ent, dt) {
       v.set(0, 0, 0);
       w.move = 0;
     }
+    if (w.dash > 0) {
+      // Pulled along his web, head first the way it goes
+      v.x += lx * w.dashS * w.dash;
+      v.y += w.dashV * w.dash;
+      v.z += lz * w.dashS * w.dash;
+      w.dash = Math.max(0, w.dash - WALL_ZIP_DECAY * dt);
+      w.angle += angleDiff(Math.atan2(w.dashS, w.dashV), w.angle) * (1 - Math.exp(-dt * 10));
+      w.move = Math.max(w.move, CRAWL_UP_SPEED);
+    }
     p.addScaledVector(v, dt);
     ent.heading = Math.atan2(-w.nx, -w.nz);
     const ground = groundAt(controllers, p.x, p.z, p.y);
-    if (pressed || (held && w.time > 0.35)) {
-      kickOffWall(ent, 0);
-    } else if (vert < 0 && p.y <= ground + 0.02) {
+    if (v.y < 0 && p.y <= ground + 0.02) {
       // Down at the bottom: stand up
       p.y = ground;
       ent.state = 'ground';
-    } else if (p.y + 1.1 >= w.top && vert > 0) {
-      // Vault over the parapet onto the roof
+    } else if (p.y + 1.1 >= w.top && v.y > 0) {
+      // Vault over the parapet onto the roof (higher, pulled up by a web)
       p.y = w.top;
       p.x -= w.nx * 0.9;
       p.z -= w.nz * 0.9;
-      v.set(-w.nx * 4, 3.5, -w.nz * 4);
+      v.set(-w.nx * 4, 3.5 + Math.max(0, w.dash * w.dashV) * 0.4, -w.nz * 4);
+      w.dash = 0;
       ent.state = 'air';
       ent.flip = 1;
     }
@@ -1378,21 +1447,42 @@ function updateSpiderMan(controllers, ent, dt) {
     const w = ent.wall;
     const r = ent.wallRun;
     w.time += dt;
-    const vertical = r.dy > 0.7;
-    if (vertical) {
-      r.speed -= GRAVITY * 0.5 * dt;
-    } else {
-      r.speed -= (fwdIn > 0.3 ? 0.6 : 2.0) * dt;
+    // The stick steers the run across the wall's face, like a crawl, and keeps it going: relative to the camera
+    // like everywhere else, so pushed along the wall he runs that way, into it he runs up it and away from it
+    // down it. Pushed back against the run he brakes; let go of it and he slows to a stop and clings on
+    const lx = -w.nz, lz = w.nx;
+    let drag = WALL_RUN_BRAKE;
+    if (wantYaw !== null && stickMag > 0.3) {
+      const sx = Math.sin(wantYaw), sz = Math.cos(wantYaw);
+      const along = sx * lx + sz * lz;
+      let up = -(sx * w.nx + sz * w.nz);
+      // (a stick held roughly along the wall keeps a run along it level)
+      up = Math.sign(up) * Math.max(0, Math.abs(up) - 0.25) / 0.75;
+      const n = Math.hypot(along, up) || 1;
+      const tx = lx * along / n, ty = up / n, tz = lz * along / n;
+      if (r.dx * tx + r.dy * ty + r.dz * tz < -0.3) {
+        drag = WALL_RUN_BRAKE * 1.5;
+      } else {
+        drag = 0.6;
+        const k = 1 - Math.exp(-dt * WALL_RUN_STEER);
+        r.dx += (tx - r.dx) * k; r.dy += (ty - r.dy) * k; r.dz += (tz - r.dz) * k;
+        const len = Math.hypot(r.dx, r.dy, r.dz) || 1;
+        r.dx /= len; r.dy /= len; r.dz /= len;
+      }
+    } else if (r.dy <= 0.7) {
       // Level out along the wall
       r.dy *= Math.exp(-dt * 2.5);
       const h = Math.hypot(r.dx, r.dz) || 1;
       const k = Math.sqrt(Math.max(0, 1 - r.dy * r.dy)) / h;
       r.dx *= k; r.dz *= k;
     }
+    // (running up costs speed, running down gains it)
+    r.speed = Math.min(Math.max(r.speed, WALL_RUN_MAX), r.speed - (drag + GRAVITY * 0.5 * r.dy) * dt);
+    const vertical = r.dy > 0.7;
     v.set(r.dx * r.speed, r.dy * r.speed, r.dz * r.speed);
     p.addScaledVector(v, dt);
     ent.runPhase += dt * (5 + r.speed * 0.55);
-    ent.heading = vertical ? Math.atan2(-w.nx, -w.nz) : Math.atan2(r.dx, r.dz);
+    ent.heading = vertical || Math.hypot(r.dx, r.dz) < 0.3 ? Math.atan2(-w.nx, -w.nz) : Math.atan2(r.dx, r.dz);
     const ground = groundAt(controllers, p.x, p.z, _before.y);
     if (pressed || (!vertical && held && w.time > 0.3)) {
       // Kick off and carry on (holding the button through a run along a wall flows straight into the next swing)
@@ -1402,14 +1492,13 @@ function updateSpiderMan(controllers, ent, dt) {
       ent.state = 'air';
       ent.webCooldown = 0.1;
       if (carry > 16) ent.flip = 0;
-    } else if (vertical && p.y + 1.4 >= w.top) {
+    } else if (r.dy > 0.3 && p.y + 1.4 >= w.top) {
       // Up and over the top with the run's momentum
       v.set(-w.nx * 5, Math.min(r.speed, 16) * 0.7 + 4, -w.nz * 5);
       ent.state = 'air';
       ent.flip = 0;
     } else if (r.speed < 4.5) {
       // Out of steam: cling on, head the way he was running
-      const lx = -w.nz, lz = w.nx;
       startCrawl(ent, Math.atan2(r.dx * lx + r.dz * lz, r.dy));
     } else if (!vertical && p.y <= ground + 0.02) {
       // Ran down onto the street or a roof: keep running
@@ -1417,7 +1506,8 @@ function updateSpiderMan(controllers, ent, dt) {
       v.set(r.dx * r.speed, 0, r.dz * r.speed);
       ent.state = 'ground';
     }
-    if (ent.state === 'wallrun') {
+    if (ent.state === 'wallrun' || ent.state === 'wall') {
+      // (out of steam too: he clings on, rather than coming away from the wall)
       p.y = Math.max(p.y, ground);
       p.x -= w.nx * 0.25;
       p.z -= w.nz * 0.25;
@@ -1501,8 +1591,8 @@ function updateSpiderMan(controllers, ent, dt) {
   if (ent.state === 'wall') {
     pitch = Math.cos(ent.wall.angle) * 0.8;
     side = Math.sin(ent.wall.angle) * 0.8;
-  } else if (ent.state === 'wallrun' && ent.wallRun.dy > 0.7) {
-    pitch = 0.8;
+  } else if (ent.state === 'wallrun' && Math.abs(ent.wallRun.dy) > 0.7) {
+    pitch = 0.8 * Math.sign(ent.wallRun.dy);
   }
   const ease = 1 - Math.exp(-dt * 3);
   ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
