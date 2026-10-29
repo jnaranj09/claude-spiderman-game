@@ -26,10 +26,11 @@ const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
 const ARC_WEB = 60;              // m: the web length a swing prefers...
-const ZIG_MARGIN = 3;            // m: a chosen-hand swing ends at least this far short of the facade...
+const ZIG_MARGIN = 4;            // m: a chosen-hand swing ends at least this far short of the facade...
 const ZIG_REACH = 9;             // m: ...and carries him at most this far across
 const ZIG_SHARE = 0.33;          // the pivot's share of that: the swing and the flight after it carry him the rest
 const DOUBLE_BOOST = 1.4;        // the release fling of a double web, against a single one
+const SCRAPE_PENALTY = 1.2;       // score lost per metre an anchor's arc would dip below the street
 const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
 const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
@@ -366,7 +367,8 @@ function groundAt(controllers, x, z, fromY) {
 
 // The longest web whose arc still clears every roof, ledge and the street ahead of him along the swing (dir), with
 // the hips CLEAR above them. The arc is sampled from where he is to well up the far side.
-const ARC_CLEAR = 2.2;
+const ARC_CLEAR = 3.5;
+const REEL_TIME = 1.0;           // s: the longest a web takes to be taken in to clear what's under the arc
 function clearRopeLength(controllers, web, p, dx, dz) {
   const piv = web.pivot;
   const ox = p.x - piv.x, oz = p.z - piv.z;
@@ -448,13 +450,16 @@ function findAnchor(controllers, cx, cy, cz, fx, fz, side, out, ground = 0, stri
           // The bottom of the arc this web would swing through: keep it low in the street canyon (~10 m up), where
           // swinging looks best, rather than climbing a little higher with every web until the buildings run out
           const bottom = hy - tBest * 0.94;
+          // (and an arc that would dip into the street is far worse: the web would have to be taken in while he
+          // swings, which shows)
+          const scrape = Math.max(0, ground - bottom);
           // Facades along his way (an avenue's sides) beat ones turned towards him (the end of a block ahead)
           const facing = ny > 0.5 ? 0 : Math.abs(nx * fx + nz * fz);
           // ...and the near side of the street beats the far one (alternating hands only tips an even choice)
           const across = Math.abs((hx - cx) * lx + (hz - cz) * lz);
           const score = -Math.abs(tBest - ARC_WEB) * 0.25 - Math.abs(rise - ARC_RISE) * 0.2
             - Math.abs(bottom - ground - 12) * 0.3 + ahead * 0.3 + (s === side ? 2 : 0) - facing * FACING_PENALTY
-            - (strict ? 0 : across * NEAR_SIDE)
+            - (strict ? 0 : across * NEAR_SIDE) - scrape * SCRAPE_PENALTY
             - (ny > 0.5 ? 3 : 0); // a facade reads better than a roof edge
           if (score > bestScore) {
             bestScore = score;
@@ -737,10 +742,10 @@ function attachWeb(controllers, ent) {
   const p = ent.position;
   _center.set(p.x, p.y + 1.0, p.z);
   const dist = _center.distanceTo(web.pivot);
-  // Keep the bottom of the arc clear of the street: a short web reels the player up instead of dragging them
-  const ground = controllers.getGroundHeight(p.x, p.z, 'person');
+  // (the web starts as long as it is: if the arc would scrape the street or a roof, it's taken in over the
+  // down-swing, see the swing update, not hauled in at once)
   web.length = dist;
-  web.targetLength = Math.max(6, Math.min(dist * 0.97, web.pivot.y - ground - 4.5));
+  web.targetLength = dist;
   web.phase = 'attached';
   ent.state = 'swing';
   // The splat stays on the wall while the web holds, then fades
@@ -1151,7 +1156,15 @@ function updateSpiderMan(controllers, ent, dt) {
         const clear = clearRopeLength(controllers, web, p, web.dirX, web.dirZ);
         if (clear < web.targetLength) web.targetLength = Math.max(6, clear);
       }
-      const reel = (web.targetLength - web.length) * (1 - Math.exp(-dt * 6));
+      // Taken in over the down-swing, paced to finish as he reaches the bottom of the arc: hauled in all at once, as
+      // the web caught, it lifted him bodily before the swing had even begun
+      let reel = 0;
+      if (web.targetLength < web.length) {
+        const need = web.length - web.targetLength;
+        const toBottom = (web.pivot.x - p.x) * web.dirX + (web.pivot.z - p.z) * web.dirZ;
+        const time = Math.max(0.35, Math.min(REEL_TIME, Math.max(0, toBottom) / Math.max(4, hs)));
+        reel = -Math.min(need, need / time * dt);
+      }
       _center.set(p.x, p.y + 1.0, p.z);
       _offset.subVectors(_center, web.pivot);
       let d = _offset.length();

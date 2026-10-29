@@ -365,6 +365,31 @@ test('a low roof under the swing is cleared in good time, not scraped', () => {
   assert.ok(worst < 250, `${worst.toFixed(0)} m/s² at worst`);
 });
 
+test('a web is not hauled in as it catches: it swings first, and is taken in over the down-swing', () => {
+  // (taken in all at once, as it caught, it lifted him bodily before the swing began: up to ~29 m in 0.4 s)
+  for (const h of [45, 60, 90]) {
+    const controllers = world(avenue(h));
+    const ent = spiderEntity(-6, 0, 0, 0);
+    controllers.keys.up = true;
+    let last = 'none', off = 0, len0 = 0, worst = 0, swings = 0;
+    for (let i = 0; i < 60 * 20; i++) {
+      const web = ent.web;
+      if (controllers.keys.up && web.phase === 'attached' && web.passedBottom && web.rising && ent.velocity.y < 2) {
+        controllers.keys.up = false;
+        off = 0;
+      } else if (!controllers.keys.up && (off += 1 / 60) > 0.15) {
+        controllers.keys.up = true;
+      }
+      spider.updateSpiderMan(controllers, ent, 1 / 60);
+      if (web.phase === 'attached' && last !== 'attached') { len0 = web.length; swings++; }
+      if (web.phase === 'attached' && Math.abs(web.swingTime - 0.4) < 0.008) worst = Math.max(worst, len0 - web.length);
+      last = web.phase;
+    }
+    assert.ok(swings >= 4, `${h} m: ${swings} swings`);
+    assert.ok(worst < 6, `${h} m: taken in ${worst.toFixed(1)} m in its first 0.4 s`);
+  }
+});
+
 test('press, swing, release on the way up and press again: swings chain straight down the avenue', () => {
   const colliders = avenue();
   const controllers = world(colliders);
