@@ -14,6 +14,8 @@ class Vector3 {
   sub(v) { return this.set(this.x - v.x, this.y - v.y, this.z - v.z); }
   subVectors(a, b) { return this.copy(a).sub(b); }
   lerp(v, t) { return this.set(this.x + (v.x - this.x) * t, this.y + (v.y - this.y) * t, this.z + (v.z - this.z) * t); }
+  length() { return Math.hypot(this.x, this.y, this.z); }
+  normalize() { const l = this.length() || 1; return this.set(this.x / l, this.y / l, this.z / l); }
 }
 
 class PerspectiveCamera {
@@ -22,6 +24,7 @@ class PerspectiveCamera {
     this.aspect = aspect;
     this.position = new Vector3();
     this.target = new Vector3();
+    this.up = new Vector3(0, 1, 0);
   }
   updateProjectionMatrix() {}
   lookAt(v) { this.target.copy(v); }
@@ -239,4 +242,26 @@ test('teleport releases every camera pointer and ignores old gestures before acc
   h.pointer(h.canvas, 'pointermove', 3, 610);
   close(h.camera.orbitYawOffset, -0.065);
   assert.equal(h.camera.isDragging, true);
+});
+
+test('the swing cam is slow to follow Spider-Man round a change of direction, then catches up', () => {
+  const lag = (preset) => {
+    const h = cameraHarness({
+      position: new Vector3(0, 20, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+      chaseDistance: 4.6, chaseHeight: 1.7, cameraTargetOffset: new Vector3(0, 1.3, 0)
+    });
+    h.camera.setCameraPreset(preset, true);
+    for (let i = 0; i < 60; i++) h.camera.update(1 / 60, i / 60);
+    h.entity.heading = 0.6; // a zigzag's new swing sets off the other way
+    const offsets = [];
+    for (let i = 0; i < 240; i++) {
+      h.camera.update(1 / 60, 1 + i / 60);
+      offsets.push(-h.camera.orbitYawOffset);
+    }
+    return { early: offsets[23], late: offsets[239] };
+  };
+  const swing = lag('swing'), chase = lag('chase');
+  assert.ok(swing.early > 0.45, `still looking the old way at first (${swing.early.toFixed(2)} of 0.6 rad)`);
+  assert.ok(swing.early > chase.early + 0.08, 'later to react than the chase cam');
+  assert.ok(Math.abs(swing.late) < 0.05, `settles behind him (${swing.late.toFixed(3)})`);
 });

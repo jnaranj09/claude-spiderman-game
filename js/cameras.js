@@ -5,6 +5,9 @@ import { bryantParkLawn } from './landmarks.js';
 // Multi-camera system supporting Third-Person Chase (with mouse/touch orbit + zoom),
 // Low-Angle Action Cam, POV/Cockpit Cam, 7 Iconic NYC Architectural Cameras, and Auto-Director Drone.
 
+// How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
+const SWING_CAM_PAN = 1.4;
+
 const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
   { id: 'swing',       name: 'Swing Cam',                short: 'Swing',       category: 'follow', fov: 58 },
@@ -34,6 +37,7 @@ class CameraSystem {
 
     this.activePresetId = 'chase';
     this.orbitYawOffset = 0.0;
+    this.orbitYawVel = 0; // the swing cam's pan speed back round behind him (rad/s)
     this.orbitPitchOffset = 0.09;
     this.zoomMultiplier = 1.0;
     this.isDragging = false;
@@ -142,6 +146,7 @@ class CameraSystem {
 
   resetOrbit() {
     this.orbitYawOffset = 0;
+    this.orbitYawVel = 0;
     this.orbitPitchOffset = 0.09;
     this.zoomMultiplier = 1;
     this.userOrbitTimer = 0;
@@ -201,7 +206,19 @@ class CameraSystem {
 
     if (!this.isDragging && this.userOrbitTimer <= 0 && (spider || Math.abs(entity.speed) > 0.5)) {
       this.orbitYawOffset -= Math.round(this.orbitYawOffset / (Math.PI * 2)) * (Math.PI * 2);
-      this.orbitYawOffset += (0.0 - this.orbitYawOffset) * (1 - Math.exp(-dt * (spider ? 1.3 : 2.2)));
+      if (spider && this.activePresetId === 'swing') {
+        // The swing cam pans like someone filming him by hand: slow to react as he changes direction (a zigzag's
+        // new swing sets off with the view still looking the old way), then swinging round to catch up and settling
+        // in behind him. A damped spring, rather than easing straight back, which reacts at once
+        const w = SWING_CAM_PAN, damping = 0.85;
+        this.orbitYawVel += (-w * w * this.orbitYawOffset - 2 * damping * w * this.orbitYawVel) * dt;
+        this.orbitYawOffset += this.orbitYawVel * dt;
+      } else {
+        this.orbitYawVel = 0;
+        this.orbitYawOffset += (0.0 - this.orbitYawOffset) * (1 - Math.exp(-dt * (spider ? 1.3 : 2.2)));
+      }
+    } else {
+      this.orbitYawVel = 0;
     }
 
     // The follow cameras pull back with speed, eased so that they drift back as the entity speeds up (and in as it
