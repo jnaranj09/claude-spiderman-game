@@ -910,6 +910,7 @@ test('slingshot: both hands from the ground web ahead, the stick pulled down bac
   assert.equal(ent.sling.phase, 'set', 'both webs stuck');
   const [a, b] = ent.sling.anchors;
   assert.ok(a.x > 0 && b.x < 0 && a.z > 0 && b.z > 0, 'one ahead on each side');
+  for (const anchor of [a, b]) assert.ok(anchor.y > 12, `high up a building (${anchor.y.toFixed(1)} m)`);
   step(controllers, ent, 3, { backward: 1 });
   assert.equal(ent.state, 'sling', 'still drawing');
   assert.ok(ent.position.z < -3 && ent.position.z > -7.01, `backed off ${(-ent.position.z).toFixed(1)} m`);
@@ -917,7 +918,8 @@ test('slingshot: both hands from the ground web ahead, the stick pulled down bac
   // (letting go of one hand is enough)
   step(controllers, ent, 1 / 60, { webLeft: false, backward: 0 });
   assert.equal(ent.state, 'air', 'launched');
-  assert.ok(ent.velocity.z > 25 && ent.velocity.y > 5, `at ${ent.velocity.z.toFixed(0)} m/s, rising ${ent.velocity.y.toFixed(0)}`);
+  assert.ok(ent.velocity.z > 15 && ent.velocity.y > 15 && ent.velocity.length() > 30,
+    `at ${ent.velocity.z.toFixed(0)} m/s, rising ${ent.velocity.y.toFixed(0)}`);
   step(controllers, ent, 0.5);
   assert.equal(ent.web.phase, 'none', 'no swing web from the button still held');
 });

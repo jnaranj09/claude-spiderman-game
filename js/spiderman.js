@@ -81,7 +81,8 @@ const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing o
 const ZIP_BELOW = 8;             // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
 const SLING_PAIR = 0.09;          // s: from the ground, the other web button joining within this makes a slingshot
-const SLING_REACH = 45;          // m: how far ahead the slingshot's webs look for something to stick to
+const SLING_REACH = 60;          // m: how far ahead the slingshot's webs look for something to stick to...
+const SLING_RISE = 18;           // ...preferring a point about this far above him
 const SLING_BACK_SPEED = 1.6;    // m/s backing away from the anchors (stick fully down), slowing as the webs stretch
 const SLING_DRAW = 7;            // m: the furthest he can pull the webs back
 const SLING_MIN_DRAW = 0.6;      // m: let go short of this and the webs just drop
@@ -1304,17 +1305,17 @@ function groundJump(ent) {
   ent.sling.wait = 0;
 }
 
-// The slingshot's web from one hand (s: 1 his left, -1 his right): a fan of rays ahead and out to that side, kept
-// low so the webs pull him forwards rather than up, for a wall or a taller building within reach (the near and low
-// win). With nothing standing up ahead (on a flat roof, in a park) it sticks to the floor a few metres ahead on that
-// side instead
+// The slingshot's web from one hand (s: 1 his left, -1 his right): a fan of rays ahead and out to that side, aimed
+// well up, for a point high on a building within reach (about SLING_RISE above him wins, so the launch carries him up
+// among the buildings; a lower wall will do). With nothing standing up ahead (on a flat roof, in a park) it sticks to
+// the floor a few metres ahead on that side instead
 function findSlingAnchor(controllers, x, feet, z, fx, fz, s, anchor, normal) {
   const lx = fz, lz = -fx;
   const cy = feet + 1.1;
   const candidates = controllers.nearColliders(x + fx * 20, z + fz * 20, SLING_REACH).filter((c) => c.maxY > feet + 1.5);
   let bestScore = -Infinity;
   for (const lat of [0.25, 0.5, 0.8, 1.2]) {
-    for (const elev of [0, 0.15, 0.35, 0.6]) {
+    for (const elev of [0.15, 0.35, 0.6, 0.9, 1.3, 1.8]) {
       _dir.set(fx + lx * lat * s, elev, fz + lz * lat * s).normalize();
       let t = SLING_REACH, found = false, nx = 0, ny = 0, nz = 0;
       for (const c of candidates) {
@@ -1323,7 +1324,8 @@ function findSlingAnchor(controllers, x, feet, z, fx, fz, s, anchor, normal) {
         }
       }
       if (!found || t < 3) continue;
-      const score = -t * 0.15 - elev * 6 - Math.abs(lat - 0.5) * 3;
+      const rise = _dir.y * t;
+      const score = -Math.abs(rise - SLING_RISE) * 0.25 - t * 0.05 - Math.abs(lat - 0.5) * 3 - (ny > 0.5 ? 2 : 0);
       if (score > bestScore) {
         bestScore = score;
         anchor.set(x + _dir.x * t, cy + _dir.y * t, z + _dir.z * t);
@@ -1365,7 +1367,8 @@ function startSling(controllers, ent) {
 }
 
 // Letting go of a drawn slingshot: the stretched webs fling him along his aim, harder the further he pulled them
-// back, and up at the angle of the webs (a skim off a low anchor, a lob towards a high one)
+// back, and up most of the way to the angle of the webs (a skim off a low anchor, up among the buildings towards
+// high ones)
 function launchSling(controllers, ent) {
   const sling = ent.sling;
   const p = ent.position;
@@ -1374,7 +1377,7 @@ function launchSling(controllers, ent) {
   const speed = SLING_LAUNCH_MIN + (SLING_LAUNCH_MAX - SLING_LAUNCH_MIN) * pull;
   const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
   const ahead = Math.max(1, ((a.x + b.x) * 0.5 - p.x) * fx + ((a.z + b.z) * 0.5 - p.z) * fz);
-  const pitch = Math.max(0.3, Math.min(0.8, Math.atan2((a.y + b.y) * 0.5 - p.y - 1.1, ahead) + 0.3));
+  const pitch = Math.max(0.3, Math.min(0.95, Math.atan2((a.y + b.y) * 0.5 - p.y - 1.1, ahead) * 0.8 + 0.15));
   ent.velocity.set(fx * Math.cos(pitch) * speed, Math.sin(pitch) * speed, fz * Math.cos(pitch) * speed);
   ent.state = 'air';
   ent.flip = pull > 0.5 ? 0 : 1;
