@@ -101,6 +101,7 @@ const WHIP_RADIUS_MAX = 28;
 const WHIP_GRAVITY = 0.3;        // share of gravity he feels whipping round (the web's a little above him)
 const WHIP_MIN_SPEED = 16;       // m/s: the least he goes round a corner at
 const WHIP_DONE = 0.2;           // rad: lets go once he's heading this close to where the stick points
+const CAMERA_LOCK = 0.8;         // s: the follow camera stays locked on after a whip, a vault onto a roof, a corner
 const ZIP_TURN_MIN = 0.35;       // rad: a tap with the stick this far off his line of travel zips that way...
 const ZIP_TURN = 0.8;            // ...turning his flight by up to this much
 const ZIP_TURN_COST = 0.92;      // the share of his speed the turn keeps
@@ -663,8 +664,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // Wall contact: outward normal, how high it goes, time on it, the direction of travel when it was hit, the
     // crawl direction in the wall's plane (the body's up while crawling) and how fast the stick is moving him
     // ...and a web pulled along it: speed (fading) and direction (the figure's left, up) of the pull, and whether
-    // this press has been used on the wall already
-    wall: { nx: 0, nz: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0, dash: 0, dashS: 0, dashV: 1,
+    // this press has been used on the wall already (and the face he's on, for the camera to swing round a corner)
+    wall: { nx: 0, nz: 0, faceX: 0, faceZ: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0, dash: 0, dashS: 0, dashV: 1,
       used: false },
     // Running along / up a wall: direction (in the wall's plane) and speed
     wallRun: { dx: 0, dy: 1, dz: 0, speed: 0 },
@@ -1857,6 +1858,7 @@ function updateSpiderMan(controllers, ent, dt) {
       ent.state = 'ground';
     } else if (p.y + 1.1 >= w.top && v.y > 0) {
       // Vault over the parapet onto the roof (higher, pulled up by a web)
+      ent.cameraLock = CAMERA_LOCK;
       p.y = w.top;
       p.x -= w.nx * 0.9;
       p.z -= w.nz * 0.9;
@@ -1923,6 +1925,7 @@ function updateSpiderMan(controllers, ent, dt) {
       if (carry > 16) ent.flip = 0;
     } else if (r.dy > 0.3 && p.y + 1.4 >= w.top) {
       // Up and over the top with the run's momentum
+      ent.cameraLock = CAMERA_LOCK;
       v.set(-w.nx * 5, Math.min(r.speed, 16) * 0.7 + 4, -w.nz * 5);
       ent.state = 'air';
       ent.flip = 0;
@@ -1988,7 +1991,14 @@ function updateSpiderMan(controllers, ent, dt) {
     const tx = v.x - nx * Math.min(0, into), tz = v.z - nz * Math.min(0, into);
     if (into < 0) { v.x -= nx * into; v.z -= nz * into; }
     if (onWall) {
-      ent.wall.nx = nx; ent.wall.nz = nz;
+      // (round a corner onto the next face of the building, an inside corner or an outside one: the camera swings
+      // round to it with him)
+      const w = ent.wall;
+      if (w.faceX * nx + w.faceZ * nz < 0.85) {
+        ent.cameraLock = CAMERA_LOCK;
+        w.faceX = nx; w.faceZ = nz;
+      }
+      w.nx = nx; w.nz = nz;
     } else {
       // What a wall does to him: fast enough, he runs along it (or up it, head on); slower, he sticks to it.
       // Brushing one mid-swing just slides along it
@@ -2008,7 +2018,7 @@ function updateSpiderMan(controllers, ent, dt) {
         if (ent.state === 'swing' || ent.state === 'whip') releaseWeb(controllers, ent, false);
         const travel = Math.hypot(tx, tz);
         const w = ent.wall;
-        w.nx = nx; w.nz = nz; w.top = top; w.time = 0;
+        w.nx = w.faceX = nx; w.nz = w.faceZ = nz; w.top = top; w.time = 0;
         w.tx = travel > 1 ? tx / travel : Math.sin(ent.heading);
         w.tz = travel > 1 ? tz / travel : Math.cos(ent.heading);
         if (mode === 'run' && travel > 0.45 * hs) {
@@ -2023,8 +2033,22 @@ function updateSpiderMan(controllers, ent, dt) {
     }
   } else if (onWall) {
     const w = ent.wall;
-    if (v.y > 0.5) {
+    // Crawling sideways off the edge of the wall: if the building carries on round the corner (behind the wall he
+    // was on, back the way he came), round it he goes, onto the next face, crawling on the same way
+    const lx = -w.nz, lz = w.nx;
+    const along = v.x * lx + v.z * lz;
+    const tx = lx * Math.sign(along), tz = lz * Math.sign(along);
+    const round = ent.state === 'wall' && Math.abs(along) > 0.5 && p.y + 0.5 < w.top
+      && solidAt(controllers, p.x - w.nx * 0.8 - tx * 0.8, p.y + 0.5, p.z - w.nz * 0.8 - tz * 0.8);
+    if (round) {
+      p.x -= w.nx * 0.9;
+      p.z -= w.nz * 0.9;
+      w.nx = w.faceX = tx; w.nz = w.faceZ = tz;
+      ent.heading = Math.atan2(-tx, -tz);
+      ent.cameraLock = CAMERA_LOCK;
+    } else if (v.y > 0.5) {
       // The wall ended above him (a ledge, a setback): up and over it onto the roof
+      ent.cameraLock = CAMERA_LOCK;
       p.x -= w.nx * 0.35;
       p.z -= w.nz * 0.35;
       v.set(-w.nx * 4.5, Math.max(v.y * 0.6, 3) + 3, -w.nz * 4.5);
@@ -2036,7 +2060,7 @@ function updateSpiderMan(controllers, ent, dt) {
       if (ent.state === 'wallrun') v.addScaledVector(_offset.set(w.nx, 0, w.nz), 1.5);
       else v.set(w.nx * 2, 1, w.nz * 2);
     }
-    ent.state = 'air';
+    if (!round) ent.state = 'air';
   }
 
   // A zip's pull only carries him through the air: landing, a new swing or a wall ends it (and lets him zip again)
@@ -2047,7 +2071,8 @@ function updateSpiderMan(controllers, ent, dt) {
   }
 
   // The follow camera turns round the corner with him on a whip (the point of it), and catches up just after
-  ent.cameraLock = ent.state === 'whip' ? 0.8 : Math.max(0, ent.cameraLock - dt);
+  // ...and over the top of a wall onto the roof, or round from one face of a building to the next (see above)
+  ent.cameraLock = ent.state === 'whip' ? CAMERA_LOCK : Math.max(0, ent.cameraLock - dt);
 
   // The follow camera looks up the wall as he climbs it and down it as he crawls down (and up a run up a wall)
   // ...and along it, to the side he's crawling (positive: his left)
@@ -2058,7 +2083,7 @@ function updateSpiderMan(controllers, ent, dt) {
   } else if (ent.state === 'wallrun' && Math.abs(ent.wallRun.dy) > 0.7) {
     pitch = 0.8 * Math.sign(ent.wallRun.dy);
   }
-  const ease = 1 - Math.exp(-dt * 3);
+  const ease = 1 - Math.exp(-dt * (ent.cameraLock > 0 ? 10 : 3));
   ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
   ent.cameraSide += (side - ent.cameraSide) * ease;
 
@@ -2324,7 +2349,8 @@ function bodyOrientation(ent, out) {
     // On a web his up turns to the line of the web (facing his heading, square to it, so always along the arc),
     // eased in over the first half second; a web still flying out draws him a little towards it already
     let toWeb = 0;
-    if (web.phase === 'attached') toWeb = Math.min(1, web.swingTime / 0.55);
+    // (whipping round a corner, at once: the turn's pull flings him out along the web, feet first)
+    if (web.phase === 'attached') toWeb = Math.min(1, web.swingTime / (ent.state === 'whip' ? 0.15 : 0.55));
     else if (web.phase === 'shooting') toWeb = 0.3 * Math.min(1, web.travelled / Math.max(1, web.distance));
     if (toWeb > 0) {
       toWeb = toWeb * toWeb * (3 - 2 * toWeb);
@@ -2379,7 +2405,7 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   bodyOrientation(ent, _qWant);
   // (gentler in the air and on the web, where the body flows from one attitude to the next)
-  const turnRate = ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip' ? 6 : 10;
+  const turnRate = ent.state === 'whip' ? 14 : ent.state === 'air' || ent.state === 'swing' ? 6 : 10;
   ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
   // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
   if (ent.state === 'swing' && web.phase === 'attached') {

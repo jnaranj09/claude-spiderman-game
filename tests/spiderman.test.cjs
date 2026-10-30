@@ -1070,3 +1070,33 @@ test('a tap with the stick pushed sideways zips that way and turns him towards i
   const yaw = Math.atan2(ent.velocity.x, ent.velocity.z);
   assert.ok(yaw > 0.6 && yaw < 1.0, `turned ${(yaw * 180 / Math.PI).toFixed(0)} degrees towards it`);
 });
+
+test('crawling sideways off the edge of a wall, he goes round the corner onto the next face (and the camera locks on)', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(0, 0, 90, Math.PI / 2); // facing the west face (x = 10), near its north end (z = 100)
+  step(controllers, ent, 2, { forward: 0.6 });
+  assert.equal(ent.state, 'wall');
+  step(controllers, ent, 0.6, { forward: 1 });
+  // Crawl along the face to his right (north, +Z), off its end
+  let rounded = false, locked = false;
+  for (let i = 0; i < 60 * 6 && !rounded; i++) {
+    step(controllers, ent, 1 / 60, { forward: 0, right: 1 });
+    rounded = ent.state === 'wall' && ent.wall.nz > 0.9;
+    locked ||= ent.cameraLock > 0;
+  }
+  assert.ok(rounded, `round onto the north face (state ${ent.state}, normal ${ent.wall.nx.toFixed(2)}, ${ent.wall.nz.toFixed(2)})`);
+  assert.ok(locked, 'the camera locked on');
+  step(controllers, ent, 1, { right: 1 });
+  assert.equal(ent.state, 'wall', 'still on the wall');
+  assert.ok(ent.position.x > 11 && Math.abs(ent.position.z - 100.42) < 0.3, `crawling on along it (${ent.position.x.toFixed(1)}, ${ent.position.z.toFixed(2)})`);
+});
+
+test('climbing over the top of a wall onto the roof locks the camera on', () => {
+  const controllers = world(tower());
+  const ent = spiderEntity(0, 0, 0, Math.PI / 2);
+  step(controllers, ent, 2, { forward: 0.6 });
+  let locked = false;
+  for (let i = 0; i < 60 * 20 && ent.state === 'wall'; i++) step(controllers, ent, 1 / 60, { forward: 1 });
+  locked = ent.cameraLock > 0;
+  assert.ok(locked, `locked (${ent.state} at ${ent.position.y.toFixed(1)} m)`);
+});

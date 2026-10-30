@@ -266,7 +266,7 @@ test('the swing cam is slow to follow Spider-Man round a change of direction, th
   assert.ok(Math.abs(swing.late) < 0.05, `settles behind him (${swing.late.toFixed(3)})`);
 });
 
-test('whipping round a corner, the swing cam locks on behind Spider-Man and turns with him', () => {
+test('whipping round a corner, the swing cam locks on close behind Spider-Man and turns with him, just lagging', () => {
   const turn = (state) => {
     const h = cameraHarness({
       position: new Vector3(0, 20, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
@@ -286,6 +286,6 @@ test('whipping round a corner, the swing cam locks on behind Spider-Man and turn
     return worst;
   };
   const whip = turn('whip'), air = turn('air');
-  assert.ok(whip < 0.01, `stays behind him (${whip.toFixed(3)} rad off)`);
+  assert.ok(whip > 0.05 && whip < 0.35, `close behind him, a little late (${whip.toFixed(2)} rad off)`);
   assert.ok(air > 0.8, `a turn in the air still lags (${air.toFixed(2)} rad)`);
 });

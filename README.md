@@ -57,8 +57,10 @@ a web button.
   pole, at the radius he was across from it, keeping all his speed (the web only pulls in towards the corner, square
   to his motion, so it turns him without slowing him). He lets go once he's heading where the stick pointed as he
   threw the web (pull the stick right back for a U-turn) and is flung on into the new street. The camera locks on
-  behind him and turns round the corner with him (normally it lags behind a change of direction), catching up as he
-  flies out. Why one web and not
+  close behind him and turns round the corner with him, just a touch late (normally it lags well behind a change of
+  direction), and his body stretches out along the web, feet first away from the corner, as the turn flings him out.
+  The camera locks on the same way as he climbs over the top of a wall onto the roof, and as he crawls round a
+  corner onto the next face of a building. Why one web and not
   two: what turns you is a pull towards the inside of the turn, and two webs to opposite sides cancel each other's
   sideways pull, which is exactly why the double web and the slingshot go dead straight. With no corner in reach
   (mid-block), it's an ordinary swing web.
