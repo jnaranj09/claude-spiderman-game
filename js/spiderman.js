@@ -80,6 +80,19 @@ const ZIP_AIM_HEIGHT = 30;       // ...levelling out by this height
 const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
 const ZIP_BELOW = 8;             // m: how far under his feet a roof, ledge or street light can be for a zip to stick to it
 const ZIP_RANGE = 90;            // m
+const SLING_PAIR = 0.09;          // s: from the ground, the other web button joining within this makes a slingshot
+const SLING_REACH = 45;          // m: how far ahead the slingshot's webs look for something to stick to
+const SLING_BACK_SPEED = 1.6;    // m/s backing away from the anchors (stick fully down), slowing as the webs stretch
+const SLING_DRAW = 7;            // m: the furthest he can pull the webs back
+const SLING_MIN_DRAW = 0.6;      // m: let go short of this and the webs just drop
+const SLING_LAUNCH_MIN = 16;     // m/s at a short pull...
+const SLING_LAUNCH_MAX = 46;     // ...and drawn all the way back
+const SLING_AIM_RATE = 0.8;      // rad/s the stick's sideways part turns the aim
+const GLIDE_SINK = 3.4;          // m/s: the steady sink of a glide, hands off
+const GLIDE_SPEED = 19;          // m/s: the forward speed a glide settles at
+const GLIDE_PULLOUT = 26;        // m/s²: how fast a faster fall is turned into the glide (and the speed it carries)
+const GLIDE_CARRY = 0.75;        // share of the fall speed taken out that turns into forward speed
+const GLIDE_TURN = 1.6;          // rad/s banking round
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
@@ -319,8 +332,54 @@ function buildWebs(scene) {
     group.add(mesh);
     splats.push({ mesh, life: 0, held: false });
   }
+  // The glide's web wings: a membrane from each wrist to the shoulder and hip, and one between the legs
+  const wingGeo = new THREE.BufferGeometry();
+  wingGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  wingGeo.setIndex([0, 1, 2, 3, 4, 5, 2, 6, 7, 2, 7, 5]);
+  const wings = new THREE.Mesh(wingGeo, new THREE.MeshBasicNodeMaterial({
+    color: 0x7a0d16, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide
+  }));
+  wings.frustumCulled = false;
+  wings.position.set(0, -500, 0);
+  group.add(wings);
   scene.add(group);
-  return { group, strand, strand2, splats, next: 0 };
+  return { group, strand, strand2, wings, splats, next: 0 };
+}
+
+// Wing corners from the posed skeleton: where each bone's joint is (indexed as PERSON_BONES)
+const WING_BONES = [
+  [3, 7],  // left shoulder (upper arm), left hip (thigh)
+  [5, 11], // right
+  [9, 13]  // ankles (feet)
+];
+
+function layWings(model, mesh, open) {
+  const rig = model.rig;
+  const a = rig.pose;
+  const arr = mesh.geometry.attributes.position.array;
+  // (a bone's pose holds its rotation and the translation that puts its bind-pose joint where the joint now is)
+  const bone = (b, o) => {
+    _boneQ.set(a[b * 8], a[b * 8 + 1], a[b * 8 + 2], a[b * 8 + 3]);
+    _boneT.copy(rig.bind[b]).applyQuaternion(_boneQ).multiplyScalar(rig.s);
+    arr.set([a[b * 8 + 4] + _boneT.x, a[b * 8 + 5] + _boneT.y, a[b * 8 + 6] + _boneT.z], o * 3);
+  };
+  for (let i = 0; i < 2; i++) {
+    bone(WING_BONES[i][0], i * 3 + 1);
+    bone(WING_BONES[i][1], i * 3 + 2);
+    // (the wrist end unfurls out from the shoulder as the wings open)
+    const sh = (i * 3 + 1) * 3, hand = model.hands[i];
+    arr[i * 9] = arr[sh] + (hand.x - arr[sh]) * open;
+    arr[i * 9 + 1] = arr[sh + 1] + (hand.y - arr[sh + 1]) * open;
+    arr[i * 9 + 2] = arr[sh + 2] + (hand.z - arr[sh + 2]) * open;
+  }
+  bone(WING_BONES[2][0], 6);
+  bone(WING_BONES[2][1], 7);
+  // (between the legs, reaching only part way down to the ankles until fully open)
+  for (const o of [6, 7]) {
+    const hip = o === 6 ? 2 : 5;
+    for (let k = 0; k < 3; k++) arr[o * 3 + k] = arr[hip * 3 + k] + (arr[o * 3 + k] - arr[hip * 3 + k]) * open;
+  }
+  mesh.geometry.attributes.position.needsUpdate = true;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -535,7 +594,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     velocity: new THREE.Vector3(),
     heading,
     speed: 0,
-    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun'
+    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun' | 'sling' (drawing a slingshot)
     web: {
       phase: 'none', // 'none' | 'shooting' | 'attached'
       anchor: new THREE.Vector3(),
@@ -606,6 +665,26 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     cameraSide: 0,
     // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
     swingUp: new THREE.Vector3(0, 1, 0),
+    // The slingshot: a web from each hand to something ahead (left hand, right hand), how far they've flown, how far
+    // he has pulled them back, and the time left for the other button to join the first (from the ground)
+    sling: {
+      phase: 'none', // 'none' | 'shooting' | 'set'
+      anchors: [new THREE.Vector3(), new THREE.Vector3()],
+      normals: [new THREE.Vector3(), new THREE.Vector3()],
+      tips: [new THREE.Vector3(), new THREE.Vector3()],
+      splats: [null, null],
+      distance: 0,
+      travelled: 0,
+      draw: 0,
+      wait: 0
+    },
+    // Gliding on the web wings under his arms: on, how far the wings are out (for the look), the bank of a turn and
+    // the nose down of a stick pushed on (-1 flaring .. 1 diving)
+    gliding: false,
+    glideHeld: false,
+    glide: 0,
+    glideBank: 0,
+    glidePitch: 0,
     diving: false,
     diveClicks: 0,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
@@ -635,6 +714,8 @@ function resetSpiderMan(ent) {
   ent.zip.time = -1;
   ent.zip.pull = 0;
   releaseSplat(ent);
+  dropSling(ent);
+  ent.gliding = ent.diving = false;
   ent.webCooldown = 0;
   ent.crouch = 0;
   ent.flip = ent.roll = 1;
@@ -669,6 +750,17 @@ function releaseSplat(ent) {
   if (ent.web.splat) ent.web.splat.held = false;
   if (ent.web.splat2) ent.web.splat2.held = false;
   ent.web.splat = ent.web.splat2 = null;
+}
+
+function dropSling(ent) {
+  const sling = ent.sling;
+  for (let i = 0; i < 2; i++) {
+    if (sling.splats[i]) sling.splats[i].held = false;
+    sling.splats[i] = null;
+  }
+  sling.phase = 'none';
+  sling.draw = 0;
+  sling.wait = 0;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -727,6 +819,7 @@ function shootWeb(controllers, ent, request = 0) {
   }
   web.side = anchor.side;
   ent.nextSide = -web.side; // alternate hands, like the real thing
+  ent.gliding = false;
   web.travelled = 0;
   web.swingTime = 0;
   web.passedBottom = web.rising = web.caught = web.turned = false;
@@ -966,6 +1059,7 @@ function webZip(controllers, ent) {
   const ground = controllers.getGroundHeight(p.x, p.z, 'person');
   const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y, ground);
   if (!target) return false;
+  ent.gliding = false;
   zip.anchor.set(target.x, target.y, target.z);
   if (target.lamp) zip.normal.set(0, 0, 0);
   else zip.normal.set(target.nx, target.ny, target.nz);
@@ -1066,6 +1160,97 @@ function jumpOffWall(ent, s) {
   ent.webCooldown = 0.12;
 }
 
+// A press from the ground: jump (fast enough to run on), and the held button fires a web on the way up
+function groundJump(ent) {
+  const v = ent.velocity;
+  v.y = 12.5;
+  const dir = { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
+  const hs = Math.hypot(v.x, v.z);
+  v.x = dir.x * Math.max(hs, 6);
+  v.z = dir.z * Math.max(hs, 6);
+  ent.state = 'air';
+  ent.webCooldown = 0.12;
+  ent.sling.wait = 0;
+}
+
+// The slingshot's web from one hand (s: 1 his left, -1 his right): a fan of rays ahead and out to that side, kept
+// low so the webs pull him forwards rather than up, for a wall or a taller building within reach (the near and low
+// win). With nothing standing up ahead (on a flat roof, in a park) it sticks to the floor a few metres ahead on that
+// side instead
+function findSlingAnchor(controllers, x, feet, z, fx, fz, s, anchor, normal) {
+  const lx = fz, lz = -fx;
+  const cy = feet + 1.1;
+  const candidates = controllers.nearColliders(x + fx * 20, z + fz * 20, SLING_REACH).filter((c) => c.maxY > feet + 1.5);
+  let bestScore = -Infinity;
+  for (const lat of [0.25, 0.5, 0.8, 1.2]) {
+    for (const elev of [0, 0.15, 0.35, 0.6]) {
+      _dir.set(fx + lx * lat * s, elev, fz + lz * lat * s).normalize();
+      let t = SLING_REACH, found = false, nx = 0, ny = 0, nz = 0;
+      for (const c of candidates) {
+        if (rayBox(c, x, cy, z, _dir.x, _dir.y, _dir.z, t, _hit)) {
+          t = _hit.t; nx = _hit.nx; ny = _hit.ny; nz = _hit.nz; found = true;
+        }
+      }
+      if (!found || t < 3) continue;
+      const score = -t * 0.15 - elev * 6 - Math.abs(lat - 0.5) * 3;
+      if (score > bestScore) {
+        bestScore = score;
+        anchor.set(x + _dir.x * t, cy + _dir.y * t, z + _dir.z * t);
+        normal.set(nx, ny, nz);
+      }
+    }
+  }
+  if (bestScore > -Infinity) return;
+  // (on the floor: as far ahead as it stays level with his feet, so it never ends up over a roof's edge)
+  for (const d of [6, 4, 2.5]) {
+    const ax = x + (fx + lx * s * 0.45) * d, az = z + (fz + lz * s * 0.45) * d;
+    const g = groundAt(controllers, ax, az, feet);
+    if (Math.abs(g - feet) < 1 || d === 2.5) {
+      anchor.set(ax, Math.abs(g - feet) < 1 ? g : feet, az);
+      normal.set(0, 1, 0);
+      return;
+    }
+  }
+}
+
+// Both web buttons from the ground: a web from each hand to something ahead, one either side, to pull back on
+function startSling(controllers, ent) {
+  const p = ent.position;
+  const sling = ent.sling;
+  const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
+  sling.distance = 0;
+  for (let i = 0; i < 2; i++) {
+    findSlingAnchor(controllers, p.x, p.y, p.z, fx, fz, i === 0 ? 1 : -1, sling.anchors[i], sling.normals[i]);
+    sling.distance = Math.max(sling.distance, sling.anchors[i].distanceTo(_center.set(p.x, p.y + 1.1, p.z)));
+  }
+  sling.phase = 'shooting';
+  sling.travelled = 0;
+  sling.draw = 0;
+  sling.wait = 0;
+  ent.state = 'sling';
+  ent.velocity.set(0, 0, 0);
+  ent.webSpent = true; // (the press's web: no swing web from it after the launch)
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(sling.distance);
+}
+
+// Letting go of a drawn slingshot: the stretched webs fling him along his aim, harder the further he pulled them
+// back, and up at the angle of the webs (a skim off a low anchor, a lob towards a high one)
+function launchSling(controllers, ent) {
+  const sling = ent.sling;
+  const p = ent.position;
+  const [a, b] = sling.anchors;
+  const pull = Math.min(1, sling.draw / SLING_DRAW);
+  const speed = SLING_LAUNCH_MIN + (SLING_LAUNCH_MAX - SLING_LAUNCH_MIN) * pull;
+  const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
+  const ahead = Math.max(1, ((a.x + b.x) * 0.5 - p.x) * fx + ((a.z + b.z) * 0.5 - p.z) * fz);
+  const pitch = Math.max(0.3, Math.min(0.8, Math.atan2((a.y + b.y) * 0.5 - p.y - 1.1, ahead) + 0.3));
+  ent.velocity.set(fx * Math.cos(pitch) * speed, Math.sin(pitch) * speed, fz * Math.cos(pitch) * speed);
+  ent.state = 'air';
+  ent.flip = pull > 0.5 ? 0 : 1;
+  ent.webCooldown = 0.25;
+  dropSling(ent);
+}
+
 function updateSpiderMan(controllers, ent, dt) {
   if (dt <= 0) return;
   const keys = controllers.keys;
@@ -1137,9 +1322,26 @@ function updateSpiderMan(controllers, ent, dt) {
   if (diveClicks !== ent.diveClicks) {
     ent.diveClicks = diveClicks;
     if (ent.state === 'air' && zip.pull <= 0) ent.diving = !ent.diving;
+    // (a dive folds the wings)
+    if (ent.diving) ent.gliding = false;
   }
   // A web (or a zip) ends a dive
   if (held || tap) ent.diving = false;
+  // The glide button spreads the web wings under his arms (in the air; on a web he lets go first, flung on as usual)
+  // and folds them again. A web or a zip that flies also folds them (see shootWeb and webZip): pressing one over
+  // open ground, with nothing to stick to, keeps him gliding
+  const glideBtn = Boolean(keys.glide);
+  if (glideBtn && !ent.glideHeld) {
+    if (ent.gliding) {
+      ent.gliding = false;
+    } else if (ent.state === 'air' || ent.state === 'swing') {
+      if (ent.state === 'swing') releaseWeb(controllers, ent, v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0);
+      web.phase = 'none';
+      ent.gliding = true;
+      ent.diving = false;
+    }
+  }
+  ent.glideHeld = glideBtn;
 
   // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
   if (tap && ent.pressAir && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
@@ -1150,19 +1352,20 @@ function updateSpiderMan(controllers, ent, dt) {
 
   if (ent.state === 'ground') {
     ent.groundTime += dt;
-    // A press jumps (and, held, fires a web on the way up)
-    if (pressed) {
-      // Jump, and fire a web on the way up if the button stays down (a tap leaps on into a zip)
-      v.y = 12.5;
-      const dir = { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
-      const hs = Math.hypot(v.x, v.z);
-      v.x = dir.x * Math.max(hs, 6);
-      v.z = dir.z * Math.max(hs, 6);
-      ent.state = 'air';
-      ent.webCooldown = 0.12;
+    // A press jumps (and, held, fires a web on the way up). Both web buttons together set up a slingshot instead, so
+    // a press of just one waits a moment for the other (the second of a pair is never pressed in quite the same
+    // frame); the automatic web (Space, A) jumps at once
+    const sling = ent.sling;
+    if (pressed && btnL && btnR) startSling(controllers, ent);
+    else if (pressed && (btnL || btnR)) sling.wait = SLING_PAIR;
+    else if (pressed) groundJump(ent);
+    else if (sling.wait > 0) {
+      if (btnL && btnR) startSling(controllers, ent);
+      else if (!held || (sling.wait -= dt) <= 0) groundJump(ent);
     }
   } else {
     ent.groundTime = 0;
+    ent.sling.wait = 0;
   }
   // In the air a held button fires the swing web (after a moment, so that a tap stays a zip): one per press
   if (ent.state === 'air' && held && !ent.webSpent && ent.pressTime >= 0.08 && web.phase === 'none'
@@ -1202,14 +1405,17 @@ function updateSpiderMan(controllers, ent, dt) {
     let pump = 0, brake = 0;
     // Diving (clicked on with the stick): head first, falling fast, still steering a little with the sides. A web
     // fired out of a dive turns all that speed into a huge swing
-    if (ent.state !== 'air') ent.diving = false;
+    if (ent.state !== 'air') ent.diving = ent.gliding = false;
+    let steer = 0;
     if (ent.diving) {
       v.y -= GRAVITY * (DIVE_GRAVITY - 1) * dt;
       steerVelocity(ent, turn * 0.6, dt);
     } else if (wantYaw !== null) {
       const travel = travelDirection(ent);
       const diff = angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
-      steerVelocity(ent, Math.max(-1, Math.min(1, diff * 1.5)) * stickMag, dt);
+      steer = Math.max(-1, Math.min(1, diff * 1.5)) * stickMag;
+      // (on the wings he banks round faster than he can just twist in the air)
+      steerVelocity(ent, steer * (ent.gliding ? GLIDE_TURN / AIR_TURN_RATE : 1), dt);
       pump = stickMag * Math.max(0, Math.cos(diff));
       brake = stickMag * Math.max(0, -Math.cos(diff)) * 0.5;
     } else if (!web.chosen) {
@@ -1228,7 +1434,37 @@ function updateSpiderMan(controllers, ent, dt) {
       v.z += dir.z * gain;
       if (v.y < zip.rise) v.y = Math.min(zip.rise, v.y + ZIP_LIFT * step);
     }
-    if (ent.state === 'air') {
+    const bankK = 1 - Math.exp(-dt * 4);
+    ent.glideBank += ((ent.gliding ? steer : 0) - ent.glideBank) * bankK;
+    ent.glidePitch += ((ent.gliding ? pump - brake * 2 : 0) - ent.glidePitch) * bankK;
+    if (ent.gliding) {
+      // Gliding: the wings hold his fall to a slow sink. A faster fall (the drop before they opened, or a dive) is
+      // pulled out of over a second or two, and most of the speed taken out of it carries on forwards, like a
+      // wingsuit's: a dive into a glide is the fastest way across open ground. The stick pushed on dips the nose
+      // (sinking faster, flying faster); pulled back, he flares (slower and flatter)
+      const flare = brake * 2;
+      const sink = GLIDE_SINK + 5 * pump - 1.6 * flare;
+      if (v.y < -sink) {
+        const out = Math.min(-sink - v.y, (GRAVITY + GLIDE_PULLOUT) * dt);
+        v.y += out;
+        // (holding off gravity is just lift; only what's pulled out beyond it becomes speed)
+        const carry = Math.max(0, out - GRAVITY * dt) * GLIDE_CARRY;
+        v.x += dir.x * carry;
+        v.z += dir.z * carry;
+      }
+      // Gliding down is what keeps him going: the speed settles where the drag of the wings meets that
+      const want = GLIDE_SPEED + 8 * pump - 7 * flare;
+      const now = Math.hypot(v.x, v.z);
+      if (now < want) {
+        const gain = Math.min(want - now, 6 * dt);
+        v.x += dir.x * gain;
+        v.z += dir.z * gain;
+      } else {
+        const keep = 1 - Math.min(1, 0.3 * dt) * (1 - want / now);
+        v.x *= keep;
+        v.z *= keep;
+      }
+    } else if (ent.state === 'air') {
       // Light air control and drag; terminal velocity keeps long falls readable
       if (pump && hs < 16) { v.x += dir.x * 7 * pump * dt; v.z += dir.z * 7 * pump * dt; }
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
@@ -1514,6 +1750,38 @@ function updateSpiderMan(controllers, ent, dt) {
       p.x -= w.nx * 0.25;
       p.z -= w.nz * 0.25;
     }
+  } else if (ent.state === 'sling') {
+    // The slingshot: both buttons held, the webs fly out and stick; then the stick pulled down backs him away from
+    // them in a squat, still facing them, stretching the webs (ever more slowly, the further they stretch), and its
+    // sideways part turns his aim. Letting go of either button launches him (or, barely drawn, drops the webs)
+    const sling = ent.sling;
+    v.set(0, 0, 0);
+    if (sling.phase === 'shooting' && (sling.travelled += WEB_SPEED * dt) >= sling.distance) {
+      sling.phase = 'set';
+      if (ent.webs) for (let i = 0; i < 2; i++) sling.splats[i] = stickSplat(ent, sling.anchors[i], sling.normals[i], true);
+    }
+    if (!(btnL && btnR)) {
+      if (sling.phase === 'set' && sling.draw >= SLING_MIN_DRAW) launchSling(controllers, ent);
+      else {
+        dropSling(ent);
+        ent.state = 'ground';
+      }
+    } else if (sling.phase === 'set') {
+      ent.heading += turn * SLING_AIM_RATE * dt;
+      const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
+      const stretch = sling.draw / SLING_DRAW;
+      const pull = backIn - fwdIn;
+      const speed = pull * SLING_BACK_SPEED * (pull > 0 ? 1 - 0.75 * stretch * stretch : 1);
+      const back = Math.max(-sling.draw, Math.min(SLING_DRAW - sling.draw, speed * dt));
+      // (never back off a roof's edge or up a step: he digs his heels in instead)
+      const nx = p.x - fx * back, nz = p.z - fz * back;
+      const ground = groundAt(controllers, nx, nz, p.y);
+      if (back && Math.abs(ground - p.y) < 0.4) {
+        p.set(nx, ground, nz);
+        sling.draw += back;
+        ent.runPhase += Math.abs(back) * 3.2;
+      }
+    }
   }
 
   // --- Buildings ---------------------------------------------------------------------------------------------
@@ -1582,7 +1850,7 @@ function updateSpiderMan(controllers, ent, dt) {
 
   // A zip's pull only carries him through the air: landing, a new swing or a wall ends it (and lets him zip again)
   if (ent.state !== 'air') {
-    ent.diving = false;
+    ent.diving = ent.gliding = false;
     zip.pull = 0;
     zip.chain = 0;
   }
@@ -1685,6 +1953,37 @@ function targetPose(ent, t) {
     runPose(t, ent, 1, 0.15);
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
+  } else if (ent.state === 'sling') {
+    // Drawing the slingshot: a deep squat, both fists out in front holding the webs, leaning back against them more
+    // the further they stretch; short shuffling steps backing off
+    const pull = Math.min(1, ent.sling.draw / SLING_DRAW);
+    const s = Math.sin(ent.runPhase);
+    setPose(t, 'spine', 0.3 - pull * 0.4, 0, 0);
+    setPose(t, 'neck', -0.2 + pull * 0.3, 0, 0);
+    setPose(t, 'shL', -1.35 - pull * 0.15, 0, 0.22);
+    setPose(t, 'shR', -1.35 - pull * 0.15, 0, -0.22);
+    setPose(t, 'elL', -0.45 + pull * 0.3, 0, 0);
+    setPose(t, 'elR', -0.45 + pull * 0.3, 0, 0);
+    setPose(t, 'hipL', -1.3 - s * 0.18, 0, 0.2);
+    setPose(t, 'hipR', -1.3 + s * 0.18, 0, -0.2);
+    setPose(t, 'knL', 1.95 + Math.max(0, s) * 0.3, 0, 0);
+    setPose(t, 'knR', 1.95 + Math.max(0, -s) * 0.3, 0, 0);
+    setPose(t, 'ftL', -0.5, 0, 0);
+    setPose(t, 'ftR', -0.5, 0, 0);
+  } else if (ent.gliding) {
+    // Gliding: arms spread wide and a little forward, stretching the wings to his sides, legs apart and straight
+    setPose(t, 'spine', -0.05, 0, 0);
+    setPose(t, 'neck', -0.6, 0, 0);
+    setPose(t, 'shL', -0.25, 0, 1.45);
+    setPose(t, 'shR', -0.25, 0, -1.45);
+    setPose(t, 'elL', -0.08, 0, 0);
+    setPose(t, 'elR', -0.08, 0, 0);
+    setPose(t, 'hipL', 0.05, 0, 0.3);
+    setPose(t, 'hipR', 0.05, 0, -0.3);
+    setPose(t, 'knL', 0.1, 0, 0);
+    setPose(t, 'knR', 0.1, 0, 0);
+    setPose(t, 'ftL', 0.7, 0, 0);
+    setPose(t, 'ftR', 0.7, 0, 0);
   } else if (ent.diving) {
     // Diving head first: arms swept back along the sides, legs together and straight, toes pointed
     setPose(t, 'spine', 0.05, 0, 0);
@@ -1815,6 +2114,12 @@ function bodyOrientation(ent, out) {
     _by.copy(v).normalize();
     _bz.set(0, -1, 0).addScaledVector(_by, _by.y);
     if (_bz.lengthSq() < 1e-4) _bz.set(Math.sin(ent.heading), 0, Math.cos(ent.heading));
+  } else if (ent.gliding) {
+    // Gliding: flat out, chest down, head the way he flies with the nose a little up (down, the stick pushed on)
+    const fx = h > 1 ? v.x / h : _bz.x, fz = h > 1 ? v.z / h : _bz.z;
+    const nose = 0.18 - ent.glidePitch * 0.3;
+    _by.set(fx * Math.cos(nose), Math.sin(nose), fz * Math.cos(nose));
+    _bz.set(0, -1, 0);
   } else if (ent.state === 'air' || ent.state === 'swing') {
     // In flight he leans into the way he's going: head first and body stretched out at speed (more so falling,
     // less on the way up, when he tips back a little); zipping, flat out along the web
@@ -1850,6 +2155,9 @@ function bodyOrientation(ent, out) {
     // a corkscrew with each zip
     const e = ent.roll * ent.roll * (3 - 2 * ent.roll);
     out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 0, 1), e * Math.PI * 2 * (ent.zip.side || 1)));
+  } else if (ent.gliding) {
+    // banked into a turn, the inside wing down
+    out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 1, 0), -ent.glideBank * 0.5));
   }
   return out;
 }
@@ -1860,6 +2168,7 @@ function pelvisOffset(ent, out) {
   const w = ent.wall;
   if (ent.state === 'wall') return out.set(-w.nx * 0.12, 1.0, -w.nz * 0.12);
   if (ent.state === 'wallrun') return out.set(w.nx * 0.55, 1.0, w.nz * 0.55);
+  if (ent.state === 'sling') return out.set(0, PELVIS_HEIGHT - 0.38, 0);
   return out.set(0, PELVIS_HEIGHT - ent.crouch * 0.3, 0);
 }
 
@@ -1893,9 +2202,29 @@ function updateSpiderManVisuals(ent, dt, active) {
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
   applyRigToBones(model);
 
+  // The web wings open (and fold) over a quarter second
+  ent.glide += ((ent.gliding ? 1 : 0) - ent.glide) * Math.min(1, dt * 8);
+  if (active && ent.glide > 0.02) {
+    webs.wings.position.set(0, 0, 0);
+    webs.wings.material.opacity = 0.85 * Math.min(1, ent.glide * 1.5);
+    layWings(model, webs.wings, ent.glide);
+  } else {
+    webs.wings.position.set(0, -500, 0);
+  }
+
   const strand = webs.strand;
+  const sling = ent.sling;
   let from = null, to = null, fray = 0, normal = web.normal;
-  if (active && web.phase !== 'none') {
+  if (active && sling.phase !== 'none') {
+    // The slingshot: a web from each hand to its anchor, flying out, then stuck
+    const set = sling.phase === 'set';
+    for (let i = 0; i < 2; i++) {
+      const hand = model.hands[i];
+      if (set) sling.tips[i].copy(sling.anchors[i]);
+      else sling.tips[i].lerpVectors(hand, sling.anchors[i], Math.min(1, sling.travelled / Math.max(1, hand.distanceTo(sling.anchors[i]))));
+      layStrand(i === 0 ? strand : webs.strand2, hand, sling.tips[i], set ? 1 : 0, sling.normals[i]);
+    }
+  } else if (active && web.phase !== 'none') {
     from = model.hands[web.side > 0 ? 0 : 1];
     if (web.phase === 'attached') {
       web.tip.copy(web.anchor);
@@ -1916,11 +2245,13 @@ function updateSpiderManVisuals(ent, dt, active) {
   }
   if (to) {
     layStrand(strand, from, to, fray, normal);
-  } else {
+  } else if (!(active && sling.phase !== 'none')) {
     strand.position.set(0, -500, 0);
   }
   // A double web's second strand, from the other hand
-  if (active && web.double && web.phase !== 'none') {
+  if (active && sling.phase !== 'none') {
+    // (the slingshot's, laid above)
+  } else if (active && web.double && web.phase !== 'none') {
     const from2 = model.hands[web.side > 0 ? 1 : 0];
     if (web.phase === 'attached') {
       web.tip2.copy(web.anchor2);

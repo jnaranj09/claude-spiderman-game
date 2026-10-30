@@ -1479,3 +1479,19 @@ body[data-mode="spider"] .touch-actions { gap: 6px; }
 body[data-mode="spider"] .mode-indicator { background: var(--spider-red); }
 body[data-mode="spider"] .mode-btn.active,
 body[data-mode="spider"] .mode-btn.active:hover { color: #fff; }
+
+/* The glide button: a smaller one sitting over the R button, for the thumb to reach up to */
+body[data-mode="spider"] .touch-actions { position: relative; }
+.touch-action.touch-glide {
+  position: absolute;
+  right: 18px;
+  bottom: calc(100% + 4px);
+  width: 56px;
+  height: 56px;
+  font-size: 10px;
+  font-weight: 750;
+  color: #fff;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: radial-gradient(circle at 50% 35%, #4d73e8, var(--spider-blue) 60%, #0e2366);
+}
+.touch-action.touch-glide.is-pressed { border-color: #fff; background: var(--spider-red); transform: scale(0.94); }

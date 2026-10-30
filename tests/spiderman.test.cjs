@@ -159,7 +159,7 @@ test('anchors prefer the near side of the street, whichever hand is next', () =>
 // A player swinging with the hand buttons: holds `hands()` from each press, lets go on the way up the far side,
 // presses again a moment later. Records where each web stuck and where he went
 function playHands(controllers, ent, hands, seconds = 20) {
-  let holding = true, off = 0, presses = 0, last = 'none', state = null;
+  let holding = true, off = 0, presses = 0, last = 'none', state = null, airborne = false;
   const anchors = [], xs = [];
   const press = (on) => {
     controllers.keys.webLeft = controllers.keys.webRight = false;
@@ -182,7 +182,9 @@ function playHands(controllers, ent, hands, seconds = 20) {
       anchors.push({ x: web.anchor.x, x2: web.double ? web.anchor2.x : null, at: ent.position.x });
     }
     last = web.phase;
-    if (ent.state === 'wall' || ent.state === 'wallrun' || ent.state === 'ground') state ||= ent.state;
+    // (from the moment he's off: a hand button alone waits a moment on the ground before jumping, see the slingshot)
+    if (ent.state !== 'ground') airborne = true;
+    if (airborne && (ent.state === 'wall' || ent.state === 'wallrun' || ent.state === 'ground')) state ||= ent.state;
     xs.push(ent.position.x);
   }
   return { anchors, xs, state };
@@ -222,7 +224,10 @@ test('a chosen hand picks its side of the screen, even flying diagonally across 
 test('both hands: a double web, one to each side, swings straight down the middle', () => {
   const controllers = world(avenue());
   controllers.cameraYaw = 0;
+  // (jumped already: both hands from the ground set up a slingshot instead)
   const ent = spiderEntity(0, 0, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 12.5, 6);
   const run = playHands(controllers, ent, () => ['webLeft', 'webRight']);
   assert.ok(run.anchors.length >= 4, `${run.anchors.length} swings`);
   for (const a of run.anchors) assert.ok(a.x2 !== null && Math.sign(a.x) !== Math.sign(a.x2), 'two webs, either side');
@@ -895,4 +900,116 @@ test('crawling sideways turns the camera along the wall the way he goes', () => 
   assert.ok(Math.abs(ent.cameraPitch) < 0.3, 'level');
   step(controllers, ent, 2, { left: 0, right: 1 });
   assert.ok(ent.cameraSide < -0.5, `looks to his right (${ent.cameraSide.toFixed(2)})`);
+});
+
+test('slingshot: both hands from the ground web ahead, the stick pulled down backs him off, and letting go flings him', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(0, 0, 0, 0);
+  step(controllers, ent, 0.3, { webLeft: true, webRight: true });
+  assert.equal(ent.state, 'sling');
+  assert.equal(ent.sling.phase, 'set', 'both webs stuck');
+  const [a, b] = ent.sling.anchors;
+  assert.ok(a.x > 0 && b.x < 0 && a.z > 0 && b.z > 0, 'one ahead on each side');
+  step(controllers, ent, 3, { backward: 1 });
+  assert.equal(ent.state, 'sling', 'still drawing');
+  assert.ok(ent.position.z < -3 && ent.position.z > -7.01, `backed off ${(-ent.position.z).toFixed(1)} m`);
+  assert.equal(ent.heading, 0, 'still facing ahead');
+  // (letting go of one hand is enough)
+  step(controllers, ent, 1 / 60, { webLeft: false, backward: 0 });
+  assert.equal(ent.state, 'air', 'launched');
+  assert.ok(ent.velocity.z > 25 && ent.velocity.y > 5, `at ${ent.velocity.z.toFixed(0)} m/s, rising ${ent.velocity.y.toFixed(0)}`);
+  step(controllers, ent, 0.5);
+  assert.equal(ent.web.phase, 'none', 'no swing web from the button still held');
+});
+
+test('slingshot: let go before drawing and the webs just drop; one hand alone still jumps', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(0, 0, 0, 0);
+  // (the second hand a couple of frames after the first still pairs up)
+  step(controllers, ent, 2 / 60, { webLeft: true });
+  assert.equal(ent.state, 'ground', 'waiting for the other hand');
+  step(controllers, ent, 0.3, { webRight: true });
+  assert.equal(ent.state, 'sling');
+  step(controllers, ent, 1 / 60, { webLeft: false, webRight: false });
+  assert.equal(ent.state, 'ground', 'dropped');
+  assert.equal(ent.sling.phase, 'none');
+  step(controllers, ent, 0.3);
+  step(controllers, ent, 0.15, { webRight: true });
+  assert.equal(ent.state, 'air', 'jumped');
+});
+
+test('slingshot on a flat roof: the webs stick to the roof ahead and he never backs off its edge', () => {
+  const controllers = world([{ minX: -20, maxX: 20, minZ: -6, maxZ: 40, minY: 0, maxY: 30 }]);
+  const ent = spiderEntity(0, 30, 0, 0);
+  step(controllers, ent, 0.3, { webLeft: true, webRight: true });
+  assert.equal(ent.sling.phase, 'set');
+  for (const a of ent.sling.anchors) assert.ok(Math.abs(a.y - 30) < 1e-6 && a.z > 2, `on the roof (${a.toArray().map((n) => n.toFixed(1))})`);
+  step(controllers, ent, 6, { backward: 1 });
+  assert.equal(ent.position.y, 30);
+  assert.ok(ent.position.z > -6, `stopped at the edge (z=${ent.position.z.toFixed(2)})`);
+  step(controllers, ent, 1 / 60, { webLeft: false, webRight: false, backward: 0 });
+  assert.equal(ent.state, 'air');
+});
+
+test('gliding: the wings hold the fall to a slow sink and carry him on, out over open ground', () => {
+  const controllers = world([]);
+  const fall = (glide) => {
+    const ent = spiderEntity(0, 300, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 15);
+    step(controllers, ent, 1, {});
+    if (glide) {
+      step(controllers, ent, 1 / 60, { glide: true });
+      step(controllers, ent, 1 / 60, { glide: false });
+    }
+    step(controllers, ent, 5);
+    return ent;
+  };
+  const glider = fall(true), faller = fall(false);
+  assert.ok(glider.gliding);
+  assert.ok(Math.abs(glider.velocity.y + 3.4) < 0.5, `sinking at ${(-glider.velocity.y).toFixed(1)} m/s`);
+  const hs = Math.hypot(glider.velocity.x, glider.velocity.z);
+  assert.ok(hs > 17 && hs < 30, `flying on at ${hs.toFixed(1)} m/s`);
+  assert.ok(glider.position.y > faller.position.y + 150, `${glider.position.y.toFixed(0)} m up against ${faller.position.y.toFixed(0)} m`);
+  // The glide button again folds the wings
+  step(controllers, glider, 1 / 60, { glide: true });
+  step(controllers, glider, 1 / 60, { glide: false });
+  assert.equal(glider.gliding, false);
+});
+
+test('gliding: a fast fall (a dive) pulled out into a glide carries on faster; a web that flies ends the glide, one with nothing to hit does not', () => {
+  const open = world([]);
+  const glideAfter = (seconds) => {
+    const ent = spiderEntity(0, 400, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 15);
+    open.requestDive();
+    step(open, ent, seconds);
+    step(open, ent, 1 / 60, { glide: true });
+    step(open, ent, 1 / 60, { glide: false });
+    assert.equal(ent.diving, false, 'the wings end the dive');
+    step(open, ent, 2);
+    return Math.hypot(ent.velocity.x, ent.velocity.z);
+  };
+  const plain = glideAfter(1 / 60), dived = glideAfter(3);
+  assert.ok(dived > plain + 10, `out of a dive ${dived.toFixed(1)} m/s, against ${plain.toFixed(1)}`);
+
+  const ent = spiderEntity(0, 40, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 15);
+  step(open, ent, 1 / 60, { glide: true });
+  step(open, ent, 1 / 60, { glide: false });
+  step(open, ent, 0.3, { webLeft: true });
+  step(open, ent, 1 / 60, { webLeft: false });
+  assert.ok(ent.gliding, 'nothing to stick to: still gliding');
+  const city = world(avenue());
+  const swinger = spiderEntity(0, 20, 0, 0);
+  swinger.state = 'air';
+  swinger.velocity.set(0, 0, 15);
+  step(city, swinger, 1 / 60, { glide: true });
+  step(city, swinger, 1 / 60, { glide: false });
+  assert.ok(swinger.gliding);
+  step(city, swinger, 0.3, { webLeft: true });
+  assert.equal(swinger.gliding, false, 'a web to swing on folds the wings');
+  assert.notEqual(swinger.web.phase, 'none');
 });

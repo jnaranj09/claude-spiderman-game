@@ -114,17 +114,18 @@ class TouchControls {
     this.reset();
     if (!this.root) return;
     this.mode = mode;
-    const labels = { up: mode === 'helicopter' ? 'Ascend' : 'Jump', down: 'Descend', webLeft: 'Left web', webRight: 'Right web' };
+    const labels = { up: mode === 'helicopter' ? 'Ascend' : 'Jump', down: 'Descend', webLeft: 'Left web', webRight: 'Right web', glide: 'Glide' };
     const captions = { ...labels, webLeft: 'L', webRight: 'R' };
     const hint = this.root.querySelector('[data-touch-hint="look"]');
     if (hint) {
-      hint.textContent = mode === 'spider' ? 'Hold L or R to swing from that hand · both for a double web · Tap the stick to dive'
+      hint.textContent = mode === 'spider' ? 'Hold L or R to swing from that hand · both for a double web (a slingshot from the ground: pull the stick down, let go) · Tap the stick to dive · Glide to spread the wings'
         : 'Drag to look · Pinch to zoom';
     }
     for (const button of this.buttons) {
       const action = button.getAttribute('data-touch-action');
       // Spider-Man has his two web buttons (L and R) in place of the one action button
-      const web = action === 'webLeft' || action === 'webRight';
+      // (and a small one for his web wings)
+      const web = action === 'webLeft' || action === 'webRight' || action === 'glide';
       button.hidden = web ? mode !== 'spider'
         : (action === 'up' && mode !== 'person' && mode !== 'helicopter') || (action === 'down' && mode !== 'helicopter');
       button.setAttribute('aria-label', labels[action]);

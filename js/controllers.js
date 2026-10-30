@@ -204,7 +204,8 @@ class ThirdPersonControllerManager {
       up: false,
       down: false,
       webLeft: false, // Spider-Man's two hands (L and R)
-      webRight: false
+      webRight: false,
+      glide: false    // ...and his web wings
     };
 
     this.entities = {
@@ -261,7 +262,8 @@ class ThirdPersonControllerManager {
       up: ['Space', 'KeyE'],
       down: ['KeyQ', 'KeyC'],
       webLeft: ['KeyQ'],
-      webRight: ['KeyE']
+      webRight: ['KeyE'],
+      glide: ['KeyG']
     };
     // (a key can drive more than one action: Q and E are also the helicopter's descend and ascend)
     const actionsByCode = new Map();

@@ -17,6 +17,8 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Zip forward (quick tap) | tap **L** or **R** | tap Q, E or Space | tap a trigger or A |
 | Run / steer (relative to the camera: up is away from it) | left stick | W A S D / arrows | left stick |
 | Dive (in the air) | tap the stick | X | click the left stick |
+| Slingshot (on the ground or a roof) | **L** + **R**, pull the stick down, let go | Q + E, S, let go | LT + RT, stick down, let go |
+| Glide on / off (in the air) | **Glide** | G | B |
 | Look around | drag the screen | drag | right stick |
 
 Press and hold **L** or **R** and Spider-Man jumps and fires a web from that hand, at a building on that side of him
@@ -46,6 +48,20 @@ top vaults onto the roof and crawling down to the street stands him up. A web bu
 stick the way he's crawling (or facing), shoots a web along the wall that pulls him on, much faster than he
 crawls; with the stick the other way he jumps off the building, out into the street; with the stick centred he
 kicks off and carries on.
+
+**Slingshot:** standing anywhere (the street, a roof), press **both** web buttons together. He shoots a web from each
+hand at something ahead, one either side (a wall or a taller building; on an open roof, the roof itself). Pull the
+stick down and he backs away from them in a squat, still facing them, stretching the webs (ever more slowly as they
+tighten, up to ~7 m back); its sideways part turns his aim. Let go of either button and he's flung forward, from
+~16 m/s barely drawn up to ~46 m/s fully drawn, and up at the angle of the webs. Let go before drawing back and the
+webs just drop. (One web button alone on the ground waits ~0.1 s for the other before it jumps.)
+
+**Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. They
+hold his fall to a slow ~3.4 m/s sink at ~19 m/s, banking round with the stick (faster than he can turn falling);
+pushed on he dips the nose and flies faster, pulled back he flares. A fast fall (or a dive) is pulled out of over a
+second or two and most of its speed carries on forwards, like a wingsuit: dive, then glide, for the fastest way across
+a park or a river. Press glide again to fold the wings, or fire a web: a swing web or a zip that sticks to something
+folds them (one with nothing to hit leaves him gliding). Landing or touching a wall folds them too.
 
 **Dive:** in the air, click the stick to dive head-first, falling fast. Click again, fire a web or land to stop. A
 web fired out of a dive turns that speed into a big swing. **Swing Cam** (next to 3rd-Person Chase in the camera
@@ -101,8 +117,8 @@ node --test tests/*.cjs tests/*.mjs
 ```
 
 `tests/spiderman.test.cjs` covers the ray casts, anchor choice, the rope constraint, press-by-press swinging down a
-synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, rooftop spawning and camera
-clipping.
+synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, the slingshot, gliding, rooftop spawning
+and camera clipping.
 
 ## Credits and license
 

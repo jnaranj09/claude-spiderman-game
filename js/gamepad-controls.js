@@ -161,6 +161,8 @@ class GamepadControls {
     // on A, the automatic web
     this.controller.setGamepadInput('webLeft', mode === 'spider' ? Number(buttonValue(pad, 6) > 0.5) : 0);
     this.controller.setGamepadInput('webRight', mode === 'spider' ? Number(buttonValue(pad, 7) > 0.5) : 0);
+    // ...and B spreads (or folds) his web wings
+    this.controller.setGamepadInput('glide', mode === 'spider' ? Number(Boolean(held(1))) : 0);
     this.controller.setGamepadInput('up', mode === 'spider' || mode === 'person' ? Number(Boolean(held(0))) : Math.max(0, vertical));
     this.controller.setGamepadInput('down', Math.max(0, -vertical));
     const zoom = Number(Boolean(held(13))) - Number(Boolean(held(12)));
