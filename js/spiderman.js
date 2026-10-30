@@ -90,10 +90,12 @@ const SLING_LAUNCH_MIN = 16;     // m/s at a short pull...
 const SLING_LAUNCH_MAX = 46;     // ...and drawn all the way back
 const SLING_SIDE_SPEED = 1.4;    // m/s stepping sideways with the stick, swinging the aim round the other way...
 const SLING_AIM_MAX = 0.8;       // ...up to this far (rad) round from where he first aimed
-const GLIDE_SINK = 3.4;          // m/s: the steady sink of a glide, hands off
-const GLIDE_SPEED = 19;          // m/s: the forward speed a glide settles at
-const GLIDE_PULLOUT = 26;        // m/s²: how fast a faster fall is turned into the glide (and the speed it carries)
-const GLIDE_CARRY = 0.75;        // share of the fall speed taken out that turns into forward speed
+const GLIDE_ANGLE = 0.12;        // rad: the shallow downward path of a glide, hands off (a sink of about 3.4 m/s)
+const GLIDE_SPEED = 28;          // m/s: the speed a hands-off glide settles at
+const GLIDE_DIVE = 0.55;         // rad: how much further the nose goes down with the stick pushed on
+const GLIDE_CLIMB = 0.4;         // rad: how far up it comes with the stick pulled back
+const GLIDE_STALL = 14;          // m/s: near this the wings can't hold the nose up and it drops
+const GLIDE_PITCH_RATE = 1.6;    // rad/s: how fast the path follows the nose (slower near a stall)
 const GLIDE_TURN = 1.6;          // rad/s banking round
 const WHIP_ANGLE = 1.0;          // rad: a held web with the stick this far off his line of travel whips round a corner
 const WHIP_REACH = 32;           // m: how far ahead that corner can be...
@@ -710,6 +712,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     glide: 0,
     glideBank: 0,
     glidePitch: 0,
+    glidePath: null,
     diving: false,
     diveClicks: 0,
     cameraTargetOffset: new THREE.Vector3(0, 1.3, 0),
@@ -1481,7 +1484,8 @@ function updateSpiderMan(controllers, ent, dt) {
   const diveClicks = controllers.diveRequests || 0;
   if (diveClicks !== ent.diveClicks) {
     ent.diveClicks = diveClicks;
-    if (ent.state === 'air' && zip.pull <= 0) ent.diving = !ent.diving;
+    // (not on the wings: a tap on the stick to steer the glide shouldn't fold them into a dive)
+    if (ent.state === 'air' && zip.pull <= 0 && !ent.gliding) ent.diving = !ent.diving;
     // (a dive folds the wings)
     if (ent.diving) ent.gliding = false;
   }
@@ -1498,6 +1502,7 @@ function updateSpiderMan(controllers, ent, dt) {
       if (ent.state !== 'air') releaseWeb(controllers, ent, web.whip || (v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0));
       web.phase = 'none';
       ent.gliding = true;
+      ent.glidePath = null;
       ent.diving = false;
     }
   }
@@ -1582,12 +1587,20 @@ function updateSpiderMan(controllers, ent, dt) {
     if (ent.diving) {
       v.y -= GRAVITY * (DIVE_GRAVITY - 1) * dt;
       steerVelocity(ent, turn * 0.6, dt);
+    } else if (ent.gliding && stickMag > 0.12) {
+      // On the wings the stick flies him like a plane, not towards a point: sideways banks him round, pushed on
+      // dips the nose (a dive) and pulled back raises it (a climb). (Camera-relative, pulled back would mean
+      // turn round)
+      const vert = fwdIn - backIn;
+      steer = Math.max(-1, Math.min(1, turn));
+      steerVelocity(ent, steer * GLIDE_TURN / AIR_TURN_RATE, dt);
+      pump = Math.max(0, vert);
+      brake = Math.max(0, -vert) * 0.5;
     } else if (wantYaw !== null) {
       const travel = travelDirection(ent);
       const diff = angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
       steer = Math.max(-1, Math.min(1, diff * 1.5)) * stickMag;
-      // (on the wings he banks round faster than he can just twist in the air)
-      steerVelocity(ent, steer * (ent.gliding ? GLIDE_TURN / AIR_TURN_RATE : 1), dt);
+      steerVelocity(ent, steer, dt);
       pump = stickMag * Math.max(0, Math.cos(diff));
       brake = stickMag * Math.max(0, -Math.cos(diff)) * 0.5;
     } else if (!web.chosen) {
@@ -1608,40 +1621,42 @@ function updateSpiderMan(controllers, ent, dt) {
     }
     const bankK = 1 - Math.exp(-dt * 4);
     ent.glideBank += ((ent.gliding ? steer : 0) - ent.glideBank) * bankK;
-    ent.glidePitch += ((ent.gliding ? pump - brake * 2 : 0) - ent.glidePitch) * bankK;
     if (ent.gliding) {
-      // Gliding: the wings hold his fall to a slow sink. A faster fall (the drop before they opened, or a dive) is
-      // pulled out of over a second or two, and most of the speed taken out of it carries on forwards, like a
-      // wingsuit's: a dive into a glide is the fastest way across open ground. The stick pushed on dips the nose
-      // (sinking faster, flying faster); pulled back, he flares (slower and flatter)
+      // Gliding: he flies along a path angle that follows the nose, and speed and height trade like a real glider's.
+      // Hands off, the path is a shallow slope down and the speed settles at GLIDE_SPEED. The stick pushed on dips
+      // the nose: diving, gravity speeds him up. Pulled back, the nose comes up: climbing, gravity slows him down,
+      // until near a stall the nose drops again by itself. Opening the wings out of a fall (or a dive) keeps the
+      // speed while the path is pulled out level, so a dive into a glide is the fastest way across open ground
+      // (gravity is taken along the path below, so not straight down as well)
+      v.y += GRAVITY * dt;
+      let speed = v.length();
+      if (ent.glidePath === null) ent.glidePath = speed > 1 ? Math.atan2(v.y, hs) : -1.2;
       const flare = brake * 2;
-      const sink = GLIDE_SINK + 5 * pump - 1.6 * flare;
-      if (v.y < -sink) {
-        const out = Math.min(-sink - v.y, (GRAVITY + GLIDE_PULLOUT) * dt);
-        v.y += out;
-        // (holding off gravity is just lift; only what's pulled out beyond it becomes speed)
-        const carry = Math.max(0, out - GRAVITY * dt) * GLIDE_CARRY;
-        v.x += dir.x * carry;
-        v.z += dir.z * carry;
-      }
-      // Gliding down is what keeps him going: the speed settles where the drag of the wings meets that
-      const want = GLIDE_SPEED + 8 * pump - 7 * flare;
-      const now = Math.hypot(v.x, v.z);
-      if (now < want) {
-        const gain = Math.min(want - now, 6 * dt);
-        v.x += dir.x * gain;
-        v.z += dir.z * gain;
-      } else {
-        const keep = 1 - Math.min(1, 0.3 * dt) * (1 - want / now);
-        v.x *= keep;
-        v.z *= keep;
-      }
-    } else if (ent.state === 'air') {
+      let target = -GLIDE_ANGLE - GLIDE_DIVE * pump + GLIDE_CLIMB * flare;
+      const mush = GLIDE_STALL * 1.25;
+      if (speed < mush) target = Math.min(target, -GLIDE_ANGLE - 0.9 * (1 - speed / mush));
+      const lift = Math.min(1, (speed / GLIDE_STALL) ** 2);
+      const turnBy = target - ent.glidePath;
+      ent.glidePath += Math.sign(turnBy) * Math.min(Math.abs(turnBy), GLIDE_PITCH_RATE * lift * dt);
+      // (gravity along the path, measured from the hands-off slope; the wings' drag settles the rest)
+      speed -= GRAVITY * (Math.sin(ent.glidePath) + Math.sin(GLIDE_ANGLE)) * dt;
+      if (speed < GLIDE_SPEED) speed += Math.min(GLIDE_SPEED - speed, 2 * dt);
+      else speed -= (speed - GLIDE_SPEED) * Math.min(1, 0.25 * dt);
+      speed = Math.max(0, speed);
+      const level = Math.cos(ent.glidePath) * speed;
+      v.set(dir.x * level, Math.sin(ent.glidePath) * speed, dir.z * level);
+    } else {
+      ent.glidePath = null;
+    }
+    // (the nose follows the path on the wings: up when climbing, down in a dive)
+    const pitch = ent.gliding ? Math.max(-1.2, Math.min(2, (-GLIDE_ANGLE - ent.glidePath) / GLIDE_DIVE)) : 0;
+    ent.glidePitch += (pitch - ent.glidePitch) * bankK;
+    if (ent.state === 'air' && !ent.gliding) {
       // Light air control and drag; terminal velocity keeps long falls readable
       if (pump && hs < 16) { v.x += dir.x * 7 * pump * dt; v.z += dir.z * 7 * pump * dt; }
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
       v.y = Math.max(v.y, ent.diving ? -DIVE_MAX_FALL : -42);
-    } else {
+    } else if (ent.state === 'swing') {
       // A gentle push on the down stroke (more with the stick held forward) keeps chained swings flowing; once
       // he's hung on into a swing back he only coasts, with a little drag, so it settles into a dangle
       if (!web.turned && v.x * web.dirX + v.z * web.dirZ > 0) {

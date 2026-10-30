@@ -971,14 +971,57 @@ test('gliding: the wings hold the fall to a slow sink and carry him on, out over
   };
   const glider = fall(true), faller = fall(false);
   assert.ok(glider.gliding);
-  assert.ok(Math.abs(glider.velocity.y + 3.4) < 0.5, `sinking at ${(-glider.velocity.y).toFixed(1)} m/s`);
+  assert.ok(Math.abs(glider.velocity.y + 3.4) < 0.6, `sinking at ${(-glider.velocity.y).toFixed(1)} m/s`);
   const hs = Math.hypot(glider.velocity.x, glider.velocity.z);
-  assert.ok(hs > 17 && hs < 30, `flying on at ${hs.toFixed(1)} m/s`);
+  assert.ok(hs > 25 && hs < 34, `flying on at ${hs.toFixed(1)} m/s`);
   assert.ok(glider.position.y > faller.position.y + 150, `${glider.position.y.toFixed(0)} m up against ${faller.position.y.toFixed(0)} m`);
   // The glide button again folds the wings
   step(controllers, glider, 1 / 60, { glide: true });
   step(controllers, glider, 1 / 60, { glide: false });
   assert.equal(glider.gliding, false);
+});
+
+test('gliding: stick back climbs and bleeds speed, stick on dives and gains it, sideways banks; a stick click is no dive', () => {
+  const open = world([]);
+  const glider = () => {
+    const ent = spiderEntity(0, 400, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 15);
+    Object.assign(open.keys, { forward: 0, backward: 0, left: 0, right: 0 });
+    step(open, ent, 1);
+    step(open, ent, 1 / 60, { glide: true });
+    step(open, ent, 1 / 60, { glide: false });
+    step(open, ent, 6);
+    return ent;
+  };
+  const hs = (ent) => Math.hypot(ent.velocity.x, ent.velocity.z);
+  const base = glider();
+  const cruise = hs(base);
+  assert.ok(cruise > 25 && cruise < 32, `cruising at ${cruise.toFixed(1)} m/s`);
+
+  const climber = glider();
+  const y0 = climber.position.y;
+  step(open, climber, 1.5, { backward: 1 });
+  assert.ok(climber.position.y > y0 + 5, `climbed ${(climber.position.y - y0).toFixed(1)} m`);
+  assert.ok(hs(climber) < cruise - 6, `slowed to ${hs(climber).toFixed(1)} m/s`);
+  assert.equal(climber.heading, 0, 'pulling back is a climb, not a turn round');
+  // held back, the nose drops again by itself near a stall instead of hanging there
+  step(open, climber, 4);
+  assert.ok(climber.gliding && hs(climber) > 12, `still flying at ${hs(climber).toFixed(1)} m/s`);
+
+  const diver = glider();
+  step(open, diver, 1.5, { forward: 1 });
+  step(open, diver, 1, { forward: 0 });
+  assert.ok(hs(diver) > cruise + 8, `out of the dive at ${hs(diver).toFixed(1)} m/s`);
+
+  const banker = glider();
+  step(open, banker, 1, { left: 1 });
+  assert.ok(banker.velocity.x > 5, 'banks round to the left');
+
+  const tapper = glider();
+  open.requestDive();
+  step(open, tapper, 0.5);
+  assert.ok(tapper.gliding && !tapper.diving, 'a stick click while gliding keeps the wings open');
 });
 
 test('gliding: a fast fall (a dive) pulled out into a glide carries on faster; a web that flies ends the glide, one with nothing to hit does not', () => {

@@ -80,12 +80,15 @@ locked on close behind him, turning with him just a touch late. The stick is rea
 you pushed it that way, so a camera that follows him round never runs him in circles: hold it to the side and he
 turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
 
-**Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. They
-hold his fall to a slow ~3.4 m/s sink at ~19 m/s, banking round with the stick (faster than he can turn falling);
-pushed on he dips the nose and flies faster, pulled back he flares. A fast fall (or a dive) is pulled out of over a
-second or two and most of its speed carries on forwards, like a wingsuit: dive, then glide, for the fastest way across
-a park or a river. Press glide again to fold the wings, or fire a web: a swing web or a zip that sticks to something
-folds them (one with nothing to hit leaves him gliding). Landing or touching a wall folds them too.
+**Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands
+off he flies a shallow slope down at ~28 m/s, sinking ~3.4 m/s. On the wings the stick flies him like a plane rather
+than pointing where to go: sideways banks him round, pushed on dips the nose and pulled back raises it, and speed and
+height trade like a real glider's: diving speeds him up, climbing slows him down, and held up too long the nose drops
+again by itself near a stall (~14-18 m/s) to get the speed back. A fast fall (or a dive) keeps its speed while the
+wings pull it out level: dive, then glide, for the fastest way across a park or a river. Clicking the stick doesn't
+dive while gliding (fold the wings first). Press glide again to fold the wings, or fire a web: a swing web or a zip
+that sticks to something folds them (one with nothing to hit leaves him gliding). Landing or touching a wall folds
+them too.
 
 **Dive:** in the air, click the stick to dive head-first, falling fast. Click again, fire a web or land to stop. A
 web fired out of a dive turns that speed into a big swing. **Swing Cam** (next to 3rd-Person Chase in the camera
