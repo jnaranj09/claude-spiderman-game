@@ -88,7 +88,8 @@ const SLING_DRAW = 7;            // m: the furthest he can pull the webs back
 const SLING_MIN_DRAW = 0.6;      // m: let go short of this and the webs just drop
 const SLING_LAUNCH_MIN = 16;     // m/s at a short pull...
 const SLING_LAUNCH_MAX = 46;     // ...and drawn all the way back
-const SLING_AIM_RATE = 0.8;      // rad/s the stick's sideways part turns the aim
+const SLING_SIDE_SPEED = 1.4;    // m/s stepping sideways with the stick, swinging the aim round the other way...
+const SLING_AIM_MAX = 0.8;       // ...up to this far (rad) round from where he first aimed
 const GLIDE_SINK = 3.4;          // m/s: the steady sink of a glide, hands off
 const GLIDE_SPEED = 19;          // m/s: the forward speed a glide settles at
 const GLIDE_PULLOUT = 26;        // m/s²: how fast a faster fall is turned into the glide (and the speed it carries)
@@ -655,6 +656,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     wantR: false,
     pressAir: false, // whether this press began in the air (only then can a tap zip)
     stickYaw: null,  // where the stick points (camera-relative), while it's pushed
+    stickRef: null,  // the camera's direction the stick is read against (see the update), and the stick's own angle
+    stickAngle: 0,   // when it was pushed that way
     courseX: Math.sin(heading), // his line of travel, smoothed
     courseZ: Math.cos(heading),
     pressTime: 0,
@@ -695,6 +698,9 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       distance: 0,
       travelled: 0,
       draw: 0,
+      rest: 0,
+      homeX: 0,
+      homeZ: 1,
       wait: 0
     },
     // Gliding on the web wings under his arms: on, how far the wings are out (for the look), the bank of a turn and
@@ -1363,6 +1369,10 @@ function startSling(controllers, ent) {
   sling.travelled = 0;
   sling.draw = 0;
   sling.wait = 0;
+  // (how far he stands from between the anchors, undrawn, and the way he first aimed)
+  sling.rest = Math.hypot((sling.anchors[0].x + sling.anchors[1].x) * 0.5 - p.x, (sling.anchors[0].z + sling.anchors[1].z) * 0.5 - p.z);
+  sling.homeX = fx;
+  sling.homeZ = fz;
   ent.state = 'sling';
   ent.velocity.set(0, 0, 0);
   ent.webSpent = true; // (the press's web: no swing web from it after the launch)
@@ -1399,14 +1409,24 @@ function updateSpiderMan(controllers, ent, dt) {
   const backIn = +keys.backward || 0;
   const turn = (+keys.left || 0) - (+keys.right || 0);
   // The stick, relative to the camera (on the ground and in the air): up moves him away from the camera, whichever
-  // way he faces. wantYaw is the heading it asks for (null with the stick centred). Walls use the stick as it is
+  // way he faces. wantYaw is the heading it asks for (null with the stick centred). Walls use the stick as it is.
+  // It's read against the camera as it was when the stick was pushed that way, not as it is now: the camera follows
+  // him round as he turns (closely, on foot), and against the camera's latest direction a stick held to the side
+  // would ask for ever more turn, running him round in circles. Moving the stick on (or letting go) reads it afresh
   const stickMag = Math.min(1, Math.hypot(turn, fwdIn - backIn));
   let wantYaw = null;
   if (stickMag > 0.12) {
-    const camYaw = Number.isFinite(controllers.cameraYaw) ? controllers.cameraYaw : ent.heading;
+    const stickAngle = Math.atan2(-turn, fwdIn - backIn);
+    if (ent.stickRef === null || Math.abs(angleDiff(stickAngle, ent.stickAngle)) > 0.35) {
+      ent.stickRef = Number.isFinite(controllers.cameraYaw) ? controllers.cameraYaw : ent.heading;
+      ent.stickAngle = stickAngle;
+    }
+    const camYaw = ent.stickRef;
     const c = Math.cos(camYaw), sn = Math.sin(camYaw);
     const sx = -turn, sy = fwdIn - backIn; // stick right, stick up
     wantYaw = Math.atan2(sn * sy - c * sx, c * sy + sn * sx);
+  } else {
+    ent.stickRef = null;
   }
   ent.stickYaw = stickMag > 0.3 ? wantYaw : null;
   {
@@ -1945,9 +1965,10 @@ function updateSpiderMan(controllers, ent, dt) {
       p.z -= w.nz * 0.25;
     }
   } else if (ent.state === 'sling') {
-    // The slingshot: both buttons held, the webs fly out and stick; then the stick pulled down backs him away from
-    // them in a squat, still facing them, stretching the webs (ever more slowly, the further they stretch), and its
-    // sideways part turns his aim. Letting go of either button launches him (or, barely drawn, drops the webs)
+    // The slingshot: both buttons held, the webs fly out and stick; then he's the pouch. The stick moves him, in a
+    // squat: pulled down he backs away, stretching the webs (ever more slowly, the further they stretch); sideways he
+    // steps to that side. He always faces between the two anchors, so a step right swings the aim left, as pulling a
+    // slingshot's pouch does. Letting go of either button launches him (or, barely drawn, drops the webs)
     const sling = ent.sling;
     v.set(0, 0, 0);
     if (sling.phase === 'shooting' && (sling.travelled += WEB_SPEED * dt) >= sling.distance) {
@@ -1961,20 +1982,27 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.state = 'ground';
       }
     } else if (sling.phase === 'set') {
-      ent.heading += turn * SLING_AIM_RATE * dt;
-      const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
+      const [a, b] = sling.anchors;
+      const mx = (a.x + b.x) * 0.5, mz = (a.z + b.z) * 0.5;
+      const d = Math.hypot(p.x - mx, p.z - mz) || 1;
+      const ux = (p.x - mx) / d, uz = (p.z - mz) / d; // back, away from the anchors
+      const rx = uz, rz = -ux;                          // his right, facing them
       const stretch = sling.draw / SLING_DRAW;
       const pull = backIn - fwdIn;
-      const speed = pull * SLING_BACK_SPEED * (pull > 0 ? 1 - 0.75 * stretch * stretch : 1);
-      const back = Math.max(-sling.draw, Math.min(SLING_DRAW - sling.draw, speed * dt));
-      // (never back off a roof's edge or up a step: he digs his heels in instead)
-      const nx = p.x - fx * back, nz = p.z - fz * back;
+      const back = pull * SLING_BACK_SPEED * (pull > 0 ? 1 - 0.75 * stretch * stretch : 1);
+      const side = -turn * SLING_SIDE_SPEED;
+      const nx = p.x + (ux * back + rx * side) * dt, nz = p.z + (uz * back + rz * side) * dt;
+      const nd = Math.hypot(nx - mx, nz - mz) || 1;
+      const draw = nd - sling.rest;
+      const aim = -((nx - mx) * sling.homeX + (nz - mz) * sling.homeZ) / nd;
+      // (within the draw and the aim's reach, and never off a roof's edge or up a step: he digs his heels in instead)
       const ground = groundAt(controllers, nx, nz, p.y);
-      if (back && Math.abs(ground - p.y) < 0.4) {
+      if ((back || side) && draw >= -0.01 && draw <= SLING_DRAW && aim > Math.cos(SLING_AIM_MAX) && Math.abs(ground - p.y) < 0.4) {
+        ent.runPhase += Math.hypot(nx - p.x, nz - p.z) * 3.2;
         p.set(nx, ground, nz);
-        sling.draw += back;
-        ent.runPhase += Math.abs(back) * 3.2;
+        sling.draw = Math.max(0, draw);
       }
+      ent.heading += angleDiff(Math.atan2(mx - p.x, mz - p.z), ent.heading) * (1 - Math.exp(-dt * 10));
     }
   }
 
@@ -2070,9 +2098,11 @@ function updateSpiderMan(controllers, ent, dt) {
     zip.chain = 0;
   }
 
-  // The follow camera turns round the corner with him on a whip (the point of it), and catches up just after
-  // ...and over the top of a wall onto the roof, or round from one face of a building to the next (see above)
-  ent.cameraLock = ent.state === 'whip' ? CAMERA_LOCK : Math.max(0, ent.cameraLock - dt);
+  // The follow camera stays locked on close behind him (see cameras.js) except while he swings and flies between
+  // swings, when it lags like a hand-held one: on foot, drawing a slingshot, whipping round a corner, on a wall, and
+  // for a moment after (climbing over the top of a wall onto the roof, or round from one face of a building to the
+  // next, see above, lock it on too)
+  ent.cameraLock = ent.state === 'swing' || ent.state === 'air' ? Math.max(0, ent.cameraLock - dt) : CAMERA_LOCK;
 
   // The follow camera looks up the wall as he climbs it and down it as he crawls down (and up a run up a wall)
   // ...and along it, to the side he's crawling (positive: his left)

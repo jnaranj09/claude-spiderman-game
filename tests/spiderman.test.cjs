@@ -632,9 +632,11 @@ test('the stick steers a wall run like a crawl, and letting go of it slows him t
   assert.equal(ent.state, 'wallrun');
   assert.ok(Math.abs(ent.wallRun.dy) < 0.3 && ent.wallRun.dz > 0.9, 'along the wall');
   assert.ok(ent.wallRun.speed > 22, `kept going (${ent.wallRun.speed.toFixed(1)} m/s)`);
-  // Stick into the wall: the run turns up it
+  // Stick into the wall: the run turns up it (the stick pushed afresh: one held through a turn of the camera keeps
+  // the direction it was pushed in)
   controllers.cameraYaw = Math.PI / 2;
   const y = ent.position.y;
+  step(controllers, ent, 1 / 60, { forward: 0 });
   step(controllers, ent, 0.6, { forward: 1 });
   assert.ok(ent.wallRun.dy > 0.6, `turned up the wall (dy ${ent.wallRun.dy.toFixed(2)})`);
   assert.ok(ent.position.y > y + 4, 'climbing');
@@ -1100,3 +1102,33 @@ test('climbing over the top of a wall onto the roof locks the camera on', () => 
   locked = ent.cameraLock > 0;
   assert.ok(locked, `locked (${ent.state} at ${ent.position.y.toFixed(1)} m)`);
 });
+
+test('slingshot: the stick moves him like the pouch, so a step right swings the aim left', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(0, 0, 0, 0);
+  step(controllers, ent, 0.3, { webLeft: true, webRight: true });
+  step(controllers, ent, 1.5, { backward: 1 });
+  step(controllers, ent, 1.5, { backward: 0, right: 1 });
+  assert.ok(ent.position.x < -1, `stepped to his right (x=${ent.position.x.toFixed(1)})`);
+  assert.ok(ent.heading > 0.05, `aiming left of straight on (${(ent.heading * 180 / Math.PI).toFixed(0)} degrees)`);
+  step(controllers, ent, 1 / 60, { right: 0, webLeft: false });
+  assert.equal(ent.state, 'air');
+  assert.ok(ent.velocity.x > 1, `launched to the left (vx ${ent.velocity.x.toFixed(1)})`);
+});
+
+test('on foot, a stick held to the side turns him once and runs him straight on, however closely the camera follows', () => {
+  const controllers = world([]);
+  const ent = spiderEntity(0, 0, 0, 0);
+  for (let i = 0; i < 180; i++) {
+    controllers.cameraYaw = ent.heading; // (the worst case: a camera locked right behind him)
+    step(controllers, ent, 1 / 60, { right: 1 });
+  }
+  assert.ok(Math.abs(angleDelta(ent.heading, -Math.PI / 2)) < 0.05, `turned right and kept on (${ent.heading.toFixed(2)})`);
+  assert.ok(ent.position.x < -25, `ran on that way (x=${ent.position.x.toFixed(1)})`);
+});
+
+function angleDelta(a, b) {
+  let d = a - b;
+  d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
+  return d;
+}

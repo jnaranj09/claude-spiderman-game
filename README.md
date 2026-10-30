@@ -56,11 +56,9 @@ a web button.
   has just passed), where the street opens up beyond it, and he swings round it level, like a tetherball round a
   pole, at the radius he was across from it, keeping all his speed (the web only pulls in towards the corner, square
   to his motion, so it turns him without slowing him). He lets go once he's heading where the stick pointed as he
-  threw the web (pull the stick right back for a U-turn) and is flung on into the new street. The camera locks on
-  close behind him and turns round the corner with him, just a touch late (normally it lags well behind a change of
-  direction), and his body stretches out along the web, feet first away from the corner, as the turn flings him out.
-  The camera locks on the same way as he climbs over the top of a wall onto the roof, and as he crawls round a
-  corner onto the next face of a building. Why one web and not
+  threw the web (pull the stick right back for a U-turn) and is flung on into the new street. The camera turns
+  round the corner close behind him (see **Camera** below), and his body stretches out along the web, feet first away
+  from the corner, as the turn flings him out. Why one web and not
   two: what turns you is a pull towards the inside of the turn, and two webs to opposite sides cancel each other's
   sideways pull, which is exactly why the double web and the slingshot go dead straight. With no corner in reach
   (mid-block), it's an ordinary swing web.
@@ -70,9 +68,17 @@ a web button.
 **Slingshot:** standing anywhere (the street, a roof), press **both** web buttons together. He shoots a web from each
 hand at something ahead, one either side (a wall or a taller building; on an open roof, the roof itself). Pull the
 stick down and he backs away from them in a squat, still facing them, stretching the webs (ever more slowly as they
-tighten, up to ~7 m back); its sideways part turns his aim. Let go of either button and he's flung forward, from
+tighten, up to ~7 m back). He's the pouch: sideways, the stick steps him to that side and he keeps facing between the
+anchors, so a step right aims left (up to ~45 degrees round), just as pulling a slingshot's pouch does. Let go of either button and he's flung forward, from
 ~16 m/s barely drawn up to ~46 m/s fully drawn, and up at the angle of the webs. Let go before drawing back and the
 webs just drop. (One web button alone on the ground waits ~0.1 s for the other before it jumps.)
+
+**Camera:** the Swing Cam lags like a hand-held one while he swings and flies between swings (slow to react to a new
+direction, then catching up). Everywhere else (on foot, drawing a slingshot, whipping round a corner, on a wall, and for
+a moment after, such as climbing over the top onto a roof or crawling round onto the next face of a building) it stays
+locked on close behind him, turning with him just a touch late. The stick is read against the camera as it was when
+you pushed it that way, so a camera that follows him round never runs him in circles: hold it to the side and he
+turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
 
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. They
 hold his fall to a slow ~3.4 m/s sink at ~19 m/s, banking round with the stick (faster than he can turn falling);

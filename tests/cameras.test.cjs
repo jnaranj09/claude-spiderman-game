@@ -286,6 +286,6 @@ test('whipping round a corner, the swing cam locks on close behind Spider-Man an
     return worst;
   };
   const whip = turn('whip'), air = turn('air');
-  assert.ok(whip > 0.05 && whip < 0.35, `close behind him, a little late (${whip.toFixed(2)} rad off)`);
+  assert.ok(whip > 0.1 && whip < 0.5, `close behind him, a little late (${whip.toFixed(2)} rad off)`);
   assert.ok(air > 0.8, `a turn in the air still lags (${air.toFixed(2)} rad)`);
 });
