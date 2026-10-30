@@ -1013,3 +1013,58 @@ test('gliding: a fast fall (a dive) pulled out into a glide carries on faster; a
   assert.equal(swinger.gliding, false, 'a web to swing on folds the wings');
   assert.notEqual(swinger.web.phase, 'none');
 });
+
+// An avenue along +Z (30 m wide) with a 20 m cross street opening off to the left (+X) at z = 0..20
+const crossroads = () => [
+  { minX: 15, maxX: 95, minZ: -300, maxZ: 0, minY: 0, maxY: 60 },
+  { minX: 15, maxX: 95, minZ: 20, maxZ: 300, minY: 0, maxY: 60 },
+  { minX: -95, maxX: -15, minZ: -300, maxZ: 300, minY: 0, maxY: 60 }
+];
+
+test('corner whip: a held web with the stick pushed into a side street whips him round the corner into it, at speed', () => {
+  const controllers = world(crossroads());
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 20, -25, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 25);
+  let whipped = false, minZ = Infinity, walls = 0;
+  for (let i = 0; i < 60 * 2.5; i++) {
+    step(controllers, ent, 1 / 60, { left: 1, webLeft: true });
+    whipped ||= ent.state === 'whip';
+    if (ent.state === 'wall' || ent.state === 'wallrun') walls++;
+    if (ent.position.x > 15) minZ = Math.min(minZ, ent.position.z);
+  }
+  assert.ok(whipped, 'whipped round the corner');
+  assert.equal(ent.web.anchor.x, 15, 'webbed the corner');
+  assert.equal(walls, 0, 'never hit a wall');
+  const hs = Math.hypot(ent.velocity.x, ent.velocity.z);
+  assert.ok(ent.velocity.x > 0.85 * hs, `heading down the side street (${ent.velocity.x.toFixed(1)}, ${ent.velocity.z.toFixed(1)})`);
+  assert.ok(hs > 22, `kept his speed (${hs.toFixed(1)} m/s)`);
+  assert.ok(ent.position.x > 30 && minZ > 0 && ent.position.z < 20, `in the side street (${ent.position.x.toFixed(0)}, ${ent.position.z.toFixed(0)})`);
+});
+
+test('corner whip: with no corner in reach (mid-block) a web pushed sideways is an ordinary swing', () => {
+  // (blocks of two buildings side by side: where they meet is not a corner)
+  const controllers = world(avenue().flatMap((c) => [{ ...c, maxZ: c.minZ + 30 }, { ...c, minZ: c.minZ + 30 }]));
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 20, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 25);
+  step(controllers, ent, 0.4, { left: 1, webLeft: true });
+  assert.notEqual(ent.web.phase, 'none', 'a web flew');
+  assert.equal(ent.web.whip, false);
+});
+
+test('a tap with the stick pushed sideways zips that way and turns him towards it', () => {
+  const controllers = world([{ minX: 30, maxX: 60, minZ: -50, maxZ: 80, minY: 0, maxY: 60 }]);
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 10, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, 0, 20);
+  step(controllers, ent, 3 / 60, { left: 1, webLeft: true });
+  step(controllers, ent, 1 / 60, { webLeft: false });
+  assert.ok(ent.zip.time >= 0, 'zipped');
+  assert.ok(ent.zip.anchor.x >= 29.9, `at the building to his left (x=${ent.zip.anchor.x.toFixed(1)})`);
+  const yaw = Math.atan2(ent.velocity.x, ent.velocity.z);
+  assert.ok(yaw > 0.6 && yaw < 1.0, `turned ${(yaw * 180 / Math.PI).toFixed(0)} degrees towards it`);
+});

@@ -19,6 +19,7 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Dive (in the air) | tap the stick | X | click the left stick |
 | Slingshot (on the ground or a roof) | **L** + **R**, pull the stick down, let go | Q + E, S, let go | LT + RT, stick down, let go |
 | Glide on / off (in the air) | **Glide** | G | B |
+| Whip round a corner / turning zip | stick hard to the side + hold / tap **L** or **R** | A/D + hold / tap Q or E | stick to the side + hold / tap a trigger |
 | Look around | drag the screen | drag | right stick |
 
 Press and hold **L** or **R** and Spider-Man jumps and fires a web from that hand, at a building on that side of him
@@ -48,6 +49,19 @@ top vaults onto the roof and crawling down to the street stands him up. A web bu
 stick the way he's crawling (or facing), shoots a web along the wall that pulls him on, much faster than he
 crawls; with the stick the other way he jumps off the building, out into the street; with the stick centred he
 kicks off and carries on.
+
+**Fast turns:** push the stick well off the way he's going (into a side street, or back the way he came) and press
+a web button.
+- **Hold it** to **whip round the corner** on that side: the web goes to the edge of the block he's coming up to (or
+  has just passed), where the street opens up beyond it, and he swings round it level, like a tetherball round a
+  pole, at the radius he was across from it, keeping all his speed (the web only pulls in towards the corner, square
+  to his motion, so it turns him without slowing him). He lets go once he's heading where the stick points (keep
+  swinging the stick on to go further round, up to a U-turn) and is flung on into the new street. Why one web and not
+  two: what turns you is a pull towards the inside of the turn, and two webs to opposite sides cancel each other's
+  sideways pull, which is exactly why the double web and the slingshot go dead straight. With no corner in reach
+  (mid-block), it's an ordinary swing web.
+- **Tap it** for a **turning zip**: the zip goes to a building that way and turns his flight up to ~45 degrees
+  towards it, at a little of his speed. Two zips turn a corner.
 
 **Slingshot:** standing anywhere (the street, a roof), press **both** web buttons together. He shoots a web from each
 hand at something ahead, one either side (a wall or a taller building; on an open roof, the roof itself). Pull the
@@ -117,7 +131,7 @@ node --test tests/*.cjs tests/*.mjs
 ```
 
 `tests/spiderman.test.cjs` covers the ray casts, anchor choice, the rope constraint, press-by-press swinging down a
-synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, the slingshot, gliding, rooftop spawning
+synthetic avenue, landing, wall climbing and crawling, wall runs, tap zips, corner whips and turning zips, the slingshot, gliding, rooftop spawning
 and camera clipping.
 
 ## Credits and license

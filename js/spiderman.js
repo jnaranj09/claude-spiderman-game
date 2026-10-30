@@ -93,6 +93,16 @@ const GLIDE_SPEED = 19;          // m/s: the forward speed a glide settles at
 const GLIDE_PULLOUT = 26;        // m/s²: how fast a faster fall is turned into the glide (and the speed it carries)
 const GLIDE_CARRY = 0.75;        // share of the fall speed taken out that turns into forward speed
 const GLIDE_TURN = 1.6;          // rad/s banking round
+const WHIP_ANGLE = 1.0;          // rad: a held web with the stick this far off his line of travel whips round a corner
+const WHIP_REACH = 32;           // m: how far ahead that corner can be...
+const WHIP_RADIUS_MIN = 4;       // ...and how far across, in towards the turn: the radius he swings round it
+const WHIP_RADIUS_MAX = 28;
+const WHIP_GRAVITY = 0.3;        // share of gravity he feels whipping round (the web's a little above him)
+const WHIP_MIN_SPEED = 16;       // m/s: the least he goes round a corner at
+const WHIP_DONE = 0.2;           // rad: lets go once he's heading this close to where the stick points
+const ZIP_TURN_MIN = 0.35;       // rad: a tap with the stick this far off his line of travel zips that way...
+const ZIP_TURN = 0.8;            // ...turning his flight by up to this much
+const ZIP_TURN_COST = 0.92;      // the share of his speed the turn keeps
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
 const SPLATS = 8;
 
@@ -594,7 +604,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     velocity: new THREE.Vector3(),
     heading,
     speed: 0,
-    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun' | 'sling' (drawing a slingshot)
+    state: 'ground', // 'ground' | 'air' | 'swing' | 'wall' (crawling) | 'wallrun' | 'sling' (drawing a slingshot) | 'whip' (round a corner)
     web: {
       phase: 'none', // 'none' | 'shooting' | 'attached'
       anchor: new THREE.Vector3(),
@@ -625,6 +635,11 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       caught: false,
       turned: false, // has swung back (hanging on past the top of the arc)
       rising: false,
+      // Whipping round a building's corner: the heading that ends it, and how far he has turned so far
+      whip: false,
+      whipYaw: 0,
+      whipTurned: 0,
+      whipRadius: 0,
       dirX: 0,
       dirZ: 1
     },
@@ -826,6 +841,7 @@ function shootWeb(controllers, ent, request = 0) {
   web.dirX = dir.x;
   web.dirZ = dir.z;
   web.phase = 'shooting';
+  web.whip = false;
   web.chosen = chosen;
   ent.webSpent = true;
   web.anchor.set(anchor.x, anchor.y, anchor.z);
@@ -890,6 +906,110 @@ function attachWeb(controllers, ent) {
   web.splat2 = ent.webs && web.double ? stickSplat(ent, web.anchor2, web.normal2, true) : null;
 }
 
+// Whether (x, z) at height y is inside a building
+function solidAt(controllers, x, y, z) {
+  for (const c of controllers.nearColliders(x, z, 0.5)) {
+    if (c.maxY > y && (c.minY ?? 0) <= y && footprintContains(c, x, z)) return true;
+  }
+  return false;
+}
+
+// The corner to whip round, on the inside of a turn (side: 1 his left, -1 his right): the edge of a block he's coming
+// up to (or has just passed) with the street opening up beyond it on that side. That block lies behind the corner
+// and towards the inside, so the circle he swings round it stays out in the streets. Fills out with the point on
+// the edge the web sticks to, the pivot just off it (diagonally out of the corner) and that diagonal
+function findCorner(controllers, cx, cy, cz, fx, fz, side, out) {
+  const ix = fz * side, iz = -fx * side; // towards the inside of the turn
+  let best = null, bestScore = -Infinity;
+  for (const c of controllers.nearColliders(cx + fx * 12, cz + fz * 12, WHIP_REACH + 12)) {
+    if (c.maxY < cy + 2 || (c.minY ?? 0) > cy) continue;
+    const f = boxFrame(c);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        // The box's two axes at this corner, pointing out of it (its local x and z in the world)
+        const ax = sx * f.cs, az = -sx * f.sn;
+        const bx = sz * f.sn, bz = sz * f.cs;
+        const kx = f.cx + ax * f.hx + bx * f.hz, kz = f.cz + az * f.hx + bz * f.hz;
+        const ox = (ax + bx) * Math.SQRT1_2, oz = (az + bz) * Math.SQRT1_2;
+        // (the block behind and inside: out of the corner is ahead of him and back across his path)
+        if (ox * fx + oz * fz < 0.3 || ox * ix + oz * iz > -0.3) continue;
+        const rx = kx - cx, rz = kz - cz;
+        const ahead = rx * fx + rz * fz, across = rx * ix + rz * iz;
+        if (ahead < -8 || ahead > WHIP_REACH || across < WHIP_RADIUS_MIN || across > WHIP_RADIUS_MAX) continue;
+        // A real corner, not where one building of a block meets the next: just past it along either face, the street
+        const ay = Math.min(c.maxY - 0.5, cy + 4);
+        if (solidAt(controllers, kx + bx * 1.5 - ax * 0.5, ay, kz + bz * 1.5 - az * 0.5)
+          || solidAt(controllers, kx + ax * 1.5 - bx * 0.5, ay, kz + az * 1.5 - bz * 0.5)) continue;
+        // ...and in sight
+        const px = kx + ox * 0.6, pz = kz + oz * 0.6;
+        const dx = px - cx, dy = ay - cy, dz = pz - cz;
+        const d = Math.hypot(dx, dy, dz);
+        let blocked = false;
+        for (const o of controllers.nearColliders(cx + dx * 0.5, cz + dz * 0.5, d * 0.5 + 1)) {
+          if (rayBox(o, cx, cy, cz, dx / d, dy / d, dz / d, d - 0.3, _hit)) { blocked = true; break; }
+        }
+        if (blocked) continue;
+        // The corner he's at beats one further on; a radius of a street's half width or so swings best
+        const score = -Math.abs(ahead) * 0.3 - Math.abs(across - 14) * 0.2;
+        if (score > bestScore) {
+          bestScore = score;
+          best = out;
+          out.x = kx; out.y = ay; out.z = kz;
+          out.px = px; out.pz = pz;
+          out.nx = ox; out.nz = oz;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+const _cornerOut = { x: 0, y: 0, z: 0, px: 0, pz: 0, nx: 0, nz: 0 };
+
+// A web to the corner on the inside of a turn (see findCorner), to whip round it until he heads `yaw`
+function shootWhip(controllers, ent, side, yaw) {
+  const p = ent.position;
+  const dir = travelDirection(ent);
+  const corner = findCorner(controllers, p.x, p.y + 1.0, p.z, dir.x, dir.z, side, _cornerOut);
+  if (!corner) return false;
+  const web = ent.web;
+  web.side = side;
+  ent.nextSide = -side;
+  ent.gliding = false;
+  web.travelled = 0;
+  web.swingTime = 0;
+  web.passedBottom = web.rising = web.caught = web.turned = false;
+  web.dirX = dir.x;
+  web.dirZ = dir.z;
+  web.phase = 'shooting';
+  web.chosen = web.double = false;
+  web.whip = true;
+  web.whipYaw = yaw;
+  web.whipTurned = 0;
+  ent.webSpent = true;
+  web.anchor.set(corner.x, corner.y, corner.z);
+  web.normal.set(corner.nx, 0, corner.nz);
+  web.aim.copy(web.anchor);
+  web.pivot.set(corner.px, corner.y, corner.pz);
+  web.distance = web.anchor.distanceTo(_center.set(p.x, p.y + 1.3, p.z));
+  if (typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
+  return true;
+}
+
+function attachWhip(ent) {
+  const web = ent.web;
+  const p = ent.position;
+  // The radius he'll go round at: how far across from the corner he is, square to the way he was going when he threw
+  // the web (steering in towards the corner as it flies doesn't tighten it into a hairpin)
+  const ix = web.dirZ * web.side, iz = -web.dirX * web.side;
+  const d = Math.hypot(p.x - web.pivot.x, p.z - web.pivot.z);
+  web.whipRadius = Math.max(WHIP_RADIUS_MIN, Math.min(d, (web.pivot.x - p.x) * ix + (web.pivot.z - p.z) * iz));
+  web.length = Math.max(web.whipRadius, d);
+  web.phase = 'attached';
+  ent.state = 'whip';
+  web.splat = ent.webs ? stickSplat(ent, web.anchor, web.normal, true) : null;
+}
+
 function releaseWeb(controllers, ent, boost) {
   const web = ent.web;
   if (web.phase === 'attached' && boost) {
@@ -908,8 +1028,9 @@ function releaseWeb(controllers, ent, boost) {
     if (v.length() > 20 && Math.random() < 0.55) ent.flip = 0;
   }
   web.phase = 'none';
+  web.whip = false;
   releaseSplat(ent);
-  if (ent.state === 'swing') ent.state = 'air';
+  if (ent.state === 'swing' || ent.state === 'whip') ent.state = 'air';
   ent.webCooldown = 0.16;
 }
 
@@ -1050,16 +1171,26 @@ function findZipTarget(controllers, cx, cy, cz, fx, fz, out, feetY = cy - 1.3, g
 
 const _zipOut = { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, bnx: 0, bny: 0, bnz: 0, lamp: false };
 
-function webZip(controllers, ent) {
+// `aimYaw`: a heading to zip towards instead of straight on (the stick pushed off his line of travel): the web goes
+// that way and the yank turns his flight towards it, by up to ZIP_TURN, at a little of his speed
+function webZip(controllers, ent, aimYaw = null) {
   const p = ent.position;
   const v = ent.velocity;
   const zip = ent.zip;
-  const dir = travelDirection(ent);
+  const dir = aimYaw === null ? travelDirection(ent) : { x: Math.sin(aimYaw), z: Math.cos(aimYaw) };
   const cy = p.y + 1.3;
   const ground = controllers.getGroundHeight(p.x, p.z, 'person');
   const target = findZipTarget(controllers, p.x, cy, p.z, dir.x, dir.z, _zipOut, p.y, ground);
   if (!target) return false;
   ent.gliding = false;
+  if (aimYaw !== null) {
+    const now = Math.atan2(v.x, v.z);
+    const diff = angleDiff(aimYaw, now);
+    const yaw = now + Math.sign(diff) * Math.min(Math.abs(diff), ZIP_TURN);
+    const hs = Math.hypot(v.x, v.z) * ZIP_TURN_COST;
+    v.x = Math.sin(yaw) * hs;
+    v.z = Math.cos(yaw) * hs;
+  }
   zip.anchor.set(target.x, target.y, target.z);
   if (target.lamp) zip.normal.set(0, 0, 0);
   else zip.normal.set(target.nx, target.ny, target.nz);
@@ -1292,7 +1423,7 @@ function updateSpiderMan(controllers, ent, dt) {
   if (pressed) {
     ent.pressTime = 0; ent.webSpent = false; ent.wantL = ent.wantR = false;
     // (from the ground a press always jumps first: a tap there is just a jump, and only a tap begun in the air zips)
-    ent.pressAir = ent.state === 'air' || ent.state === 'swing';
+    ent.pressAir = ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip';
   }
   else if (held) ent.pressTime += dt;
   // (the hands pressed in the moment before the web flies count: the second of a double needn't be exact)
@@ -1311,10 +1442,13 @@ function updateSpiderMan(controllers, ent, dt) {
   if (web.phase === 'shooting') {
     web.travelled += WEB_SPEED * dt;
     if (!held) web.phase = 'none';
-    else if (web.travelled >= (web.double ? Math.max(web.distance, web.distance2) : web.distance)) attachWeb(controllers, ent);
+    else if (web.travelled >= (web.double ? Math.max(web.distance, web.distance2) : web.distance)) {
+      if (web.whip) attachWhip(ent);
+      else attachWeb(controllers, ent);
+    }
   }
   if (web.phase === 'attached' && !held) {
-    releaseWeb(controllers, ent, v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0 && !tap);
+    releaseWeb(controllers, ent, (web.whip || (v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0)) && !tap);
   }
 
   // Clicking the stick (L3, a tap on the touch stick, X) starts or ends a dive in the air
@@ -1334,8 +1468,8 @@ function updateSpiderMan(controllers, ent, dt) {
   if (glideBtn && !ent.glideHeld) {
     if (ent.gliding) {
       ent.gliding = false;
-    } else if (ent.state === 'air' || ent.state === 'swing') {
-      if (ent.state === 'swing') releaseWeb(controllers, ent, v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0);
+    } else if (ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip') {
+      if (ent.state !== 'air') releaseWeb(controllers, ent, web.whip || (v.y > -2 && v.x * web.dirX + v.z * web.dirZ > 0));
       web.phase = 'none';
       ent.gliding = true;
       ent.diving = false;
@@ -1344,10 +1478,15 @@ function updateSpiderMan(controllers, ent, dt) {
   ent.glideHeld = glideBtn;
 
   // A tap in the air zips forward instead (up to three in a row before landing, swinging or touching a wall)
+  // (with the stick pushed well off his line of travel, the zip goes that way and turns him; with nothing that way
+  // to stick to, it goes straight on as usual)
   if (tap && ent.pressAir && (ent.state === 'air' || ent.state === 'swing') && zip.cooldown <= 0 && zip.chain < ZIP_CHAIN) {
     web.phase = 'none';
     if (request === 1 || request === -1) ent.nextSide = request; // from the hand tapped
-    webZip(controllers, ent);
+    const travel = travelDirection(ent);
+    const turnTo = wantYaw !== null && stickMag > 0.5
+      && Math.abs(angleDiff(wantYaw, Math.atan2(travel.x, travel.z))) > ZIP_TURN_MIN ? wantYaw : null;
+    if (!webZip(controllers, ent, turnTo) && turnTo !== null) webZip(controllers, ent);
   }
 
   if (ent.state === 'ground') {
@@ -1370,7 +1509,12 @@ function updateSpiderMan(controllers, ent, dt) {
   // In the air a held button fires the swing web (after a moment, so that a tap stays a zip): one per press
   if (ent.state === 'air' && held && !ent.webSpent && ent.pressTime >= 0.08 && web.phase === 'none'
     && ent.webCooldown <= 0 && ent.webRetry <= 0) {
-    shootWeb(controllers, ent, request);
+    // The stick pushed hard off his line of travel (towards a side street, or back the way he came): a web to the
+    // corner of the block on that side, to whip round it. With no corner in reach, an ordinary swing web
+    const travel = travelDirection(ent);
+    const off = wantYaw === null ? 0 : angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
+    const whip = stickMag > 0.5 && Math.abs(off) > WHIP_ANGLE && Math.hypot(v.x, v.z) > 8;
+    if (!whip || !shootWhip(controllers, ent, Math.sign(off), wantYaw)) shootWeb(controllers, ent, request);
   }
 
   // --- Movement per state ------------------------------------------------------------------------------------
@@ -1612,6 +1756,47 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.flip = ent.roll = 1;
       }
     }
+  } else if (ent.state === 'whip') {
+    // Whipping round a corner: a level swing round the web (a tetherball round a pole). The web only ever pulls in
+    // towards the corner, square to his motion, so it turns him without slowing him: as he comes up to the corner
+    // it's taken in (down to how far across from it he was), and once he's past it, it holds him at that radius and
+    // his line of travel swings round. He lets go once he's heading where the stick points (it can be swung on
+    // while he goes round), flung on into the new street
+    web.swingTime += dt;
+    if (wantYaw !== null && stickMag > 0.5) web.whipYaw = wantYaw;
+    const speed = Math.max(Math.hypot(v.x, v.z), WHIP_MIN_SPEED);
+    const before = Math.atan2(v.x, v.z);
+    v.y = Math.max(v.y - GRAVITY * WHIP_GRAVITY * dt, -6);
+    p.addScaledVector(v, dt);
+    const dx = p.x - web.pivot.x, dz = p.z - web.pivot.z;
+    const d = Math.hypot(dx, dz);
+    if (d < web.length) web.length = Math.max(web.whipRadius, d);
+    if (d < web.whipRadius && d > 1e-4) {
+      // (arcade: never closer than that, as if the web were a rod, so he can't cut the corner into the wall)
+      const ux = dx / d, uz = dz / d;
+      p.x = web.pivot.x + ux * web.whipRadius;
+      p.z = web.pivot.z + uz * web.whipRadius;
+      const inward = v.x * ux + v.z * uz;
+      if (inward < 0) { v.x -= ux * inward; v.z -= uz * inward; }
+    } else if (d > web.length && d > 1e-4) {
+      const ux = dx / d, uz = dz / d;
+      p.x = web.pivot.x + ux * web.length;
+      p.z = web.pivot.z + uz * web.length;
+      const out = v.x * ux + v.z * uz;
+      if (out > 0) { v.x -= ux * out; v.z -= uz * out; }
+    }
+    // (arcade: the speed he came in with, all of it, goes round the corner)
+    const hs = Math.hypot(v.x, v.z);
+    if (hs > 1e-3) { v.x *= speed / hs; v.z *= speed / hs; }
+    const yaw = Math.atan2(v.x, v.z);
+    web.whipTurned += Math.abs(angleDiff(yaw, before));
+    ent.heading += angleDiff(yaw, ent.heading) * (1 - Math.exp(-dt * 10));
+    const ground = groundAt(controllers, p.x, p.z, _before.y);
+    if (p.y <= ground) {
+      p.y = ground;
+      v.y = Math.max(0, v.y);
+    }
+    if (Math.abs(angleDiff(yaw, web.whipYaw)) < WHIP_DONE || web.whipTurned > 3.5 || web.swingTime > 3) releaseWeb(controllers, ent, true);
   } else if (ent.state === 'wall') {
     // Crawling: only while the stick is held (up climbs head first, down goes down head first, the sides go
     // sideways); let go of the stick and he holds still
@@ -1803,7 +1988,7 @@ function updateSpiderMan(controllers, ent, dt) {
       // Brushing one mid-swing just slides along it
       let mode = null;
       if (ent.state === 'air') mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : !held || -into > 6 ? 'crawl' : null;
-      else if (ent.state === 'swing') mode = -into > 4 ? (hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl') : hs < 5 ? 'crawl' : null;
+      else if (ent.state === 'swing' || ent.state === 'whip') mode = -into > 4 ? (hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl') : hs < 5 ? 'crawl' : null;
       else if (ent.state === 'ground' && stickMag > 0.5 && -into > 1) mode = hs >= WALL_RUN_MIN_SPEED ? 'run' : 'crawl';
       const reaching = ent.state === 'air' || (ent.state === 'ground' && stickMag > 0.5);
       const top = mode || (reaching && -into > 0.5) ? wallTopAt(controllers, p.x - nx * 0.6, p.y + 0.5, p.z - nz * 0.6) : -Infinity;
@@ -1814,7 +1999,7 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.state = 'ground';
         ent.crouch = 0.6;
       } else if (mode && top > p.y + 2.2) {
-        if (ent.state === 'swing') releaseWeb(controllers, ent, false);
+        if (ent.state === 'swing' || ent.state === 'whip') releaseWeb(controllers, ent, false);
         const travel = Math.hypot(tx, tz);
         const w = ent.wall;
         w.nx = nx; w.nz = nz; w.top = top; w.time = 0;
@@ -1876,7 +2061,7 @@ function updateSpiderMan(controllers, ent, dt) {
   }
 
   ent.speed = ent.state === 'wallrun' ? ent.wallRun.speed
-    : Math.hypot(v.x, v.z, ent.state === 'swing' || ent.state === 'air' ? v.y * 0.5 : 0);
+    : Math.hypot(v.x, v.z, ent.state === 'swing' || ent.state === 'whip' || ent.state === 'air' ? v.y * 0.5 : 0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -2120,7 +2305,7 @@ function bodyOrientation(ent, out) {
     const nose = 0.18 - ent.glidePitch * 0.3;
     _by.set(fx * Math.cos(nose), Math.sin(nose), fz * Math.cos(nose));
     _bz.set(0, -1, 0);
-  } else if (ent.state === 'air' || ent.state === 'swing') {
+  } else if (ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip') {
     // In flight he leans into the way he's going: head first and body stretched out at speed (more so falling,
     // less on the way up, when he tips back a little); zipping, flat out along the web
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
@@ -2185,7 +2370,7 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   bodyOrientation(ent, _qWant);
   // (gentler in the air and on the web, where the body flows from one attitude to the next)
-  const turnRate = ent.state === 'air' || ent.state === 'swing' ? 6 : 10;
+  const turnRate = ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip' ? 6 : 10;
   ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
   // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
   if (ent.state === 'swing' && web.phase === 'attached') {
