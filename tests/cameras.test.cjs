@@ -265,3 +265,27 @@ test('the swing cam is slow to follow Spider-Man round a change of direction, th
   assert.ok(swing.early > chase.early + 0.08, 'later to react than the chase cam');
   assert.ok(Math.abs(swing.late) < 0.05, `settles behind him (${swing.late.toFixed(3)})`);
 });
+
+test('whipping round a corner, the swing cam locks on behind Spider-Man and turns with him', () => {
+  const turn = (state) => {
+    const h = cameraHarness({
+      position: new Vector3(0, 20, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+      chaseDistance: 4.6, chaseHeight: 1.7, cameraTargetOffset: new Vector3(0, 1.3, 0), state: 'air', cameraLock: 0
+    });
+    h.camera.setCameraPreset('swing', true);
+    for (let i = 0; i < 60; i++) h.camera.update(1 / 60, i / 60);
+    h.entity.state = state;
+    h.entity.cameraLock = state === 'whip' ? 0.8 : 0;
+    let worst = 0;
+    // A quarter turn round the corner in 0.6 s
+    for (let i = 1; i <= 36; i++) {
+      h.entity.heading = (Math.PI / 2) * i / 36;
+      h.camera.update(1 / 60, 1 + i / 60);
+      worst = Math.max(worst, Math.abs(h.camera.orbitYawOffset));
+    }
+    return worst;
+  };
+  const whip = turn('whip'), air = turn('air');
+  assert.ok(whip < 0.01, `stays behind him (${whip.toFixed(3)} rad off)`);
+  assert.ok(air > 0.8, `a turn in the air still lags (${air.toFixed(2)} rad)`);
+});

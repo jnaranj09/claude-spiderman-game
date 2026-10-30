@@ -678,6 +678,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     onWebShot: null,
     // Tilt for the follow camera (-1 look down .. 1 look up): up or down the wall he's crawling or running
     cameraPitch: 0,
+    // Seconds left of the follow camera locked on behind him (whipping round a corner, and a moment after)
+    cameraLock: 0,
     cameraSide: 0,
     // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
     swingUp: new THREE.Vector3(0, 1, 0),
@@ -1517,7 +1519,9 @@ function updateSpiderMan(controllers, ent, dt) {
     const travel = travelDirection(ent);
     const off = wantYaw === null ? 0 : angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
     const whip = stickMag > 0.5 && Math.abs(off) > WHIP_ANGLE && Math.hypot(v.x, v.z) > 8;
-    if (!whip || !shootWhip(controllers, ent, Math.sign(off), wantYaw)) shootWeb(controllers, ent, request);
+    // (the stick pulled right back, for a U-turn: round a corner on either side)
+    if (!whip || !(shootWhip(controllers, ent, Math.sign(off), wantYaw)
+      || (Math.abs(off) > 2.6 && shootWhip(controllers, ent, -Math.sign(off), wantYaw)))) shootWeb(controllers, ent, request);
   }
 
   // --- Movement per state ------------------------------------------------------------------------------------
@@ -1763,10 +1767,9 @@ function updateSpiderMan(controllers, ent, dt) {
     // Whipping round a corner: a level swing round the web (a tetherball round a pole). The web only ever pulls in
     // towards the corner, square to his motion, so it turns him without slowing him: as he comes up to the corner
     // it's taken in (down to how far across from it he was), and once he's past it, it holds him at that radius and
-    // his line of travel swings round. He lets go once he's heading where the stick points (it can be swung on
-    // while he goes round), flung on into the new street
+    // his line of travel swings round. He lets go once he's heading where the stick pointed as he threw the web
+    // (fixed then: the camera turns round with him, so the stick's direction turns too), flung on into the new street
     web.swingTime += dt;
-    if (wantYaw !== null && stickMag > 0.5) web.whipYaw = wantYaw;
     const speed = Math.max(Math.hypot(v.x, v.z), WHIP_MIN_SPEED);
     const before = Math.atan2(v.x, v.z);
     v.y = Math.max(v.y - GRAVITY * WHIP_GRAVITY * dt, -6);
@@ -2042,6 +2045,9 @@ function updateSpiderMan(controllers, ent, dt) {
     zip.pull = 0;
     zip.chain = 0;
   }
+
+  // The follow camera turns round the corner with him on a whip (the point of it), and catches up just after
+  ent.cameraLock = ent.state === 'whip' ? 0.8 : Math.max(0, ent.cameraLock - dt);
 
   // The follow camera looks up the wall as he climbs it and down it as he crawls down (and up a run up a wall)
   // ...and along it, to the side he's crawling (positive: his left)

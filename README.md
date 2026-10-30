@@ -55,8 +55,10 @@ a web button.
 - **Hold it** to **whip round the corner** on that side: the web goes to the edge of the block he's coming up to (or
   has just passed), where the street opens up beyond it, and he swings round it level, like a tetherball round a
   pole, at the radius he was across from it, keeping all his speed (the web only pulls in towards the corner, square
-  to his motion, so it turns him without slowing him). He lets go once he's heading where the stick points (keep
-  swinging the stick on to go further round, up to a U-turn) and is flung on into the new street. Why one web and not
+  to his motion, so it turns him without slowing him). He lets go once he's heading where the stick pointed as he
+  threw the web (pull the stick right back for a U-turn) and is flung on into the new street. The camera locks on
+  behind him and turns round the corner with him (normally it lags behind a change of direction), catching up as he
+  flies out. Why one web and not
   two: what turns you is a pull towards the inside of the turn, and two webs to opposite sides cancel each other's
   sideways pull, which is exactly why the double web and the slingshot go dead straight. With no corner in reach
   (mid-block), it's an ordinary swing web.

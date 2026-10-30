@@ -193,6 +193,11 @@ class CameraSystem {
     // his heading (that would turn "away from the camera" as he turns, and he'd run in circles): it holds its
     // direction as he turns, then drifts back behind him
     const spider = entity.type === 'spider';
+    // ...except whipping round a corner (and a moment after), when it turns with him: that's the point of the move.
+    // Rigidly while he goes round (his target heading is fixed then, so the stick can't chase the camera), then
+    // catching up fast
+    const whipping = spider && entity.state === 'whip';
+    const locked = spider && entity.cameraLock > 0;
     if (spider) {
       if (this._headingEntity !== entity) {
         this._headingEntity = entity;
@@ -201,12 +206,15 @@ class CameraSystem {
       let turned = entity.heading - this._lastHeading;
       turned -= Math.round(turned / (Math.PI * 2)) * (Math.PI * 2);
       this._lastHeading = entity.heading;
-      this.orbitYawOffset -= turned;
+      if (!whipping) this.orbitYawOffset -= turned;
     }
 
     if (!this.isDragging && this.userOrbitTimer <= 0 && (spider || Math.abs(entity.speed) > 0.5)) {
       this.orbitYawOffset -= Math.round(this.orbitYawOffset / (Math.PI * 2)) * (Math.PI * 2);
-      if (spider && this.activePresetId === 'swing') {
+      if (locked) {
+        this.orbitYawVel = 0;
+        this.orbitYawOffset *= Math.exp(-dt * 8);
+      } else if (spider && this.activePresetId === 'swing') {
         // The swing cam pans like someone filming him by hand: slow to react as he changes direction (a zigzag's
         // new swing sets off with the view still looking the old way), then swinging round to catch up and settling
         // in behind him. A damped spring, rather than easing straight back, which reacts at once
@@ -399,7 +407,8 @@ class CameraSystem {
         this.followLookOffset.subVectors(this.currentLookAt, entity.position);
       }
       // The swing cam eases more softly: it floats with the swing rather than locking on
-      const k = 1 - Math.exp(-dt * (this.activePresetId === 'swing' ? 4.5 : 8.5));
+      // (but locks on round a whip)
+      const k = 1 - Math.exp(-dt * (this.activePresetId === 'swing' && !(entity.cameraLock > 0) ? 4.5 : 10));
       // Spider-Man drops and climbs far faster than any vehicle (a dive tops 60 m/s): his height is followed
       // tightly, or he'd fall out of the bottom of the frame
       const ky = entity.type === 'spider' ? 1 - Math.exp(-dt * 16) : k;
