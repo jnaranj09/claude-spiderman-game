@@ -7,7 +7,7 @@ import { bryantParkLawn } from './landmarks.js';
 
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
-// The swing cam's height above Spider-Man by how high he's swinging (m above the street or roof under him -> m above
+// The swing cam's height above Spider-Man by how high he's swinging (m above the street, roofs aside -> m above
 // his feet, at the default zoom). Up high it's the usual view from above; it comes down level with him through the
 // middle heights, and close to the street it's a little below him, looking up at the swing
 const SWING_CAM_HEIGHTS = [
@@ -487,7 +487,7 @@ class CameraSystem {
     desiredPos.x += (this._swingUp.x) * dist * 0.45;
     desiredPos.y += (this._swingUp.y - 1) * dist * 0.45 - this._flight.y * dist * 0.25;
     desiredPos.z += (this._swingUp.z) * dist * 0.45;
-    // (never down in the street or a roof under him)
+    // (never down in the street)
     desiredPos.y = Math.max(0.65, entity.position.y - (entity.altitude ?? 1e3) + 1, desiredPos.y);
     // Look where he's going
     desiredLook.y += this._flight.y * 6;

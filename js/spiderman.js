@@ -687,7 +687,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // Seconds left of the follow camera locked on behind him (whipping round a corner, and a moment after)
     cameraLock: 0,
     cameraSide: 0,
-    // Height above what's under him, and whether the swing cam rides it (swinging, and in the air between swings)
+    // Height above the street, and whether the swing cam rides it (swinging, and in the air between swings)
     altitude: 0,
     swingCamAltitude: false,
     // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
@@ -2134,8 +2134,9 @@ function updateSpiderMan(controllers, ent, dt) {
   const ease = 1 - Math.exp(-dt * (ent.cameraLock > 0 ? 10 : 3));
   ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
   ent.cameraSide += (side - ent.cameraSide) * ease;
-  // How high he is above whatever is under him (the street, or a roof), for the swing cam's height
-  ent.altitude = p.y - groundAt(controllers, p.x, p.z, p.y);
+  // How high he is above the street (not a roof under him: up among the tall roofs the swing cam looks down on him),
+  // for the swing cam's height
+  ent.altitude = p.y - controllers.getGroundHeight(p.x, p.z, 'person');
   ent.swingCamAltitude = ent.state === 'swing' || ent.state === 'air';
 
   // Never below the street (tunnels, piers or a teleport onto a roof edge)

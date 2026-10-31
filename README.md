@@ -79,7 +79,8 @@ a moment after, such as climbing over the top onto a roof or crawling round onto
 locked on close behind him, turning with him just a touch late. The stick is read against the camera as it was when
 you pushed it that way, so a camera that follows him round never runs him in circles: hold it to the side and he
 turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
-While swinging, the Swing Cam's height follows how high he is above the street (or roof) under him: from 60 m up it
+While swinging, the Swing Cam's height follows how high he is above the street (the real ground, not a roof under him, so
+up among tall roofs it still looks down on him): from 60 m up it
 looks down from its usual ~5 m above him, at 45 m it's 3 m above, at 30 m level with him, at 15 m 1 m below and from
 8 m down 2 m below, looking up at the swing (eased between, and scaled with the zoom; `SWING_CAM_HEIGHTS` in
 `js/cameras.js`).
