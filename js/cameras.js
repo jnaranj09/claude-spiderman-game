@@ -443,7 +443,10 @@ class CameraSystem {
       // Spider-Man drops and climbs far faster than any vehicle (a dive tops 60 m/s): his height is followed
       // tightly, or he'd fall out of the bottom of the frame
       const ky = entity.type === 'spider' ? 1 - Math.exp(-dt * 16) : k;
-      this.followBaseY += (entity.position.y - this.followBaseY) * ky;
+      // (on the swing cam, led by most of his climb or drop: a plain ease trails him by a metre or more, which
+      // left it under him all the way up every swing)
+      const lead = this.activePresetId === 'swing' && entity.type === 'spider' ? (entity.velocity?.y ?? 0) * 0.8 / 16 : 0;
+      this.followBaseY += (entity.position.y + lead - this.followBaseY) * ky;
       this.followOffset.lerp(desiredPos.sub(entity.position), k);
       this.followLookOffset.lerp(desiredLook.sub(entity.position), k);
       this.currentPos.set(entity.position.x, this.followBaseY, entity.position.z).add(this.followOffset);
@@ -484,9 +487,10 @@ class CameraSystem {
     // Flight direction's climb or drop (-1 .. 1), only once he's really moving
     const climb = speed > 4 ? Math.max(-1, Math.min(1, v.y / speed)) : 0;
     this._flight.y += (climb - this._flight.y) * k;
-    // Ride the arc: offset along how far his up leans from vertical
+    // Ride the arc: offset along how far his up leans from vertical (only a little of it downwards, and climbing
+    // doesn't lower it at all, only a drop lifts it: otherwise the camera spent most of every swing below him)
     desiredPos.x += (this._swingUp.x) * dist * 0.45;
-    desiredPos.y += (this._swingUp.y - 1) * dist * 0.45 - this._flight.y * dist * 0.25;
+    desiredPos.y += (this._swingUp.y - 1) * dist * 0.13 - Math.min(0, this._flight.y) * dist * 0.25;
     desiredPos.z += (this._swingUp.z) * dist * 0.45;
     // (never down in the street)
     desiredPos.y = Math.max(0.65, entity.position.y - (entity.altitude ?? 1e3) + 1, desiredPos.y);
