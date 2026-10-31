@@ -12,9 +12,8 @@ const SWING_CAM_PAN = 1.4;
 // him from a few metres up and climbs higher the higher he swings, looking down on him and the city
 const SWING_CAM_HEIGHTS = [
   [2, -0.5],   // all but touching the street: a little below him
-  [5, 0.3],
-  [10, 1.2],   // about level with him
-  [15, 2],
+  [5, 2],      // above him from here on
+  [15, 2.4],
   [25, 3.2],
   [40, 4.8],   // the usual height of the other follow views
   [60, 6.5],
