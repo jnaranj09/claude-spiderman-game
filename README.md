@@ -82,7 +82,7 @@ turns that way once and runs straight on while the camera swings in behind him; 
 While swinging, the Swing Cam's height follows how high he is above the street (the real ground, not a roof under him, so
 up among tall roofs it still looks down on him): from 55 m up it
 looks down from its usual ~5 m above him, at 40 m it's 3 m above, at 24 m level with him, at 15 m level with his feet
-and from 8 m down 1 m below, looking up at the swing (eased between, and scaled with the zoom; `SWING_CAM_HEIGHTS` in
+and from 8 m down half a metre below, looking up at the swing (eased between, and scaled with the zoom; `SWING_CAM_HEIGHTS` in
 `js/cameras.js`).
 
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands
