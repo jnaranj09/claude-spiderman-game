@@ -301,9 +301,9 @@ test('the swing cam rides below Spider-Man near the street, level with him mid-h
     for (let i = 0; i < 300; i++) h.camera.update(1 / 60, i / 60);
     return h.camera.camera.position.y - altitude;
   };
-  const low = heightAt(6), mid = heightAt(24), high = heightAt(90), ground = heightAt(6, false);
+  const low = heightAt(1.5), mid = heightAt(15), high = heightAt(90), ground = heightAt(6, false);
   assert.ok(low < -0.3, `skimming the street, below him (${low.toFixed(1)} m)`);
-  assert.ok(Math.abs(mid - 1) < 1, `mid-height, level with him (${mid.toFixed(1)} m)`);
+  assert.ok(Math.abs(mid - 0.8) < 0.6, `mid-height, level with him (${mid.toFixed(1)} m)`);
   assert.ok(high > 4, `up high, above him as before (${high.toFixed(1)} m)`);
   assert.ok(Math.abs(ground - high) < 0.5, `not swinging: the usual height (${ground.toFixed(1)} m)`);
 });

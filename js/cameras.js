@@ -11,9 +11,10 @@ const SWING_CAM_PAN = 1.4;
 // his feet, at the default zoom). Up high it's the usual view from above; it comes down level with him through the
 // middle heights, and close to the street it's a little below him, looking up at the swing
 const SWING_CAM_HEIGHTS = [
-  [8, -0.5],   // skimming the street: a little below him
-  [15, 0],
-  [24, 1],     // level with him
+  [2, -0.5],   // all but touching the street: a little below him
+  [5, 0],      // level with his feet
+  [15, 0.8],   // about level with him
+  [25, 1.8],
   [40, 3],
   [55, null],  // and up: the usual height (about 5 m above him)
 ];
