@@ -8,18 +8,20 @@ import { bryantParkLawn } from './landmarks.js';
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
 // The swing cam's height above Spider-Man by how high he's swinging (m above the street, roofs aside -> m above
-// his feet, at the default zoom). Up high it's the usual view from above; it comes down level with him through the
-// middle heights, and close to the street it's a little below him, looking up at the swing
+// his feet, at the default zoom). Close to the street it's a little below him, looking up at the swing; it's above
+// him from a few metres up and climbs higher the higher he swings, looking down on him and the city
 const SWING_CAM_HEIGHTS = [
   [2, -0.5],   // all but touching the street: a little below him
-  [5, 0],      // level with his feet
-  [15, 0.8],   // about level with him
-  [25, 1.8],
-  [40, 3],
-  [55, null],  // and up: the usual height (about 5 m above him)
+  [5, 0.3],
+  [10, 1.2],   // about level with him
+  [15, 2],
+  [25, 3.2],
+  [40, 4.8],   // the usual height of the other follow views
+  [60, 6.5],
+  [80, 8],     // and up
 ];
-function swingCamHeight(altitude, high) {
-  const rows = SWING_CAM_HEIGHTS.map(([a, h]) => [a, h ?? high]);
+function swingCamHeight(altitude) {
+  const rows = SWING_CAM_HEIGHTS;
   if (altitude <= rows[0][0]) return rows[0][1];
   for (let i = 1; i < rows.length; i++) {
     const [a1, h1] = rows[i];
@@ -28,7 +30,7 @@ function swingCamHeight(altitude, high) {
       return h0 + (h1 - h0) * (altitude - a0) / (a1 - a0);
     }
   }
-  return high;
+  return rows[rows.length - 1][1];
 }
 
 const CAMERA_PRESETS = [
@@ -269,7 +271,7 @@ class CameraSystem {
         // dragging the view up or down still tilts it from there)
         if (this.activePresetId === 'swing' && entity.type === 'spider') {
           const usual = entity.chaseHeight * zoom + Math.sin(0.09) * dist * 0.85;
-          const want = entity.swingCamAltitude ? swingCamHeight(entity.altitude ?? 1e3, usual / this.zoomMultiplier) * this.zoomMultiplier : usual;
+          const want = entity.swingCamAltitude ? swingCamHeight(entity.altitude ?? 1e3) * this.zoomMultiplier : usual;
           this.swingHeight ??= want;
           this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * 1.5));
           height += this.swingHeight - usual;
