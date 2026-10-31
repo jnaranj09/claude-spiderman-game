@@ -7,6 +7,28 @@ import { bryantParkLawn } from './landmarks.js';
 
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
+// The swing cam's height above Spider-Man by how high he's swinging (m above the street or roof under him -> m above
+// his feet, at the default zoom). Up high it's the usual view from above; it comes down level with him through the
+// middle heights, and close to the street it's a little below him, looking up at the swing
+const SWING_CAM_HEIGHTS = [
+  [8, -2],     // skimming the street: a little below him
+  [15, -1],
+  [30, 1],     // level with him
+  [45, 3],
+  [60, null],  // and up: the usual height (about 5 m above him)
+];
+function swingCamHeight(altitude, high) {
+  const rows = SWING_CAM_HEIGHTS.map(([a, h]) => [a, h ?? high]);
+  if (altitude <= rows[0][0]) return rows[0][1];
+  for (let i = 1; i < rows.length; i++) {
+    const [a1, h1] = rows[i];
+    if (altitude <= a1) {
+      const [a0, h0] = rows[i - 1];
+      return h0 + (h1 - h0) * (altitude - a0) / (a1 - a0);
+    }
+  }
+  return high;
+}
 
 const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
@@ -241,7 +263,16 @@ class CameraSystem {
         // (chaseZoom: how far out this entity's view starts, which pinch / wheel zoom then scales)
         const zoom = this.zoomMultiplier * (entity.chaseZoom ?? 1);
         const dist = entity.chaseDistance * zoom * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
-        const height = entity.chaseHeight * zoom + Math.sin(this.orbitPitchOffset) * dist * 0.85;
+        let height = entity.chaseHeight * zoom + Math.sin(this.orbitPitchOffset) * dist * 0.85;
+        // The swing cam rides lower the nearer the street he swings (eased, so crossing a roof's edge doesn't jolt it;
+        // dragging the view up or down still tilts it from there)
+        if (this.activePresetId === 'swing' && entity.type === 'spider') {
+          const usual = entity.chaseHeight * zoom + Math.sin(0.09) * dist * 0.85;
+          const want = entity.swingCamAltitude ? swingCamHeight(entity.altitude ?? 1e3, usual / this.zoomMultiplier) * this.zoomMultiplier : usual;
+          this.swingHeight ??= want;
+          this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * 1.5));
+          height += this.swingHeight - usual;
+        }
         // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
         // sky as he climbs, and rises above him to look down it at the street as he crawls down
         // ...and likewise slides the other way along the wall to look ahead as he crawls sideways
@@ -456,7 +487,8 @@ class CameraSystem {
     desiredPos.x += (this._swingUp.x) * dist * 0.45;
     desiredPos.y += (this._swingUp.y - 1) * dist * 0.45 - this._flight.y * dist * 0.25;
     desiredPos.z += (this._swingUp.z) * dist * 0.45;
-    desiredPos.y = Math.max(0.65, desiredPos.y);
+    // (never down in the street or a roof under him)
+    desiredPos.y = Math.max(0.65, entity.position.y - (entity.altitude ?? 1e3) + 1, desiredPos.y);
     // Look where he's going
     desiredLook.y += this._flight.y * 6;
     // A gentle roll: a quarter of the way from level towards his lean

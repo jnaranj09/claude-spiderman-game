@@ -289,3 +289,21 @@ test('whipping round a corner, the swing cam locks on close behind Spider-Man an
   assert.ok(whip > 0.1 && whip < 0.5, `close behind him, a little late (${whip.toFixed(2)} rad off)`);
   assert.ok(air > 0.8, `a turn in the air still lags (${air.toFixed(2)} rad)`);
 });
+
+test('the swing cam rides below Spider-Man near the street, level with him mid-height and above him up high', () => {
+  const heightAt = (altitude, swinging = true) => {
+    const h = cameraHarness({
+      position: new Vector3(0, altitude, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+      chaseDistance: 4.6, chaseHeight: 1.7, chaseZoom: 2.4, cameraTargetOffset: new Vector3(0, 1.3, 0),
+      state: 'swing', cameraLock: 0, altitude, swingCamAltitude: swinging
+    });
+    h.camera.setCameraPreset('swing', true);
+    for (let i = 0; i < 300; i++) h.camera.update(1 / 60, i / 60);
+    return h.camera.camera.position.y - altitude;
+  };
+  const low = heightAt(6), mid = heightAt(30), high = heightAt(90), ground = heightAt(6, false);
+  assert.ok(low < -1, `skimming the street, below him (${low.toFixed(1)} m)`);
+  assert.ok(Math.abs(mid - 1) < 1, `mid-height, level with him (${mid.toFixed(1)} m)`);
+  assert.ok(high > 4, `up high, above him as before (${high.toFixed(1)} m)`);
+  assert.ok(Math.abs(ground - high) < 0.5, `not swinging: the usual height (${ground.toFixed(1)} m)`);
+});
