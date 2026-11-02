@@ -2151,8 +2151,9 @@ function updateSpiderMan(controllers, ent, dt) {
     const ahead = (web.pivot.x - p.x) * dir.x + (web.pivot.z - p.z) * dir.z;
     ent.swingRise = Math.max(0, Math.min(1, -ahead / Math.max(4, web.length * 0.6)));
   } else if (ent.state === 'air' || ent.state === 'swing') {
-    ent.swingCam = ent.launching ? 'launch' : 'swing';
-    ent.swingRise = ent.gliding ? 0.6 : Math.max(0, Math.min(1, 0.5 + v.y / 10));
+    // (a dive keeps it up high, looking down past him at where he's headed)
+    ent.swingCam = ent.launching && !ent.diving ? 'launch' : 'swing';
+    ent.swingRise = ent.diving ? 1 : ent.gliding ? 0.6 : Math.max(0, Math.min(1, 0.5 + v.y / 10));
   } else {
     ent.swingCam = 'off';
   }

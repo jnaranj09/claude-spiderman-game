@@ -8,10 +8,11 @@ import { bryantParkLawn } from './landmarks.js';
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
 // The swing cam's height above Spider-Man's feet (m, at the default zoom), the same at any height: low behind him
-// coming down the arc and through the bottom, rising above him at the end of the swing and on out of it. Climbing off
-// the ground (the first zips and jumps, before any swing) it keeps a little below him, looking up past him to aim
+// coming down the arc and through the bottom, rising above him to look down on him at the end of the swing and on out
+// of it, and staying up there through a dive. Climbing off the ground (the first zips and jumps, before any swing) it
+// keeps a little below him, looking up past him to aim
 const SWING_CAM_LOW = -1;
-const SWING_CAM_HIGH = 3;
+const SWING_CAM_HIGH = 5;      // (and while diving)
 const SWING_CAM_LAUNCH = -0.5;
 
 const CAMERA_PRESETS = [

@@ -1175,3 +1175,19 @@ function angleDelta(a, b) {
   d -= Math.round(d / (Math.PI * 2)) * Math.PI * 2;
   return d;
 }
+
+test('the swing cam is told to stay low climbing off the ground, then to ride high through a dive', () => {
+  const controllers = world([]);
+  const ent = spiderEntity(0, 0, 0, 0);
+  step(controllers, ent, 0.2);
+  ent.state = 'air';
+  ent.position.y = 30;
+  ent.velocity.set(0, 2, 10);
+  step(controllers, ent, 1 / 60);
+  assert.equal(ent.swingCam, 'launch');
+  controllers.requestDive();
+  step(controllers, ent, 0.3);
+  assert.ok(ent.diving);
+  assert.equal(ent.swingCam, 'swing');
+  assert.equal(ent.swingRise, 1, 'up high, looking down');
+});
