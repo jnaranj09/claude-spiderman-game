@@ -14,6 +14,9 @@ const SWING_CAM_PAN = 1.4;
 const SWING_CAM_LOW = -1;
 const SWING_CAM_HIGH = 5;      // (and while diving)
 const SWING_CAM_LAUNCH = -0.5;
+const SWING_CAM_LOOK_DOWN = 3;     // m: how much lower it aims up there (looking down more steeply), at the default zoom
+const SWING_CAM_RISE_RATE = 4;     // 1/s: how quickly it rises (and tilts down) up the far side
+const SWING_CAM_SINK_RATE = 1.6;   // 1/s: how slowly it comes back down (and level) as he falls into the next swing
 
 const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
@@ -257,8 +260,16 @@ class CameraSystem {
           const want = mode === 'swing' ? (SWING_CAM_LOW + (SWING_CAM_HIGH - SWING_CAM_LOW) * (entity.swingRise ?? 0)) * this.zoomMultiplier
             : mode === 'launch' ? SWING_CAM_LAUNCH * this.zoomMultiplier : usual;
           this.swingHeight ??= want;
-          this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * 5));
+          // Quick to rise up the far side, but slow to come back down from up there, so it sinks with him as he falls
+          // into the next swing. The lag is a time, not a place in the swing: through a long swing the camera keeps up
+          // with it, through a fast one it trails a little behind, which gives quick swings a livelier camera
+          const rate = want > this.swingHeight ? SWING_CAM_RISE_RATE : SWING_CAM_SINK_RATE;
+          this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * rate));
           height += this.swingHeight - usual;
+          // Up there it also looks further down, at him and the street ahead (eased the same way)
+          const lookWant = mode === 'swing' ? (entity.swingRise ?? 0) : 0;
+          this.swingLookDown ??= lookWant;
+          this.swingLookDown += (lookWant - this.swingLookDown) * (1 - Math.exp(-dt * (lookWant > this.swingLookDown ? SWING_CAM_RISE_RATE : SWING_CAM_SINK_RATE)));
         }
         // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
         // sky as he climbs, and rises above him to look down it at the street as he crawls down
@@ -284,7 +295,10 @@ class CameraSystem {
           entity.position.y + entity.cameraTargetOffset.y + lookUpBias + tilt * 9,
           entity.position.z + Math.cos(lookYaw) * lookAhead + sideZ * 9
         );
-        if (this.activePresetId === 'swing') this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
+        if (this.activePresetId === 'swing') {
+          if (entity.type === 'spider') desiredLook.y -= (this.swingLookDown ?? 0) * SWING_CAM_LOOK_DOWN * this.zoomMultiplier;
+          this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
+        }
         break;
       }
 

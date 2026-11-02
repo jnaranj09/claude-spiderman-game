@@ -329,3 +329,27 @@ test('climbing up the far side of a swing, the swing cam stays above Spider-Man,
   const rel = h.camera.camera.position.y - (h.entity.position.y + 1);
   assert.ok(rel > 0.5, `${rel.toFixed(1)} m above his chest`);
 });
+
+test('up at the end of the swing the swing cam looks further down, and sinks back slowly as he falls into the next', () => {
+  const h = cameraHarness({
+    position: new Vector3(0, 40, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+    chaseDistance: 4.6, chaseHeight: 1.7, chaseZoom: 2.4, cameraTargetOffset: new Vector3(0, 1.3, 0),
+    state: 'swing', cameraLock: 0, altitude: 40, swingCam: 'swing', swingRise: 0
+  });
+  h.camera.setCameraPreset('swing', true);
+  const pitch = () => {
+    const c = h.camera.camera;
+    return Math.atan2(c.position.y - c.target.y, Math.hypot(c.position.x - c.target.x, c.position.z - c.target.z));
+  };
+  for (let i = 0; i < 300; i++) h.camera.update(1 / 60, i / 60);
+  const lowPitch = pitch();
+  h.entity.swingRise = 1;
+  for (let i = 0; i < 120; i++) h.camera.update(1 / 60, 5 + i / 60);
+  const top = h.camera.camera.position.y - 40, highPitch = pitch();
+  assert.ok(top > 4, `up high (${top.toFixed(1)} m)`);
+  assert.ok(highPitch > lowPitch + 0.3, `looking down more steeply (${highPitch.toFixed(2)} against ${lowPitch.toFixed(2)} rad)`);
+  h.entity.swingRise = 0;
+  for (let i = 0; i < 30; i++) h.camera.update(1 / 60, 7 + i / 60);
+  const after = h.camera.camera.position.y - 40;
+  assert.ok(after > top - 3, `half a second later, still on its way down (${after.toFixed(1)} m)`);
+});

@@ -81,7 +81,9 @@ you pushed it that way, so a camera that follows him round never runs him in cir
 turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
 While swinging, the Swing Cam's height follows the swing, the same at any height: it dips low behind him (1 m below
 his feet) coming down the arc and through the bottom, and rises above him (5 m) up the far side, at the end of the
-swing and on out of it, looking down on him; it stays up there through a dive. Climbing off the ground (the first zips and jumps, before any swing) it stays a little below
+swing and on out of it, looking down on him (aimed lower, so it looks down more steeply); it stays up there
+through a dive. It rises quickly but sinks back slowly, falling with him into the next swing; the lag is a time, so
+through fast swings it trails a little behind the swing, which livens the camera up. Climbing off the ground (the first zips and jumps, before any swing) it stays a little below
 him, looking up past him to aim the webs. It never goes below the street. (`SWING_CAM_LOW`, `SWING_CAM_HIGH` and
 `SWING_CAM_LAUNCH` in `js/cameras.js`, all scaled with the zoom.)
 
