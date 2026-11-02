@@ -7,13 +7,15 @@ import { bryantParkLawn } from './landmarks.js';
 
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
-// The swing cam's height above Spider-Man's feet (m, at the default zoom), the same at any height: low behind him
-// coming down the arc and through the bottom, rising above him to look down on him at the end of the swing and on out
-// of it, and staying up there through a dive. Climbing off the ground (the first zips and jumps, before any swing) it
-// keeps a little below him, looking up past him to aim
+// The swing cam's height above Spider-Man's feet (m, at the default zoom), the same at any height: low behind him all
+// the way through the swing, looking up with him towards the sky ahead as he rises up the far side (like your head
+// following your body up at the end of a swing). As he lets go it rises above him and looks down on him, ready for the
+// next swing, staying up there through a dive, and sinks back slowly as he falls into the next one. Climbing off the
+// ground (the first zips and jumps, before any swing) it keeps a little below him, looking up past him to aim
 const SWING_CAM_LOW = -1;
 const SWING_CAM_HIGH = 5;      // (and while diving)
 const SWING_CAM_LAUNCH = -0.5;
+const SWING_CAM_LOOK_UP = 4;       // m: how much higher it aims up the far side of a swing, at the default zoom
 const SWING_CAM_LOOK_DOWN = 3;     // m: how much lower it aims up there (looking down more steeply), at the default zoom
 const SWING_CAM_RISE_RATE = 4;     // 1/s: how quickly it rises (and tilts down) up the far side
 const SWING_CAM_SINK_RATE = 1.6;   // 1/s: how slowly it comes back down (and level) as he falls into the next swing
@@ -296,7 +298,11 @@ class CameraSystem {
           entity.position.z + Math.cos(lookYaw) * lookAhead + sideZ * 9
         );
         if (this.activePresetId === 'swing') {
-          if (entity.type === 'spider') desiredLook.y -= (this.swingLookDown ?? 0) * SWING_CAM_LOOK_DOWN * this.zoomMultiplier;
+          if (entity.type === 'spider') {
+            const upWant = (entity.swingCam ?? 'off') === 'swing' ? (entity.swingLookUp ?? 0) : 0;
+            this.swingLookUp = (this.swingLookUp ?? upWant) + (upWant - (this.swingLookUp ?? upWant)) * (1 - Math.exp(-dt * 3));
+            desiredLook.y += (this.swingLookUp * SWING_CAM_LOOK_UP - (this.swingLookDown ?? 0) * SWING_CAM_LOOK_DOWN) * this.zoomMultiplier;
+          }
           this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
         }
         break;

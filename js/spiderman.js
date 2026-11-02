@@ -691,6 +691,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // ('swing'), still climbing off the ground ('launch') or neither ('off')
     altitude: 0,
     swingRise: 0,
+    swingLookUp: 0,
     launching: true,
     swingCam: 'off',
     // The swing camera's up: leans (gently) with his body along the web while he swings, world up otherwise
@@ -2137,10 +2138,12 @@ function updateSpiderMan(controllers, ent, dt) {
   const ease = 1 - Math.exp(-dt * (ent.cameraLock > 0 ? 10 : 3));
   ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
   ent.cameraSide += (side - ent.cameraSide) * ease;
-  // For the swing cam's height. How high he is above the street (the camera never goes below it). Then where he is in
-  // the swing (swingRise 0: coming down the arc and through the bottom, low behind him; 1: up at the end of the swing
-  // and on out of it, above him), and whether he's still on his way up off the ground (zips, jumps: the camera keeps
-  // low, looking up past him at where the webs will go) or has started swinging
+  // For the swing cam. How high he is above the street (the camera never goes below it). On the web it stays low
+  // behind him, and up the far side looks up with him towards the sky ahead (swingLookUp 0 .. 1: how far up the far
+  // side he is), the way your head follows your body up at the end of a swing. Let go, it rises above him and looks
+  // down, ready for the next swing (swingRise 1), and sinks back as he falls into it (0). And whether he's still on
+  // his way up off the ground (zips, jumps: the camera keeps low, looking up past him at where the webs will go) or
+  // has started swinging
   ent.altitude = p.y - controllers.getGroundHeight(p.x, p.z, 'person');
   if (ent.state === 'ground') ent.launching = true;
   if (ent.state === 'swing' && web.phase === 'attached') {
@@ -2149,11 +2152,13 @@ function updateSpiderMan(controllers, ent, dt) {
     const dir = travelDirection(ent);
     // (the pivot ahead of him: on the way down; behind him: on the way up the far side)
     const ahead = (web.pivot.x - p.x) * dir.x + (web.pivot.z - p.z) * dir.z;
-    ent.swingRise = Math.max(0, Math.min(1, -ahead / Math.max(4, web.length * 0.6)));
+    ent.swingLookUp = Math.max(0, Math.min(1, -ahead / Math.max(4, web.length * 0.6)));
+    ent.swingRise = 0;
   } else if (ent.state === 'air' || ent.state === 'swing') {
     // (a dive keeps it up high, looking down past him at where he's headed)
     ent.swingCam = ent.launching && !ent.diving ? 'launch' : 'swing';
     ent.swingRise = ent.diving ? 1 : ent.gliding ? 0.6 : Math.max(0, Math.min(1, 0.5 + v.y / 10));
+    ent.swingLookUp = 0;
   } else {
     ent.swingCam = 'off';
   }

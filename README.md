@@ -79,13 +79,13 @@ a moment after, such as climbing over the top onto a roof or crawling round onto
 locked on close behind him, turning with him just a touch late. The stick is read against the camera as it was when
 you pushed it that way, so a camera that follows him round never runs him in circles: hold it to the side and he
 turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
-While swinging, the Swing Cam's height follows the swing, the same at any height: it dips low behind him (1 m below
-his feet) coming down the arc and through the bottom, and rises above him (5 m) up the far side, at the end of the
-swing and on out of it, looking down on him (aimed lower, so it looks down more steeply); it stays up there
-through a dive. It rises quickly but sinks back slowly, falling with him into the next swing; the lag is a time, so
-through fast swings it trails a little behind the swing, which livens the camera up. Climbing off the ground (the first zips and jumps, before any swing) it stays a little below
-him, looking up past him to aim the webs. It never goes below the street. (`SWING_CAM_LOW`, `SWING_CAM_HIGH` and
-`SWING_CAM_LAUNCH` in `js/cameras.js`, all scaled with the zoom.)
+While swinging, the Swing Cam follows the swing, the same at any height: on the web it stays low behind him (1 m
+below his feet), and up the far side it looks up with him towards the sky ahead, the way your head follows your body
+up at the end of a swing. As he lets go it rises above him (5 m) and looks down on him, ready for the next swing,
+staying up there through a dive; it sinks back slowly as he falls into the next swing (the lag is a time, so through
+fast swings it trails a little behind, which livens the camera up). Climbing off the ground (the first zips and jumps,
+before any swing) it stays a little below him, looking up past him to aim the webs. It never goes below the street.
+(`SWING_CAM_*` in `js/cameras.js`, all scaled with the zoom.)
 
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands
 off he flies a shallow slope down at ~28 m/s, sinking ~3.4 m/s. On the wings the stick flies him like a plane rather

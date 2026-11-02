@@ -353,3 +353,16 @@ test('up at the end of the swing the swing cam looks further down, and sinks bac
   const after = h.camera.camera.position.y - 40;
   assert.ok(after > top - 3, `half a second later, still on its way down (${after.toFixed(1)} m)`);
 });
+
+test('up the far side of a swing the swing cam looks up with him, towards the sky ahead', () => {
+  const h = cameraHarness({
+    position: new Vector3(0, 40, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+    chaseDistance: 4.6, chaseHeight: 1.7, chaseZoom: 2.4, cameraTargetOffset: new Vector3(0, 1.3, 0),
+    state: 'swing', cameraLock: 0, altitude: 40, swingCam: 'swing', swingRise: 0, swingLookUp: 1
+  });
+  h.camera.setCameraPreset('swing', true);
+  for (let i = 0; i < 120; i++) h.camera.update(1 / 60, i / 60);
+  const c = h.camera.camera;
+  assert.ok(c.target.y > c.position.y + 2, `looking up (aim ${(c.target.y - c.position.y).toFixed(1)} m above the camera)`);
+  assert.ok(c.position.y < 40 + 1, 'from low behind him');
+});
