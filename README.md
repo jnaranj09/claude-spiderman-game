@@ -79,10 +79,11 @@ a moment after, such as climbing over the top onto a roof or crawling round onto
 locked on close behind him, turning with him just a touch late. The stick is read against the camera as it was when
 you pushed it that way, so a camera that follows him round never runs him in circles: hold it to the side and he
 turns that way once and runs straight on while the camera swings in behind him; move it to steer again.
-While swinging, the Swing Cam's height follows how high he is above the street (the real ground, not a roof under
-him): only all but touching the street (2 m and lower) is it half a metre below him; from 5 m up it's
-2 m above him, 2.4 m at 15 m, 3.2 m at 25 m, 4.8 m (the usual height) at 40 m, 6.5 m at 60 m and 8 m from 80 m up, looking
-down on him and the city (eased between, and scaled with the zoom; `SWING_CAM_HEIGHTS` in `js/cameras.js`).
+While swinging, the Swing Cam's height follows the swing, the same at any height: it dips low behind him (1 m below
+his feet) coming down the arc and through the bottom, and rises above him (3 m) up the far side, at the end of the
+swing and on out of it. Climbing off the ground (the first zips and jumps, before any swing) it stays a little below
+him, looking up past him to aim the webs. It never goes below the street. (`SWING_CAM_LOW`, `SWING_CAM_HIGH` and
+`SWING_CAM_LAUNCH` in `js/cameras.js`, all scaled with the zoom.)
 
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands
 off he flies a shallow slope down at ~28 m/s, sinking ~3.4 m/s. On the wings the stick flies him like a plane rather

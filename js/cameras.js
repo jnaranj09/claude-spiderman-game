@@ -7,30 +7,12 @@ import { bryantParkLawn } from './landmarks.js';
 
 // How quickly the swing cam pans back round behind Spider-Man (rad/s): lower lags more
 const SWING_CAM_PAN = 1.4;
-// The swing cam's height above Spider-Man by how high he's swinging (m above the street, roofs aside -> m above
-// his feet, at the default zoom). Close to the street it's a little below him, looking up at the swing; it's above
-// him from a few metres up and climbs higher the higher he swings, looking down on him and the city
-const SWING_CAM_HEIGHTS = [
-  [2, -0.5],   // all but touching the street: a little below him
-  [5, 2],      // above him from here on
-  [15, 2.4],
-  [25, 3.2],
-  [40, 4.8],   // the usual height of the other follow views
-  [60, 6.5],
-  [80, 8],     // and up
-];
-function swingCamHeight(altitude) {
-  const rows = SWING_CAM_HEIGHTS;
-  if (altitude <= rows[0][0]) return rows[0][1];
-  for (let i = 1; i < rows.length; i++) {
-    const [a1, h1] = rows[i];
-    if (altitude <= a1) {
-      const [a0, h0] = rows[i - 1];
-      return h0 + (h1 - h0) * (altitude - a0) / (a1 - a0);
-    }
-  }
-  return rows[rows.length - 1][1];
-}
+// The swing cam's height above Spider-Man's feet (m, at the default zoom), the same at any height: low behind him
+// coming down the arc and through the bottom, rising above him at the end of the swing and on out of it. Climbing off
+// the ground (the first zips and jumps, before any swing) it keeps a little below him, looking up past him to aim
+const SWING_CAM_LOW = -1;
+const SWING_CAM_HIGH = 3;
+const SWING_CAM_LAUNCH = -0.5;
 
 const CAMERA_PRESETS = [
   { id: 'chase',       name: '3rd-Person Chase',         short: 'Chase',       category: 'follow', fov: 56 },
@@ -266,13 +248,15 @@ class CameraSystem {
         const zoom = this.zoomMultiplier * (entity.chaseZoom ?? 1);
         const dist = entity.chaseDistance * zoom * (1 + Math.min(0.25, this.smoothedSpeed * 0.01));
         let height = entity.chaseHeight * zoom + Math.sin(this.orbitPitchOffset) * dist * 0.85;
-        // The swing cam rides lower the nearer the street he swings (eased, so crossing a roof's edge doesn't jolt it;
-        // dragging the view up or down still tilts it from there)
+        // The swing cam dips low behind him through each swing and rises above him at its end (eased; dragging the
+        // view up or down still tilts it from there)
         if (this.activePresetId === 'swing' && entity.type === 'spider') {
           const usual = entity.chaseHeight * zoom + Math.sin(0.09) * dist * 0.85;
-          const want = entity.swingCamAltitude ? swingCamHeight(entity.altitude ?? 1e3) * this.zoomMultiplier : usual;
+          const mode = entity.swingCam ?? 'off';
+          const want = mode === 'swing' ? (SWING_CAM_LOW + (SWING_CAM_HIGH - SWING_CAM_LOW) * (entity.swingRise ?? 0)) * this.zoomMultiplier
+            : mode === 'launch' ? SWING_CAM_LAUNCH * this.zoomMultiplier : usual;
           this.swingHeight ??= want;
-          this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * 1.5));
+          this.swingHeight += (want - this.swingHeight) * (1 - Math.exp(-dt * 5));
           height += this.swingHeight - usual;
         }
         // Spider-Man on a wall: the camera drops below him (and comes in a little) to look steeply up the wall at the
@@ -488,10 +472,10 @@ class CameraSystem {
     // Flight direction's climb or drop (-1 .. 1), only once he's really moving
     const climb = speed > 4 ? Math.max(-1, Math.min(1, v.y / speed)) : 0;
     this._flight.y += (climb - this._flight.y) * k;
-    // Ride the arc: offset along how far his up leans from vertical (only a little of it downwards, and climbing
-    // doesn't lower it at all, only a drop lifts it: otherwise the camera spent most of every swing below him)
+    // Ride the arc: offset along how far his up leans from vertical (only a little of it downwards: how high the
+    // camera is through the swing is set by swingRise, see swingHeight)
     desiredPos.x += (this._swingUp.x) * dist * 0.45;
-    desiredPos.y += (this._swingUp.y - 1) * dist * 0.13 - Math.min(0, this._flight.y) * dist * 0.25;
+    desiredPos.y += (this._swingUp.y - 1) * dist * 0.13;
     desiredPos.z += (this._swingUp.z) * dist * 0.45;
     // (never down in the street)
     desiredPos.y = Math.max(0.65, entity.position.y - (entity.altitude ?? 1e3) + 1, desiredPos.y);
