@@ -15,9 +15,9 @@ const SWING_CAM_PAN = 1.4;
 const SWING_CAM_LOW = -1;
 const SWING_CAM_HIGH = 5;      // (and while diving)
 const SWING_CAM_LAUNCH = -0.5;
-const SWING_CAM_LOOK_UP = 4;       // m: how much higher it aims up the far side of a swing, at the default zoom
+const SWING_CAM_LOOK_UP = 2;       // m: how much higher it aims up the far side of a swing, at the default zoom
 const SWING_CAM_LOOK_DOWN = 3;     // m: how much lower it aims up there (looking down more steeply), at the default zoom
-const SWING_CAM_RISE_RATE = 4;     // 1/s: how quickly it rises (and tilts down) up the far side
+const SWING_CAM_RISE_RATE = 2;     // 1/s: how quickly it rises (and tilts down) as he lets go
 const SWING_CAM_SINK_RATE = 1.6;   // 1/s: how slowly it comes back down (and level) as he falls into the next swing
 
 const CAMERA_PRESETS = [
@@ -300,7 +300,9 @@ class CameraSystem {
         if (this.activePresetId === 'swing') {
           if (entity.type === 'spider') {
             const upWant = (entity.swingCam ?? 'off') === 'swing' ? (entity.swingLookUp ?? 0) : 0;
-            this.swingLookUp = (this.swingLookUp ?? upWant) + (upWant - (this.swingLookUp ?? upWant)) * (1 - Math.exp(-dt * 3));
+            // (tilting up with him eases in at 3/s; letting go, it comes back down as slowly as the camera rises)
+            this.swingLookUp ??= upWant;
+            this.swingLookUp += (upWant - this.swingLookUp) * (1 - Math.exp(-dt * (upWant > this.swingLookUp ? 3 : SWING_CAM_RISE_RATE)));
             desiredLook.y += (this.swingLookUp * SWING_CAM_LOOK_UP - (this.swingLookDown ?? 0) * SWING_CAM_LOOK_DOWN) * this.zoomMultiplier;
           }
           this.swingFraming(entity, dt, dist, desiredPos, desiredLook);
