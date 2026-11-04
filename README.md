@@ -87,6 +87,10 @@ fast swings it trails a little behind, which livens the camera up). Climbing off
 before any swing) it stays a little below him, looking up past him to aim the webs. It never goes below the street.
 (`SWING_CAM_*` in `js/cameras.js`, all scaled with the zoom.)
 
+**Camera tilt lock:** dragging the view up or down (or the right stick) tilts the camera; shortly after you let go it
+drifts back to the usual tilt. The padlock button at the top right (next to the clean-view eye, and still there in the
+clean view) or L locks it: then the tilt stays wherever you put it until you unlock it. The choice is remembered.
+
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands
 off he flies a shallow slope down at ~28 m/s, sinking ~3.4 m/s. On the wings the stick flies him like a plane rather
 than pointing where to go: sideways banks him round, pushed on dips the nose and pulled back raises it, and speed and

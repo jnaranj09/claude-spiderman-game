@@ -318,7 +318,7 @@ body.hud-minimized .hud-bottom-left,
 body.hud-minimized .hud-bottom-right { transform: translateY(12px); }
 body.hud-minimized .hud-bottom-center { transform: translate(-50%, 12px); }
 
-body.hud-minimized .toolbar > :not(#btn-toggle-hud) {
+body.hud-minimized .toolbar > :not(#btn-toggle-hud):not(#btn-camera-lock) {
   display: none;
 }
 
@@ -487,6 +487,10 @@ body.hud-minimized .toolbar > :not(#btn-toggle-hud) {
 
 .tool-btn.is-open .icon-sm {
   transform: rotate(180deg);
+}
+
+.tool-btn[aria-pressed="true"]#btn-camera-lock {
+  background: var(--hover);
 }
 
 .tool-btn.icon-only {

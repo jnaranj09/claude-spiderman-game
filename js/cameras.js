@@ -16,7 +16,7 @@ const SWING_CAM_LOW = -1;
 const SWING_CAM_HIGH = 5;      // (and while diving)
 const SWING_CAM_LAUNCH = -0.5;
 const SWING_CAM_LOOK_UP = 0.5;       // m: how much higher it aims up the far side of a swing, at the default zoom
-const SWING_CAM_LOOK_DOWN = 3;     // m: how much lower it aims up there (looking down more steeply), at the default zoom
+const SWING_CAM_LOOK_DOWN = 4;     // m: how much lower it aims up there (looking down more steeply), at the default zoom
 const SWING_CAM_RISE_RATE = 2;     // 1/s: how quickly it rises (and tilts down) as he lets go
 const SWING_CAM_SINK_RATE = 1.6;   // 1/s: how slowly it comes back down (and level) as he falls into the next swing
 
@@ -51,6 +51,8 @@ class CameraSystem {
     this.orbitYawOffset = 0.0;
     this.orbitYawVel = 0; // the swing cam's pan speed back round behind him (rad/s)
     this.orbitPitchOffset = 0.09;
+    // Unlocked, a view dragged up or down drifts back to the usual tilt shortly after letting go; locked, it stays
+    this.pitchLocked = false;
     this.zoomMultiplier = 1.0;
     this.isDragging = false;
     this.userOrbitTimer = 0;
@@ -199,6 +201,9 @@ class CameraSystem {
 
     if (this.userOrbitTimer > 0 && !this.isDragging) {
       this.userOrbitTimer = Math.max(0, this.userOrbitTimer - dt);
+    }
+    if (!this.pitchLocked && !this.isDragging && this.userOrbitTimer < 2.5) {
+      this.orbitPitchOffset += (0.09 - this.orbitPitchOffset) * (1 - Math.exp(-dt * 1.5));
     }
 
     // Spider-Man turns to wherever the stick points relative to the camera, so the camera must not swing round with

@@ -366,3 +366,19 @@ test('up the far side of a swing the swing cam looks up with him, towards the sk
   assert.ok(c.target.y > c.position.y + 2, `looking up (aim ${(c.target.y - c.position.y).toFixed(1)} m above the camera)`);
   assert.ok(c.position.y < 40 + 1, 'from low behind him');
 });
+
+test('a view dragged up or down drifts back to the usual tilt unless the tilt is locked', () => {
+  const run = (locked) => {
+    const h = cameraHarness({
+      position: new Vector3(0, 40, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+      chaseDistance: 4.6, chaseHeight: 1.7, cameraTargetOffset: new Vector3(0, 1.3, 0), state: 'air', cameraLock: 0
+    });
+    h.camera.pitchLocked = locked;
+    h.camera.orbitPitchOffset = 0.5;
+    h.camera.userOrbitTimer = 4;
+    for (let i = 0; i < 60 * 6; i++) h.camera.update(1 / 60, i / 60);
+    return h.camera.orbitPitchOffset;
+  };
+  assert.ok(Math.abs(run(false) - 0.09) < 0.02, 'unlocked: back to the usual tilt');
+  assert.equal(run(true), 0.5, 'locked: stays where it was put');
+});

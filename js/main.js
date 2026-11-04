@@ -144,6 +144,21 @@ async function initApp() {
   }
   soundButton?.addEventListener('click', () => audioSystem.setEnabled(!audioSystem.enabled));
   updateSoundButton();
+  // Camera tilt lock: a view dragged up or down stays there while locked, and drifts back to the usual tilt when not
+  const cameraLockButton = document.getElementById('btn-camera-lock');
+  function setCameraTiltLock(locked) {
+    cameraSystem.pitchLocked = locked;
+    try { localStorage.setItem('cameraTiltLocked', locked ? '1' : '0'); } catch { /* storage unavailable */ }
+    if (!cameraLockButton) return;
+    cameraLockButton.setAttribute('aria-pressed', String(locked));
+    cameraLockButton.setAttribute('aria-label', locked ? 'Unlock camera tilt' : 'Lock camera tilt');
+    cameraLockButton.title = locked ? 'Camera tilt locked: click to let it drift back [L]' : "Lock the camera's up / down tilt [L]";
+    cameraLockButton.querySelector('use').setAttribute('href', locked ? '#i-lock' : '#i-unlock');
+  }
+  cameraLockButton?.addEventListener('click', () => setCameraTiltLock(!cameraSystem.pitchLocked));
+  let savedTiltLock = false;
+  try { savedTiltLock = localStorage.getItem('cameraTiltLocked') === '1'; } catch { /* storage unavailable */ }
+  setCameraTiltLock(savedTiltLock);
   // pagehide also covers navigation away on mobile; preserve the context across back-forward cache restores.
   window.addEventListener('pagehide', (event) => {
     savePlayerState();
@@ -546,6 +561,9 @@ async function initApp() {
         break;
       case 'KeyH':
         if (hudToggleBtn) hudToggleBtn.click();
+        break;
+      case 'KeyL':
+        if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) setCameraTiltLock(!cameraSystem.pitchLocked);
         break;
       case 'KeyN':
         if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) audioSystem.setEnabled(!audioSystem.enabled);
