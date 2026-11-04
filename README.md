@@ -89,8 +89,8 @@ before any swing) it stays a little below him, looking up past him to aim the we
 
 **Camera view lock:** dragging the view (or the right stick) turns the camera round him or tilts it up or down;
 shortly after you let go it drifts back behind him at the usual tilt. The padlock button at the top right (next to
-the clean-view eye, and still there in the clean view) or L locks it: then the view stays the way you put it, round to
-one side and tilted, following him from there, until you unlock it, which brings it back behind him at the usual tilt.
+the clean-view eye, and still there in the clean view) or L locks it: then the view stays the way you put it, tilted and
+looking the same way (it follows him about, but no longer swings round behind him as he turns), until you unlock it, which brings it back behind him at the usual tilt.
 The choice is remembered.
 
 **Glide:** in the air (or on a web: he lets go first), the glide button spreads the web wings under his arms. Hands

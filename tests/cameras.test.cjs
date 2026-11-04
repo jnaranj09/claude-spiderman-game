@@ -375,7 +375,6 @@ test('a view dragged round or up or down drifts back behind him unless locked; u
   const drag = () => {
     h.camera.orbitPitchOffset = 0.5;
     h.camera.orbitYawOffset = 1.2;
-    if (h.camera.viewLocked) h.camera.yawHome = 1.2;
     h.camera.userOrbitTimer = 4;
   };
   const settle = (seconds) => { for (let i = 0; i < 60 * seconds; i++) h.camera.update(1 / 60, i / 60); };
@@ -388,11 +387,13 @@ test('a view dragged round or up or down drifts back behind him unless locked; u
   drag();
   settle(10);
   assert.equal(h.camera.orbitPitchOffset, 0.5, 'locked: tilt stays where it was put');
-  assert.ok(Math.abs(h.camera.orbitYawOffset - 1.2) < 0.01, 'locked: stays round to the side');
-  // turning, it keeps following him from that side
-  h.entity.heading = 1;
+  assert.ok(Math.abs(h.camera.orbitYawOffset - 1.2) < 1e-9, 'locked: stays round to the side');
+  // he turns (the stick, read against the camera, sends him off the way it looks): the view keeps looking the same way
+  const yaw = () => h.entity.heading + h.camera.orbitYawOffset;
+  const before = yaw();
+  h.entity.heading = 1.2;
   settle(10);
-  assert.ok(Math.abs(h.camera.orbitYawOffset - 1.2) < 0.05, `still off to the side after he turns (${h.camera.orbitYawOffset.toFixed(2)})`);
+  assert.ok(Math.abs(yaw() - before) < 1e-9, 'still looking the same way after he turns');
 
   h.camera.setViewLocked(false);
   settle(10);
