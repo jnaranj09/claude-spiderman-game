@@ -367,18 +367,34 @@ test('up the far side of a swing the swing cam looks up with him, towards the sk
   assert.ok(c.position.y < 40 + 1, 'from low behind him');
 });
 
-test('a view dragged up or down drifts back to the usual tilt unless the tilt is locked', () => {
-  const run = (locked) => {
-    const h = cameraHarness({
-      position: new Vector3(0, 40, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
-      chaseDistance: 4.6, chaseHeight: 1.7, cameraTargetOffset: new Vector3(0, 1.3, 0), state: 'air', cameraLock: 0
-    });
-    h.camera.pitchLocked = locked;
+test('a view dragged round or up or down drifts back behind him unless locked; unlocking brings it back', () => {
+  const h = cameraHarness({
+    position: new Vector3(0, 40, 100), velocity: new Vector3(0, 0, 20), heading: 0, speed: 20, type: 'spider',
+    chaseDistance: 4.6, chaseHeight: 1.7, cameraTargetOffset: new Vector3(0, 1.3, 0), state: 'air', cameraLock: 0
+  });
+  const drag = () => {
     h.camera.orbitPitchOffset = 0.5;
+    h.camera.orbitYawOffset = 1.2;
+    if (h.camera.viewLocked) h.camera.yawHome = 1.2;
     h.camera.userOrbitTimer = 4;
-    for (let i = 0; i < 60 * 6; i++) h.camera.update(1 / 60, i / 60);
-    return h.camera.orbitPitchOffset;
   };
-  assert.ok(Math.abs(run(false) - 0.09) < 0.02, 'unlocked: back to the usual tilt');
-  assert.equal(run(true), 0.5, 'locked: stays where it was put');
+  const settle = (seconds) => { for (let i = 0; i < 60 * seconds; i++) h.camera.update(1 / 60, i / 60); };
+  drag();
+  settle(10);
+  assert.ok(Math.abs(h.camera.orbitPitchOffset - 0.09) < 0.02, 'unlocked: back to the usual tilt');
+  assert.ok(Math.abs(h.camera.orbitYawOffset) < 0.05, 'unlocked: back behind him');
+
+  h.camera.setViewLocked(true);
+  drag();
+  settle(10);
+  assert.equal(h.camera.orbitPitchOffset, 0.5, 'locked: tilt stays where it was put');
+  assert.ok(Math.abs(h.camera.orbitYawOffset - 1.2) < 0.01, 'locked: stays round to the side');
+  // turning, it keeps following him from that side
+  h.entity.heading = 1;
+  settle(10);
+  assert.ok(Math.abs(h.camera.orbitYawOffset - 1.2) < 0.05, `still off to the side after he turns (${h.camera.orbitYawOffset.toFixed(2)})`);
+
+  h.camera.setViewLocked(false);
+  settle(10);
+  assert.ok(Math.abs(h.camera.orbitPitchOffset - 0.09) < 0.02 && Math.abs(h.camera.orbitYawOffset) < 0.05, 'unlocked: all the way back');
 });

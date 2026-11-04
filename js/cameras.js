@@ -51,8 +51,10 @@ class CameraSystem {
     this.orbitYawOffset = 0.0;
     this.orbitYawVel = 0; // the swing cam's pan speed back round behind him (rad/s)
     this.orbitPitchOffset = 0.09;
-    // Unlocked, a view dragged up or down drifts back to the usual tilt shortly after letting go; locked, it stays
-    this.pitchLocked = false;
+    // Unlocked, a view dragged round or up or down drifts back behind him at the usual tilt shortly after letting go;
+    // locked, it stays as it was put (round to one side: it keeps following him from that side). See setViewLocked
+    this.viewLocked = false;
+    this.yawHome = 0; // the orbit the camera settles back to (rad off straight behind)
     this.zoomMultiplier = 1.0;
     this.isDragging = false;
     this.userOrbitTimer = 0;
@@ -107,6 +109,7 @@ class CameraSystem {
         }
       } else {
         this.orbitYawOffset -= dx * 0.0065;
+        if (this.viewLocked) this.yawHome = this.orbitYawOffset;
         this.orbitPitchOffset = Math.max(-0.32, Math.min(0.68, this.orbitPitchOffset + dy * 0.005));
       }
       this.userOrbitTimer = 4.0;
@@ -153,14 +156,23 @@ class CameraSystem {
     if (this.activePresetId !== 'chase') zoom = 0;
     if (!lookX && !lookY && !zoom) return;
     this.orbitYawOffset -= lookX * 2.0 * dt;
+    if (this.viewLocked) this.yawHome = this.orbitYawOffset;
     this.orbitPitchOffset = Math.max(-0.32, Math.min(0.68, this.orbitPitchOffset + lookY * 1.25 * dt));
     this.zoomMultiplier = Math.max(0.45, Math.min(2.4, this.zoomMultiplier + zoom * 0.9 * dt));
     this.userOrbitTimer = 4.0;
   }
 
+  // Locking keeps the view as it is now; unlocking lets it go back behind him at the usual tilt straight away
+  setViewLocked(locked) {
+    this.viewLocked = locked;
+    this.yawHome = locked ? this.orbitYawOffset : 0;
+    if (!locked) this.userOrbitTimer = 0;
+  }
+
   resetOrbit() {
     this.orbitYawOffset = 0;
     this.orbitYawVel = 0;
+    this.yawHome = 0;
     this.orbitPitchOffset = 0.09;
     this.zoomMultiplier = 1;
     this.userOrbitTimer = 0;
@@ -202,7 +214,7 @@ class CameraSystem {
     if (this.userOrbitTimer > 0 && !this.isDragging) {
       this.userOrbitTimer = Math.max(0, this.userOrbitTimer - dt);
     }
-    if (!this.pitchLocked && !this.isDragging && this.userOrbitTimer < 2.5) {
+    if (!this.viewLocked && !this.isDragging && this.userOrbitTimer < 2.5) {
       this.orbitPitchOffset += (0.09 - this.orbitPitchOffset) * (1 - Math.exp(-dt * 1.5));
     }
 
@@ -226,20 +238,22 @@ class CameraSystem {
     }
 
     if (!this.isDragging && this.userOrbitTimer <= 0 && (spider || Math.abs(entity.speed) > 0.5)) {
-      this.orbitYawOffset -= Math.round(this.orbitYawOffset / (Math.PI * 2)) * (Math.PI * 2);
+      // (measured from where it settles: straight behind him, or the side a locked view was left on)
+      const home = this.yawHome;
+      this.orbitYawOffset = home + (this.orbitYawOffset - home) - Math.round((this.orbitYawOffset - home) / (Math.PI * 2)) * (Math.PI * 2);
       if (locked) {
         this.orbitYawVel = 0;
-        this.orbitYawOffset *= Math.exp(-dt * 7);
+        this.orbitYawOffset = home + (this.orbitYawOffset - home) * Math.exp(-dt * 7);
       } else if (spider && this.activePresetId === 'swing') {
         // The swing cam pans like someone filming him by hand: slow to react as he changes direction (a zigzag's
         // new swing sets off with the view still looking the old way), then swinging round to catch up and settling
         // in behind him. A damped spring, rather than easing straight back, which reacts at once
         const w = SWING_CAM_PAN, damping = 0.85;
-        this.orbitYawVel += (-w * w * this.orbitYawOffset - 2 * damping * w * this.orbitYawVel) * dt;
+        this.orbitYawVel += (-w * w * (this.orbitYawOffset - home) - 2 * damping * w * this.orbitYawVel) * dt;
         this.orbitYawOffset += this.orbitYawVel * dt;
       } else {
         this.orbitYawVel = 0;
-        this.orbitYawOffset += (0.0 - this.orbitYawOffset) * (1 - Math.exp(-dt * (spider ? 1.3 : 2.2)));
+        this.orbitYawOffset += (home - this.orbitYawOffset) * (1 - Math.exp(-dt * (spider ? 1.3 : 2.2)));
       }
     } else {
       this.orbitYawVel = 0;
