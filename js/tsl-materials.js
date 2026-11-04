@@ -108,7 +108,10 @@ const farLampLight = {
   uCobraRange: uniform(1e9),
   uPointRange: uniform(1e9),
   // The lamps' night dimmer (0 by day)
-  uLampScale: uniform(0)
+  uLampScale: uniform(0),
+  // The glow a city street gets at night from everywhere at once (lit windows, shopfronts, signs, the orange sky):
+  // a faint, even irradiance on the ground, so no stretch between lamps goes black (per unit of the lamps' dimmer)
+  uCityGlow: uniform(2.2)
 };
 function addFarLampLight(mat) {
   const prev = mat.emissiveNode;
@@ -120,7 +123,8 @@ function addFarLampLight(mat) {
     const point = smoothstep(farLampLight.uPointRange.mul(0.62), farLampLight.uPointRange, d);
     // (the colours: COBRA_LIGHT.color in street-details.js, and the post-top globes)
     const light = color(0xffd49a).mul(irr.x.mul(cobra))
-      .add(color(0xffe0aa).mul(irr.y.mul(point)));
+      .add(color(0xffe0aa).mul(irr.y.mul(point)))
+      .add(color(0xffc890).mul(farLampLight.uCityGlow));
     // (Lambert, as three.js lights a diffuse surface: albedo / pi x irradiance; only on faces looking up)
     const lit = diffuseColor.rgb.mul(light).mul(farLampLight.uLampScale).mul(max(normalWorld.y, 0.0)).mul(1 / Math.PI);
     return prev ? vec3(prev).add(lit) : lit;

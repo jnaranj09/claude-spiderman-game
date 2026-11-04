@@ -157,8 +157,10 @@ Spider-Man included, with reflections). Past them, every lamp in the city has it
 top-down light map, worked out with exactly the same intensity, cone and falloff as the real lights, which the road,
 road markings, sidewalks and curbs add where the real lights fade out. So the streets stay lit into the distance,
 and a far street is never brighter than a near one: it's the same light, cross-faded over the same distances. How
-bright and far-reaching the lamps are is `COBRA_LIGHT` (and `POINT_LIGHT_BOOST`) in `js/street-details.js`, shared
-by both.
+bright and far-reaching the lamps are is `COBRA_LIGHT` (and `POINT_LIGHT_BOOST` / `POINT_LIGHT_REACH` for the
+post-top globes) in `js/street-details.js`, shared by both. On top of the lamps the ground gets a faint, even night
+glow (the light of a whole city's windows, shopfronts and signs, `uCityGlow` in `js/tsl-materials.js`), so no stretch
+between lamps goes black.
 
 ## Tests
 

@@ -1218,7 +1218,7 @@ function buildStreetDetails(scene) {
       const pt = streetPointPool[i];
       pt.color.setHex(s.color);
       pt.position.set(s.x, s.y, s.z);
-      pt.distance = s.dist;
+      pt.distance = s.dist * POINT_LIGHT_REACH;
       pt.intensity = s.intensity * POINT_LIGHT_BOOST * lampScale * fade;
     }
     for (let i = ptUsed; i < STREET_POINT_POOL; i++) {
@@ -1238,8 +1238,10 @@ function buildStreetDetails(scene) {
 // head, which throws its light across the street rather than pooling it under the pole)
 const COBRA_LIGHT = { color: 0xffd49a, intensity: 110, distance: 45, angle: 1.1, penumbra: 0.35, decay: 1.0 };
 // Post-top globes and the other point lights: their sites' own intensity and reach, times this
-const POINT_LIGHT_BOOST = 2;
-const POINT_LIGHT_DECAY = 1.35;
+const POINT_LIGHT_BOOST = 3;
+// ...and their reach times this (the globes along a cross street have to light the middle of the road too)
+const POINT_LIGHT_REACH = 1.6;
+const POINT_LIGHT_DECAY = 1.1;
 
 // Bakes the far lamp light map (see the call in buildStreetDetails)
 function bakeFarLampLight(cobras, points) {
@@ -1284,7 +1286,7 @@ function bakeFarLampLight(cobras, points) {
     const dx = s.x - s.tx, dy = s.y, dz = s.z - s.tz, l = Math.hypot(dx, dy, dz);
     splat(cobraE, s, COBRA_LIGHT.intensity, COBRA_LIGHT.distance, COBRA_LIGHT.decay, { x: dx / l, y: dy / l, z: dz / l, coneCos, penumbraCos });
   }
-  for (const s of points) splat(pointE, s, s.intensity * POINT_LIGHT_BOOST, s.dist, POINT_LIGHT_DECAY, null);
+  for (const s of points) splat(pointE, s, s.intensity * POINT_LIGHT_BOOST, s.dist * POINT_LIGHT_REACH, POINT_LIGHT_DECAY, null);
   const data = new Uint8Array(w * h * 2);
   for (let k = 0; k < w * h; k++) {
     data[k * 2] = Math.round(Math.sqrt(Math.min(1, cobraE[k] / FAR_LAMP_MAX)) * 255);
