@@ -24,10 +24,7 @@ import {
   mix,
   step,
   smoothstep,
-  dot,
-  pow,
-  normalView,
-  positionViewDirection,
+  normalWorld,
   diffuseColor
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -974,13 +971,13 @@ function createSpiderSuitMaterial(pose = null) {
   })();
 
   mat.roughnessNode = Fn(() => float(0.5))();
-  // At night the hero gets a little light of his own, as a film's would: a soft fill so the suit's red and blue still
-  // read in the dark, and a cool moonlit rim round his outline against the night (nothing by day)
+  // At night the suit gets a little soft light from above, shaded with his shape (stronger on what faces up, fading
+  // underneath, like a sky fill), so its red and blue still read in the dark without looking lit from inside (nothing
+  // by day)
   mat.emissiveNode = Fn(() => {
     const night = smoothstep(0.6, 1.6, cityUniforms.uInteriorGlow);
-    const facing = max(dot(normalView, positionViewDirection), 0.0);
-    const rim = pow(float(1.0).sub(facing), 2.5);
-    return diffuseColor.rgb.mul(0.22).add(color(0x8fb0ff).mul(rim.mul(0.35))).mul(night);
+    const up = clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0);
+    return diffuseColor.rgb.mul(up.mul(up).mul(0.12).add(0.02)).mul(night);
   })();
   return mat;
 }
