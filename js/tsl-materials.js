@@ -98,7 +98,7 @@ const cityUniforms = {
  * not brighter: it's the same light, cross-faded over the same distances.
  * The map: R the cobra-head luminaires', G the post-top globes' & other point lights', stored as sqrt(E / FAR_LAMP_MAX).
  */
-const FAR_LAMP_MAX = 48;
+const FAR_LAMP_MAX = 64;
 const farLampLight = {
   // (a placeholder until street-details.js bakes the map into it, before the first frame)
   texture: new THREE.DataTexture(new Uint8Array([0, 0]), 1, 1, THREE.RGFormat),
@@ -118,7 +118,9 @@ function addFarLampLight(mat) {
     const d = length(positionWorld.sub(cameraPosition));
     const cobra = smoothstep(farLampLight.uCobraRange.mul(0.62), farLampLight.uCobraRange, d);
     const point = smoothstep(farLampLight.uPointRange.mul(0.62), farLampLight.uPointRange, d);
-    const light = color(0xffe8c2).mul(irr.x.mul(cobra)).add(color(0xffe0aa).mul(irr.y.mul(point)));
+    // (the colours: COBRA_LIGHT.color in street-details.js, and the post-top globes)
+    const light = color(0xffd49a).mul(irr.x.mul(cobra))
+      .add(color(0xffe0aa).mul(irr.y.mul(point)));
     // (Lambert, as three.js lights a diffuse surface: albedo / pi x irradiance; only on faces looking up)
     const lit = diffuseColor.rgb.mul(light).mul(farLampLight.uLampScale).mul(max(normalWorld.y, 0.0)).mul(1 / Math.PI);
     return prev ? vec3(prev).add(lit) : lit;

@@ -420,8 +420,8 @@ function buildStreetDetails(scene) {
             x: headX,
             y: 8.02,
             z: headZ,
-            tx: lx + outX * 3.4,
-            tz: lz + outZ * 3.4
+            tx: lx + outX * 7,
+            tz: lz + outZ * 7
           });
         }
 
@@ -1099,7 +1099,7 @@ function buildStreetDetails(scene) {
   const streetlightSpotPool = [];
   for (let i = 0; i < STREETLIGHT_SPOT_POOL; i++) {
     // Cobra-head LED luminaire: wide downward spread (0.96 rad half-angle) illuminating both road and sidewalk
-    const spot = new THREE.SpotLight(0xffe8c2, 0, COBRA_LIGHT.distance, COBRA_LIGHT.angle, COBRA_LIGHT.penumbra, COBRA_LIGHT.decay);
+    const spot = new THREE.SpotLight(COBRA_LIGHT.color, 0, COBRA_LIGHT.distance, COBRA_LIGHT.angle, COBRA_LIGHT.penumbra, COBRA_LIGHT.decay);
     spot.position.set(0, -1000, 0);
     spot.target.position.set(0, -1001, 0);
     streetLightsGroup.add(spot, spot.target);
@@ -1233,8 +1233,10 @@ function buildStreetDetails(scene) {
 }
 
 // The street lamps' light, shared by the real lights and the far lamp light map so the two always match.
-// Cobra-head LED luminaires: a wide downward spread (0.96 rad half-angle) lighting both road and sidewalk
-const COBRA_LIGHT = { intensity: 220, distance: 32, angle: 0.96, penumbra: 0.82, decay: 1.25 };
+// Cobra-head LED luminaires: a wide spread lighting both road and sidewalk
+// (aimed well out into the road, with an even spread across most of the cone and a long reach, like a real cobra
+// head, which throws its light across the street rather than pooling it under the pole)
+const COBRA_LIGHT = { color: 0xffd49a, intensity: 110, distance: 45, angle: 1.1, penumbra: 0.35, decay: 1.0 };
 // Post-top globes and the other point lights: their sites' own intensity and reach, times this
 const POINT_LIGHT_BOOST = 2;
 const POINT_LIGHT_DECAY = 1.35;
