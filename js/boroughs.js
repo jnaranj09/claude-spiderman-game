@@ -998,7 +998,7 @@ function createBoroughBuildingMaterial() {
   const floorH = pick(3.1, 3.7, 4.6, 3.3, 3.4);
   const winW = pick(0.44, 0.88, 0.62, 0.96, 0.46);
   const winH = pick(0.54, 0.74, 0.46, 0.44, 0.56);
-  const litProb = pick(0.32, 0.36, 0.14, 0.3, 0.3);
+  const litProb = pick(0.32, 0.36, 0.14, 0.3, 0.3).add(cityUniforms.uNightLit); // (more of them at night)
   const glassy = pick(0.15, 1.0, 0.1, 0.35, 0.15);
 
   const gu = u.div(bay).toVar();

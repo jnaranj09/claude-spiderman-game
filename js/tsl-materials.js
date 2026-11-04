@@ -82,6 +82,8 @@ const cityUniforms = {
   uSkyHorizonColor: uniform(new THREE.Color(0xebd1b5)),
   uSkySunDir: uniform(new THREE.Vector3(-0.66, 0.34, -0.67).normalize()),
   uInteriorGlow: uniform(0.78),
+  // Extra share of rooms with their lights on (added to each facade's own share): most of the city is home at night
+  uNightLit: uniform(0.0),
   uRoadWetness: uniform(0.38),
   uCanyonBounce: uniform(0.52)
 };
@@ -281,7 +283,8 @@ const evaluateApartmentInterior = Fn(([uCoord, vCoord, winUV, cellId, winWNode, 
 
   const warmLight = mix(color(0xffb845), color(0xffe49c), seed1);
   const coolLight = mix(color(0xdfe8ff), color(0x9fb6ff), seed2);
-  const lightCol = mix(coolLight, warmLight, step(float(1.0).sub(warmthNode), seed2)).toVar();
+  // (at night most of the lit rooms are homes, warm lamplight rather than office white)
+  const lightCol = mix(coolLight, warmLight, step(float(1.0).sub(warmthNode.add(cityUniforms.uNightLit.mul(0.9))), seed2)).toVar();
 
   // Room shell: muted plaster walls with skirting board, wood floorboards + rug, ceiling lamp, back-wall door & art
   const wallBase = mix(mix(color(0x9a8b73), color(0x6f7a82), seed1), color(0xb9ad97), seed2.mul(0.6)).toVar();
@@ -538,7 +541,7 @@ function createCurtainWallMaterial(opts = {}) {
     vec2(0.0),
     vec2(1.0)
   );
-  const aptRoom = evaluateApartmentInterior(uCoord, vCoord, winUV, cellId, bayWidth, uFloorHeight, uSeed, uWarmth, uLitProbability.mul(0.65), fw);
+  const aptRoom = evaluateApartmentInterior(uCoord, vCoord, winUV, cellId, bayWidth, uFloorHeight, uSeed, uWarmth, uLitProbability.mul(0.65).add(cityUniforms.uNightLit).min(0.92), fw);
   const shopLit = step(0.24, hash2D(cellId.add(vec2(uSeed, 19.4))));
   const floorIdx = floor(gridV);
   const isMechFloor = float(1.0).sub(step(1.0, mod(floorIdx.add(uSeed), 16.0))).mul(step(4.0, floorIdx));
@@ -749,7 +752,7 @@ function createPreWarBuildingMaterial(opts = {}) {
     vec2(0.0),
     vec2(1.0)
   );
-  const aptRoom = evaluateApartmentInterior(uCoord, vCoord, winUV, cellId, bayWidth, uFloorHeight, uSeed, uWarmth, uLitProbability.mul(0.62), fw);
+  const aptRoom = evaluateApartmentInterior(uCoord, vCoord, winUV, cellId, bayWidth, uFloorHeight, uSeed, uWarmth, uLitProbability.mul(0.62).add(cityUniforms.uNightLit).min(0.92), fw);
   const shopLit = step(0.24, hash2D(cellId.add(vec2(uSeed, 19.4))));
   const bulbCol = mix(cCoolWindow, cWarmWindow, step(float(1.0).sub(uWarmth), hash2D(cellId.add(vec2(uSeed.mul(1.9), 83.1)))));
   // Window AC units (~12% of upper-floor windows), none in the floor the band course covers
@@ -2272,7 +2275,8 @@ function createBillboardMaterial(themeIndex = 0) {
       .mul(float(1.18).add(spotlightSweep))
       .add(basePoster.mul(tickerPulse));
 
-    return animatedCol.mul(ledScanX).mul(ledScanY).mul(borderMask);
+    // (brighter at night, glowing against the dark street)
+    return animatedCol.mul(ledScanX).mul(ledScanY).mul(borderMask).mul(cityUniforms.uNightLit.mul(2.0).add(1.0));
   })();
 
   _billboardCache.set(key, mat);

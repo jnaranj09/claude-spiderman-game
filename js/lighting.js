@@ -105,24 +105,25 @@ const TIME_PRESETS = {
     cloudCoverage: 0.40,
     cloudDensity: 0.42,
     skyExposure: 0.115,
-    nightFactor: 0.28
+    nightFactor: 0.28,
+    nightLit: 0.1
   },
   midnight: {
     id: 'midnight',
     name: 'Manhattan Night · 23:00',
     sunDir: new THREE.Vector3(0.42, 0.68, -0.60).normalize(),
-    sunColor: 0x8cb0e8,
-    sunIntensity: 1.45,
-    hemiSky: 0x263a62,
-    hemiGround: 0x382e36,
-    hemiIntensity: 0.72,
-    skyTop: 0x060c1a,
-    skyHorizon: 0x182640,
-    fogColor: 0x0c1424,
+    sunColor: 0x9cb8f0,
+    sunIntensity: 2.2,
+    hemiSky: 0x4a6aa8,
+    hemiGround: 0x4a3a40,
+    hemiIntensity: 1.3,
+    skyTop: 0x0a1630,
+    skyHorizon: 0x2a3a66,
+    fogColor: 0x1c2648,
     fogDensity: 0.00036,
-    interiorGlow: 1.55,
+    interiorGlow: 2.1,
     roadWetness: 0.62,
-    envIntensity: 0.30,
+    envIntensity: 0.5,
     canyonBounce: 0.18,
     turbidity: 4.0,
     rayleigh: 1.5,
@@ -131,7 +132,8 @@ const TIME_PRESETS = {
     cloudCoverage: 0.22,
     cloudDensity: 0.25,
     skyExposure: 0.022,
-    nightFactor: 0.86
+    nightFactor: 0.86,
+    nightLit: 0.28
   }
 };
 
@@ -172,7 +174,7 @@ class LightingSystem {
     // Calibrate SkyMesh raw radiance (EE=1000 * 0.04) into standard exposure=1.0 HDR range
     this.uSkyExposure = uniform(0.148);
     this.uNightFactor = uniform(0.0);
-    this.uNightSkyColor = uniform(new THREE.Color(0x0b1528));
+    this.uNightSkyColor = uniform(new THREE.Color(0x13244a));
     const rawSkyNode = this.sky.material.colorNode;
     this.sky.material.colorNode = Fn(() => {
       const raw = rawSkyNode;
@@ -299,6 +301,7 @@ class LightingSystem {
     cityUniforms.uSkyHorizonColor.value.setHex(p.skyHorizon);
     cityUniforms.uSkySunDir.value.copy(p.sunDir);
     cityUniforms.uInteriorGlow.value = p.interiorGlow;
+    cityUniforms.uNightLit.value = p.nightLit || 0;
     cityUniforms.uRoadWetness.value = p.roadWetness;
     if (cityUniforms.uCanyonBounce) {
       cityUniforms.uCanyonBounce.value = p.canyonBounce;
