@@ -54,7 +54,8 @@ import {
   sqrt,
   specularColor,
   specularColorBlended,
-  specularF90
+  specularF90,
+  diffuseColor
 } from 'three/tsl';
 import {
   CENTRAL_PARK_BOUNDS,
@@ -87,6 +88,43 @@ const cityUniforms = {
   uRoadWetness: uniform(0.38),
   uCanyonBounce: uniform(0.52)
 };
+
+/**
+ * Far street-lamp light. Only the nearest street lamps are real lights (a few dozen spot & point lights near the
+ * camera, see street-details.js); past them the street would go dark. So the light of every lamp in the city is baked
+ * into one top-down map, irradiance on the ground worked out with exactly the falloff, cone and intensity three.js
+ * uses for the real lights, and the ground materials (road, paint, sidewalk, curb) add it, lit by their own colour as
+ * a real light would (diffuse only), where the real lights fade out. Far streets come out as bright as near ones,
+ * not brighter: it's the same light, cross-faded over the same distances.
+ * The map: R the cobra-head luminaires', G the post-top globes' & other point lights', stored as sqrt(E / FAR_LAMP_MAX).
+ */
+const FAR_LAMP_MAX = 48;
+const farLampLight = {
+  // (a placeholder until street-details.js bakes the map into it, before the first frame)
+  texture: new THREE.DataTexture(new Uint8Array([0, 0]), 1, 1, THREE.RGFormat),
+  uMin: uniform(new THREE.Vector2(0, 0)),
+  uSize: uniform(new THREE.Vector2(1, 1)),
+  // Distances (m) the real lights fade out over (see street-details.js update): from 0.62 x these to these
+  uCobraRange: uniform(1e9),
+  uPointRange: uniform(1e9),
+  // The lamps' night dimmer (0 by day)
+  uLampScale: uniform(0)
+};
+function addFarLampLight(mat) {
+  const prev = mat.emissiveNode;
+  mat.emissiveNode = Fn(() => {
+    const e = texture(farLampLight.texture, positionWorld.xz.sub(farLampLight.uMin).div(farLampLight.uSize)).rg;
+    const irr = e.mul(e).mul(FAR_LAMP_MAX);
+    const d = length(positionWorld.sub(cameraPosition));
+    const cobra = smoothstep(farLampLight.uCobraRange.mul(0.62), farLampLight.uCobraRange, d);
+    const point = smoothstep(farLampLight.uPointRange.mul(0.62), farLampLight.uPointRange, d);
+    const light = color(0xffe8c2).mul(irr.x.mul(cobra)).add(color(0xffe0aa).mul(irr.y.mul(point)));
+    // (Lambert, as three.js lights a diffuse surface: albedo / pi x irradiance; only on faces looking up)
+    const lit = diffuseColor.rgb.mul(light).mul(farLampLight.uLampScale).mul(max(normalWorld.y, 0.0)).mul(1 / Math.PI);
+    return prev ? vec3(prev).add(lit) : lit;
+  })();
+  return mat;
+}
 
 // Fast deterministic 2D -> 1D hash in TSL
 const hash2D = Fn(([p]) => {
@@ -1759,6 +1797,7 @@ function createRoadSurfaceMaterial() {
     return reflectCol.mul(max(puddle, film.mul(0.35))).mul(roadFresnel).mul(cityUniforms.uInteriorGlow).mul(0.07);
   })();
 
+  addFarLampLight(mat);
   return mat;
 }
 
@@ -1809,6 +1848,7 @@ function createRoadPaintMaterial() {
   mat.roughnessNode = mix(mix(float(0.62), float(0.42), wet.z), float(0.2), wet.y);
   mat.aoNode = canyonSkyAONode();
 
+  addFarLampLight(mat);
   return mat;
 }
 
@@ -1883,6 +1923,7 @@ function createSidewalkMaterial() {
     return bumpNormal(height);
   })();
 
+  addFarLampLight(mat);
   return mat;
 }
 
@@ -1926,6 +1967,7 @@ function createCurbMaterial() {
     return bumpNormal(grain.mul(detail));
   })();
 
+  addFarLampLight(mat);
   return mat;
 }
 
@@ -3019,6 +3061,8 @@ function createCarFlareMaterial() {
 }
 
 export {
+  farLampLight,
+  FAR_LAMP_MAX,
   cityUniforms,
   WALL_KINDS,
   filteredPulse,

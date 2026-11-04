@@ -150,6 +150,16 @@ through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.
 
 Add `?debug` to the URL to expose the simulation as `window.spiderDebug` (the play tests use it).
 
+## Street lights at night
+
+Only the few dozen street lamps nearest the camera are real lights (they light everything round them, cars and
+Spider-Man included, with reflections). Past them, every lamp in the city has its light on the ground baked into one
+top-down light map, worked out with exactly the same intensity, cone and falloff as the real lights, which the road,
+road markings, sidewalks and curbs add where the real lights fade out. So the streets stay lit into the distance,
+and a far street is never brighter than a near one: it's the same light, cross-faded over the same distances. How
+bright and far-reaching the lamps are is `COBRA_LIGHT` (and `POINT_LIGHT_BOOST`) in `js/street-details.js`, shared
+by both.
+
 ## Tests
 
 ```sh

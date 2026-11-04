@@ -14,7 +14,7 @@ import {
   BLOCKS,
   LANDMARK_SITES
 } from './city-config.js';
-import { cityUniforms, createSteamMaterial, createTreeGrateMaterial, createGodRayMaterial } from './tsl-materials.js';
+import { cityUniforms, createSteamMaterial, createTreeGrateMaterial, createGodRayMaterial, farLampLight, FAR_LAMP_MAX } from './tsl-materials.js';
 import { createTreeField } from './trees.js';
 import { pavedPlazaRects, centralParkClearings, parkTreeSites, sidewalkBlocks, parkLampSites } from './city-grid.js';
 import { bryantParkLawn } from './landmarks.js';
@@ -1099,7 +1099,7 @@ function buildStreetDetails(scene) {
   const streetlightSpotPool = [];
   for (let i = 0; i < STREETLIGHT_SPOT_POOL; i++) {
     // Cobra-head LED luminaire: wide downward spread (0.96 rad half-angle) illuminating both road and sidewalk
-    const spot = new THREE.SpotLight(0xffe8c2, 0, 25, 0.96, 0.82, 1.25);
+    const spot = new THREE.SpotLight(0xffe8c2, 0, COBRA_LIGHT.distance, COBRA_LIGHT.angle, COBRA_LIGHT.penumbra, COBRA_LIGHT.decay);
     spot.position.set(0, -1000, 0);
     spot.target.position.set(0, -1001, 0);
     streetLightsGroup.add(spot, spot.target);
@@ -1108,11 +1108,17 @@ function buildStreetDetails(scene) {
 
   const streetPointPool = [];
   for (let i = 0; i < STREET_POINT_POOL; i++) {
-    const pt = new THREE.PointLight(0xffe4b4, 0, 12, 1.35);
+    const pt = new THREE.PointLight(0xffe4b4, 0, 12, POINT_LIGHT_DECAY);
     pt.position.set(0, -1000, 0);
     streetLightsGroup.add(pt);
     streetPointPool.push(pt);
   }
+
+  // Far lamp light: every lamp's light on the ground, baked once with the real lights' own formulas (three.js's
+  // physical spot & point lights: inverse-power falloff with a smooth cutoff, and the spot's soft-edged cone), so the
+  // ground materials can carry on lighting the streets past the few dozen real lights near the camera (see
+  // addFarLampLight in tsl-materials.js). Light per lamp at intensity 1 x its own, before the night dimmer.
+  bakeFarLampLight(cobraLampSites, streetPointSites);
 
   // Source positions are static. Query nearby cells instead of scanning the island every frame.
   const LIGHT_CELL = 128;
@@ -1165,6 +1171,7 @@ function buildStreetDetails(scene) {
     const glow = cityUniforms && cityUniforms.uInteriorGlow ? cityUniforms.uInteriorGlow.value : 0.48;
     // Streetlights fade in smoothly as dusk approaches (matching lampBulbGlow smoothstep(0.4, 1.1, uInteriorGlow))
     const lampScale = Math.min(1.25, Math.max(0.0, (glow - 0.36) * 1.15));
+    farLampLight.uLampScale.value = lampScale;
     if (lampScale <= 0.001) {
       for (let i = 0; i < STREETLIGHT_SPOT_POOL; i++) {
         streetlightSpotPool[i].intensity = 0;
@@ -1182,6 +1189,7 @@ function buildStreetDetails(scene) {
     const cobraCutoff = cobraCount > STREETLIGHT_SPOT_POOL
       ? Math.min(STREETLIGHT_DIST, activeCobras[STREETLIGHT_SPOT_POOL]._effDist)
       : STREETLIGHT_DIST;
+    farLampLight.uCobraRange.value = cobraCutoff;
     const spotUsed = Math.min(cobraCount, STREETLIGHT_SPOT_POOL);
     for (let i = 0; i < spotUsed; i++) {
       const s = activeCobras[i];
@@ -1190,7 +1198,7 @@ function buildStreetDetails(scene) {
       spot.position.set(s.x, s.y, s.z);
       spot.target.position.set(s.tx, 0.0, s.tz);
       spot.target.updateMatrixWorld();
-      spot.intensity = 88.0 * lampScale * fade;
+      spot.intensity = COBRA_LIGHT.intensity * lampScale * fade;
     }
     for (let i = spotUsed; i < STREETLIGHT_SPOT_POOL; i++) {
       streetlightSpotPool[i].intensity = 0;
@@ -1202,6 +1210,7 @@ function buildStreetDetails(scene) {
     const ptCutoff = ptCount > STREET_POINT_POOL
       ? Math.min(STREET_POINT_DIST, activePoints[STREET_POINT_POOL]._effDist)
       : STREET_POINT_DIST;
+    farLampLight.uPointRange.value = ptCutoff;
     const ptUsed = Math.min(ptCount, STREET_POINT_POOL);
     for (let i = 0; i < ptUsed; i++) {
       const s = activePoints[i];
@@ -1210,7 +1219,7 @@ function buildStreetDetails(scene) {
       pt.color.setHex(s.color);
       pt.position.set(s.x, s.y, s.z);
       pt.distance = s.dist;
-      pt.intensity = s.intensity * lampScale * fade;
+      pt.intensity = s.intensity * POINT_LIGHT_BOOST * lampScale * fade;
     }
     for (let i = ptUsed; i < STREET_POINT_POOL; i++) {
       streetPointPool[i].intensity = 0;
@@ -1223,4 +1232,72 @@ function buildStreetDetails(scene) {
   return { group, footprints, signalClock, signalIntersections, audioSignals, lampSites: cobraLampSites, update };
 }
 
-export { buildStreetDetails };
+// The street lamps' light, shared by the real lights and the far lamp light map so the two always match.
+// Cobra-head LED luminaires: a wide downward spread (0.96 rad half-angle) lighting both road and sidewalk
+const COBRA_LIGHT = { intensity: 220, distance: 32, angle: 0.96, penumbra: 0.82, decay: 1.25 };
+// Post-top globes and the other point lights: their sites' own intensity and reach, times this
+const POINT_LIGHT_BOOST = 2;
+const POINT_LIGHT_DECAY = 1.35;
+
+// Bakes the far lamp light map (see the call in buildStreetDetails)
+function bakeFarLampLight(cobras, points) {
+  const all = cobras.concat(points);
+  if (all.length === 0) return;
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  for (const s of all) {
+    minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
+    minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z);
+  }
+  const pad = 40;
+  minX -= pad; minZ -= pad; maxX += pad; maxZ += pad;
+  // ~3 m texels (coarser if the city is bigger than 4096 of them): pools are 15-25 m across
+  const texel = Math.max(3, (maxX - minX) / 4096, (maxZ - minZ) / 4096);
+  const w = Math.ceil((maxX - minX) / texel), h = Math.ceil((maxZ - minZ) / texel);
+  const cobraE = new Float32Array(w * h), pointE = new Float32Array(w * h);
+  const splat = (out, s, intensity, cutoff, decay, spot) => {
+    const r = Math.sqrt(Math.max(0, cutoff * cutoff - s.y * s.y));
+    const i0 = Math.max(0, Math.floor((s.x - r - minX) / texel)), i1 = Math.min(w - 1, Math.ceil((s.x + r - minX) / texel));
+    const j0 = Math.max(0, Math.floor((s.z - r - minZ) / texel)), j1 = Math.min(h - 1, Math.ceil((s.z + r - minZ) / texel));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        // (texel centre, on the ground)
+        const lx = s.x - (minX + (i + 0.5) * texel), ly = s.y, lz = s.z - (minZ + (j + 0.5) * texel);
+        const d = Math.hypot(lx, ly, lz);
+        if (d >= cutoff) continue;
+        const ratio = d / cutoff;
+        const falloff = (1 / Math.max(Math.pow(d, decay), 0.01)) * Math.pow(Math.max(0, 1 - ratio * ratio * ratio * ratio), 2);
+        let cone = 1;
+        if (spot) {
+          const angleCos = (lx * spot.x + ly * spot.y + lz * spot.z) / d;
+          const t = Math.min(1, Math.max(0, (angleCos - spot.coneCos) / (spot.penumbraCos - spot.coneCos)));
+          cone = t * t * (3 - 2 * t);
+        }
+        out[j * w + i] += intensity * falloff * cone * (ly / d);
+      }
+    }
+  };
+  // (exactly as the real lights: COBRA_LIGHT, and each point site's own intensity & reach)
+  const coneCos = Math.cos(COBRA_LIGHT.angle), penumbraCos = Math.cos(COBRA_LIGHT.angle * (1 - COBRA_LIGHT.penumbra));
+  for (const s of cobras) {
+    const dx = s.x - s.tx, dy = s.y, dz = s.z - s.tz, l = Math.hypot(dx, dy, dz);
+    splat(cobraE, s, COBRA_LIGHT.intensity, COBRA_LIGHT.distance, COBRA_LIGHT.decay, { x: dx / l, y: dy / l, z: dz / l, coneCos, penumbraCos });
+  }
+  for (const s of points) splat(pointE, s, s.intensity * POINT_LIGHT_BOOST, s.dist, POINT_LIGHT_DECAY, null);
+  const data = new Uint8Array(w * h * 2);
+  for (let k = 0; k < w * h; k++) {
+    data[k * 2] = Math.round(Math.sqrt(Math.min(1, cobraE[k] / FAR_LAMP_MAX)) * 255);
+    data[k * 2 + 1] = Math.round(Math.sqrt(Math.min(1, pointE[k] / FAR_LAMP_MAX)) * 255);
+  }
+  const tex = farLampLight.texture;
+  tex.image = { data, width: w, height: h };
+  tex.format = THREE.RGFormat;
+  tex.type = THREE.UnsignedByteType;
+  tex.magFilter = tex.minFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  farLampLight.uMin.value.set(minX, minZ);
+  farLampLight.uSize.value.set(w * texel, h * texel);
+}
+
+export { buildStreetDetails, bakeFarLampLight, COBRA_LIGHT };
