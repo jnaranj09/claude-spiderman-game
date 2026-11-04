@@ -23,9 +23,15 @@ import {
   clamp,
   mix,
   step,
-  smoothstep
+  smoothstep,
+  dot,
+  pow,
+  normalView,
+  positionViewDirection,
+  diffuseColor
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { cityUniforms } from './tsl-materials.js';
 
 // js/pedestrians.js
 // Skinned, procedurally animated New Yorkers: the sidewalk crowds (traffic.js), the player's pedestrian and the
@@ -968,6 +974,14 @@ function createSpiderSuitMaterial(pose = null) {
   })();
 
   mat.roughnessNode = Fn(() => float(0.5))();
+  // At night the hero gets a little light of his own, as a film's would: a soft fill so the suit's red and blue still
+  // read in the dark, and a cool moonlit rim round his outline against the night (nothing by day)
+  mat.emissiveNode = Fn(() => {
+    const night = smoothstep(0.6, 1.6, cityUniforms.uInteriorGlow);
+    const facing = max(dot(normalView, positionViewDirection), 0.0);
+    const rim = pow(float(1.0).sub(facing), 2.5);
+    return diffuseColor.rgb.mul(0.22).add(color(0x8fb0ff).mul(rim.mul(0.35))).mul(night);
+  })();
   return mat;
 }
 
