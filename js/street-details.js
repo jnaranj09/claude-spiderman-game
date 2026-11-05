@@ -1236,12 +1236,13 @@ function buildStreetDetails(scene) {
 // Cobra-head LED luminaires: a wide spread lighting both road and sidewalk
 // (aimed well out into the road, with an even spread across most of the cone and a long reach, like a real cobra
 // head, which throws its light across the street rather than pooling it under the pole)
-const COBRA_LIGHT = { color: 0xffd49a, intensity: 110, distance: 45, angle: 1.1, penumbra: 0.35, decay: 1.0 };
+const COBRA_LIGHT = { color: 0xffd49a, intensity: 45, distance: 45, angle: 1.1, penumbra: 0.35, decay: 1.0 };
 // Post-top globes and the other point lights: their sites' own intensity and reach, times this
-const POINT_LIGHT_BOOST = 3;
+const POINT_LIGHT_BOOST = 0.2;
 // ...and their reach times this (the globes along a cross street have to light the middle of the road too)
 const POINT_LIGHT_REACH = 1.6;
-const POINT_LIGHT_DECAY = 1.1;
+// (a slow falloff: about as bright across the street as at its foot, rather than a blinding glare round the pole)
+const POINT_LIGHT_DECAY = 0.4;
 
 // Bakes the far lamp light map (see the call in buildStreetDetails)
 function bakeFarLampLight(cobras, points) {
@@ -1304,4 +1305,4 @@ function bakeFarLampLight(cobras, points) {
   farLampLight.uSize.value.set(w * texel, h * texel);
 }
 
-export { buildStreetDetails, bakeFarLampLight, COBRA_LIGHT };
+export { buildStreetDetails, bakeFarLampLight, COBRA_LIGHT, POINT_LIGHT_BOOST, POINT_LIGHT_REACH, POINT_LIGHT_DECAY };
