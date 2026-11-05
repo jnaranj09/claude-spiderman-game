@@ -1191,3 +1191,21 @@ test('the swing cam is told to stay low climbing off the ground, then to ride hi
   assert.equal(ent.swingCam, 'swing');
   assert.equal(ent.swingRise, 1, 'up high, looking down');
 });
+
+test('steering on the web swings him round without costing the swing its speed or its push', () => {
+  const swing = (keys) => {
+    const controllers = world(avenue(150));
+    controllers.cameraYaw = 0;
+    const ent = spiderEntity(-6, 50, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 18);
+    controllers.keys.up = true;
+    let steps = 0;
+    while (ent.web.phase !== 'attached' && steps++ < 300) spider.updateSpiderMan(controllers, ent, 1 / 60);
+    Object.assign(controllers.keys, keys);
+    for (let i = 0; i < 45; i++) spider.updateSpiderMan(controllers, ent, 1 / 60);
+    return ent.velocity.length();
+  };
+  const straight = swing({ forward: 1 }), steered = swing({ forward: 0.8, left: 0.6 });
+  assert.ok(steered > straight * 0.92, `steering ${steered.toFixed(1)} m/s against straight ${straight.toFixed(1)} m/s`);
+});

@@ -97,6 +97,7 @@ const GLIDE_CLIMB = 0.4;         // rad: how far up it comes with the stick pull
 const GLIDE_STALL = 14;          // m/s: near this the wings can't hold the nose up and it drops
 const GLIDE_PITCH_RATE = 1.6;    // rad/s: how fast the path follows the nose (slower near a stall)
 const GLIDE_TURN = 1.6;          // rad/s banking round
+const SWING_LONG_PUSH = 0.6;     // extra share of the push down the arc on a long web (none at 15 m, all of it from 45 m)
 const WHIP_ANGLE = 1.0;          // rad: a held web with the stick this far off his line of travel whips round a corner
 const WHIP_REACH = 32;           // m: how far ahead that corner can be...
 const WHIP_RADIUS_MIN = 4;       // ...and how far across, in towards the turn: the radius he swings round it
@@ -1059,6 +1060,11 @@ function clampSpeed(v) {
   if (s > MAX_SPEED) v.multiplyScalar(MAX_SPEED / s);
 }
 
+function smoothstep01(t) {
+  const x = Math.max(0, Math.min(1, t));
+  return x * x * (3 - 2 * x);
+}
+
 // Signed shortest angle from b to a
 function angleDiff(a, b) {
   let d = a - b;
@@ -1585,6 +1591,7 @@ function updateSpiderMan(controllers, ent, dt) {
     }
   } else if (ent.state === 'air' || ent.state === 'swing') {
     v.y -= GRAVITY * dt;
+
     // Steer the momentum towards where the stick points; ahead it pumps, against it brakes
     let pump = 0, brake = 0;
     // Diving (clicked on with the stick): head first, falling fast, still steering a little with the sides. A web
@@ -1607,8 +1614,26 @@ function updateSpiderMan(controllers, ent, dt) {
       const travel = travelDirection(ent);
       const diff = angleDiff(wantYaw, Math.atan2(travel.x, travel.z));
       steer = Math.max(-1, Math.min(1, diff * 1.5)) * stickMag;
-      steerVelocity(ent, steer, dt);
-      pump = stickMag * Math.max(0, Math.cos(diff));
+      if (ent.state === 'swing' && web.phase === 'attached') {
+        // On the web, steering swings him round along the arc without losing any speed: turned as in the air, the
+        // velocity swung out off the arc and the web took that part away
+        const speed = v.length();
+        steerVelocity(ent, steer, dt);
+        _offset.set(p.x - web.pivot.x, p.y + 1.0 - web.pivot.y, p.z - web.pivot.z);
+        const l = _offset.length();
+        if (l > 1e-4) {
+          _offset.multiplyScalar(1 / l);
+          const radial = v.dot(_offset);
+          if (radial > 0) v.addScaledVector(_offset, -radial);
+          const now = v.length();
+          if (now > 1e-4) v.multiplyScalar(speed / now);
+        }
+        // (and any stick roughly ahead pumps the swing fully, so steering doesn't cost the push down the arc)
+        pump = stickMag * smoothstep01((Math.cos(diff) + 0.2) / 0.7);
+      } else {
+        steerVelocity(ent, steer, dt);
+        pump = stickMag * Math.max(0, Math.cos(diff));
+      }
       brake = stickMag * Math.max(0, -Math.cos(diff)) * 0.5;
     } else if (!web.chosen) {
       // (not after a web from a chosen hand: then the line he takes is the player's, zigzag and all)
@@ -1668,9 +1693,17 @@ function updateSpiderMan(controllers, ent, dt) {
       // he's hung on into a swing back he only coasts, with a little drag, so it settles into a dangle
       if (!web.turned && v.x * web.dirX + v.z * web.dirZ > 0) {
         if (v.y <= 0) {
+          // (arcade: harder on a long web, which as a plain pendulum took ~4 s over half a 45 m arc and felt floaty;
+          // short ones are left as they were)
+          const long = Math.max(0, Math.min(1, (web.length - 15) / 30));
           const push = 4.5 + 6 * pump;
           v.x += dir.x * push * dt;
           v.z += dir.z * push * dt;
+          // (the extra only along the avenue or street he's swinging down, never across it: a zigzag stays as wide
+          // as it was)
+          const extra = push * SWING_LONG_PUSH * long;
+          if (Math.abs(dir.x) > Math.abs(dir.z)) v.x += Math.sign(dir.x) * extra * dt;
+          else v.z += Math.sign(dir.z) * extra * dt;
         }
       } else {
         v.multiplyScalar(1 - Math.min(1, 0.35 * dt));
