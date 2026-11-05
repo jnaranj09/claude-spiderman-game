@@ -1209,3 +1209,26 @@ test('steering on the web swings him round without costing the swing its speed o
   const straight = swing({ forward: 1 }), steered = swing({ forward: 0.8, left: 0.6 });
   assert.ok(steered > straight * 0.92, `steering ${steered.toFixed(1)} m/s against straight ${straight.toFixed(1)} m/s`);
 });
+
+test('the speed he falls at (or dives at) goes on into the next swing, with no drop as the web catches', () => {
+  for (const dive of [false, true]) {
+    const controllers = world(avenue(250));
+    controllers.cameraYaw = 0;
+    controllers.requestDive = function () { this.diveRequests = (this.diveRequests || 0) + 1; };
+    const ent = spiderEntity(-6, 220, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 0.1);
+    if (dive) controllers.requestDive();
+    step(controllers, ent, 2);
+    let last = ent.velocity.length(), worst = 0;
+    controllers.keys.webLeft = true;
+    for (let i = 0; i < 60; i++) {
+      spider.updateSpiderMan(controllers, ent, 1 / 60);
+      const now = ent.velocity.length();
+      worst = Math.max(worst, last - now);
+      last = now;
+    }
+    controllers.keys.webLeft = false;
+    assert.ok(worst < 0.8, `${dive ? 'diving' : 'falling'}: lost ${worst.toFixed(1)} m/s in a frame`);
+  }
+});

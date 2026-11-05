@@ -1590,6 +1590,7 @@ function updateSpiderMan(controllers, ent, dt) {
       p.y = ground;
     }
   } else if (ent.state === 'air' || ent.state === 'swing') {
+    const fallBefore = v.y;
     v.y -= GRAVITY * dt;
 
     // Steer the momentum towards where the stick points; ahead it pumps, against it brakes
@@ -1687,7 +1688,11 @@ function updateSpiderMan(controllers, ent, dt) {
       // Light air control and drag; terminal velocity keeps long falls readable
       if (pump && hs < 16) { v.x += dir.x * 7 * pump * dt; v.z += dir.z * 7 * pump * dt; }
       if (brake) { v.x *= 1 - Math.min(1, 1.5 * brake * dt); v.z *= 1 - Math.min(1, 1.5 * brake * dt); }
-      v.y = Math.max(v.y, ent.diving ? -DIVE_MAX_FALL : -42);
+      // (falling faster than that, out of a dive, eases back to it rather than losing the speed in one frame)
+      const terminal = ent.diving ? -DIVE_MAX_FALL : -42;
+      if (v.y < terminal) {
+        v.y = fallBefore >= terminal ? terminal : fallBefore + (terminal - fallBefore) * (1 - Math.exp(-dt * 1.2));
+      }
     } else if (ent.state === 'swing') {
       // A gentle push on the down stroke (more with the stick held forward) keeps chained swings flowing; once
       // he's hung on into a swing back he only coasts, with a little drag, so it settles into a dangle
@@ -1783,6 +1788,9 @@ function updateSpiderMan(controllers, ent, dt) {
       if (d > web.length && d > 1e-4) {
         const stretch = d - web.length;
         const radial = v.dot(_offset);
+        // (arcade: as the web catches, the speed he fell at goes on into the swing, turned along the arc, instead of
+        // being soaked up by the web)
+        const caughtAt = catching ? v.length() : 0;
         if (catching) {
           const firm = Math.min(1, web.swingTime / ROPE_CATCH);
           const k = ROPE_SOFT + (ROPE_STIFF - ROPE_SOFT) * firm * firm;
@@ -1797,6 +1805,10 @@ function updateSpiderMan(controllers, ent, dt) {
           p.set(_center.x, _center.y - 1.0, _center.z);
           const out = v.dot(_offset);
           if (out > 0) v.addScaledVector(_offset, -out);
+        }
+        if (catching) {
+          const now = v.length();
+          if (now > 1e-4 && now < caughtAt) v.multiplyScalar(caughtAt / now);
         }
       }
       // He hangs on for as long as the button is held (it's the release that flings him on); passing the bottom
