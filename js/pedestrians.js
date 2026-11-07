@@ -581,15 +581,15 @@ function shoeSkin(z, k) {
 // The hero's build, as multipliers on the base (male) profiles. Torso: [rx, rzFront, rzBack] per TORSO row
 const HERO = {
   torso: [
-    [1.3, 1.25, 1.25], // neck: thick, running into the traps
-    [1.45, 1.22, 1.3],
-    [1.7, 1.15, 1.35],
-    [1.6, 1.12, 1.3], // traps sloping down to the shoulders
-    [1.14, 1.1, 1.2],
-    [1.0, 1.16, 1.16], // shoulders (the arms' deltoids give the width)
-    [1.1, 1.22, 1.2], // pecs & lats
-    [1.26, 1.16, 1.2],
-    [1.18, 1.06, 1.1],
+    [1.12, 1.1, 0.95], // neck: a strong column, still a neck (its back in line under the skull)
+    [1.15, 1.1, 0.88],
+    [1.12, 1.06, 0.85],
+    [1.22, 1.04, 0.88], // traps sloping out to the shoulders (sideways, not back: no hump), below a visible neck
+    [1.2, 1.06, 0.95],
+    [1.0, 1.14, 0.98], // shoulders (the arms' deltoids give the width)
+    [1.1, 1.22, 0.98], // pecs & lats (wide, not deep: a flat back)
+    [1.26, 1.16, 0.98],
+    [1.18, 1.06, 0.98],
     [0.97, 0.98, 0.98], // narrow waist
     [0.93, 0.96, 0.95],
     [0.94, 0.96, 0.95],
@@ -601,8 +601,8 @@ const HERO = {
 };
 // Arms by distance from the shoulder: round deltoids, big biceps, a slimmer elbow, big forearms
 function heroArm(d) {
-  if (d < 0) return 1.25;
-  if (d < 0.11) return 1.42;
+  if (d < 0) return 1.2;
+  if (d < 0.11) return 1.32;
   if (d < 0.2) return 1.32;
   if (d < 0.25) return 1.2;
   if (d < 0.34) return 1.1;
@@ -765,7 +765,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
     const f = HEAD.f[i];
     headRows.push({
       pts: hero
-        ? ringY(m[0], m[1] * headK(m[0]), m[2] * (headK(m[0]) * 0.5 + 0.5), m[3] * headK(m[0]), m[4], nHead, 2, hi ? maskBump(m[0]) : null)
+        ? ringY(m[0], m[1] * headK(m[0]), m[2] * (headK(m[0]) * 0.5 + 0.5), m[3] * headK(m[0]), m[4] - 0.012, nHead, 2, hi ? maskBump(m[0]) : null)
         : ringY(m[0], m[1], m[2], m[3], m[4], nHead, 2, hi ? headBump(m[0]) : null),
       ptsF: ringY(f[0], f[1], f[2], f[3], f[4], nHead, 2, hi ? headBump(m[0]) : null),
       skin: [BONE.HEAD, BONE.HEAD, 0],
@@ -991,6 +991,9 @@ function dressPerson(mat, vInfo, isPart, lane, partOf) {
 
 // Share of the ambient light the suit takes (less than a real surface: the cartoon's shadow tones are deep)
 const AMBIENT_SHARE = 2.0;
+// The lenses (bind-pose metres): centre (x either side, y), half length, half heights above & below the axis, and
+// the tilt of the axis (outer end up)
+const LENS = { x: 0.05, y: 1.636, half: 0.039, top: 0.022, bottom: 0.029, tilt: 0.6 };
 const SUIT = {
   red: 0xb42412,
   blue: 0x164cc6,
@@ -1068,15 +1071,15 @@ function suitPattern() {
 
   // Webbing over the red: straight strands with only a slight sag between them, as drawn in the cartoon
   // head: strands radiating from between the eyes round to the back of the head, crossed by rings
-  const hv = q.sub(vec3(0.0, 1.626, -0.01));
+  const hv = q.sub(vec3(0.0, 1.626, -0.022));
   const hr = length(hv);
   const hPhi = atan(hv.y, hv.x);
   const hTheta = acos(clamp(hv.z.div(hr), -1.0, 1.0));
   const hN = 14;
   const hSpokes = toGrid(hPhi, TAU / hN).mul(length(hv.xy));
-  const hSag = abs(sin(hPhi.mul(hN / 2))).mul(0.04);
-  const hRings = toGrid(hTheta.sub(hSag).sub(0.1), 0.4).mul(hr);
-  const headWeb = max(inkLine(hSpokes, SUIT.line).mul(step(mix(0.012, 0.03, step(hv.z, 0.0)), length(hv.xy))), inkLine(hRings, SUIT.line));
+  const hSag = abs(sin(hPhi.mul(hN / 2))).mul(0.04).mul(smoothstep(0.35, 0.9, hTheta));
+  const hRings = toGrid(hTheta.sub(hSag).sub(0.44), 0.4).mul(hr).add(step(hTheta, 0.24));
+  const headWeb = max(inkLine(hSpokes, SUIT.line).mul(step(mix(0.0015, 0.03, step(hv.z, 0.0)), length(hv.xy))), inkLine(hRings, SUIT.line));
   // torso: strands radiating from the chest spider (front) and round it on the back, rings
   const tv = vec2(q.x, q.y.sub(1.3));
   const tr = length(tv);
@@ -1099,18 +1102,22 @@ function suitPattern() {
   const footWeb = max(inkLine(toGrid(q.z.add(0.02), 0.05), SUIT.line), inkLine(abs(q.x.sub(side.mul(HIP_X))), SUIT.line))
     .mul(step(0.03, q.y));
 
-  // Lenses: big almonds, nearly meeting over the nose: a straight top edge rising to a point at the temple, the inner
-  // point low by the nose, a round bottom edge; pale blue-white in a thick black rim
-  const faceFront = smoothstep(0.015, 0.04, q.z).mul(head);
-  const ax = abs(q.x);
-  const x0 = 0.008;
-  const x1 = 0.086;
-  const t = clamp(ax.sub(x0).div(x1 - x0), 0.0, 1.0);
-  const yTop = float(1.628).add(t.mul(0.027)).add(sin(t.mul(Math.PI)).mul(0.006));
-  const yBot = yTop.sub(pow(sin(pow(t, 0.8).mul(Math.PI)), 0.6).mul(0.066));
-  const lensD = max(max(q.y.sub(yTop), yBot.sub(q.y)), max(ax.sub(x1), float(x0).sub(ax)));
+  // Lenses: big, tilted up towards the temples, a little apart over the nose: a straight top edge rising to a sharp
+  // corner at the temple, a tall outer end, the bottom edge curving up to the inner point low by the nose; pale
+  // blue-white in a thick black rim
+  const faceFront = smoothstep(-0.03, -0.01, q.z).mul(head);
+  // In each lens's own frame: u along it (from the nose out & up, tilted LENS.tilt), v across it
+  const ex = abs(q.x).sub(LENS.x);
+  const ey = q.y.sub(LENS.y);
+  const eu = ex.mul(Math.cos(LENS.tilt)).add(ey.mul(Math.sin(LENS.tilt)));
+  const ev = ey.mul(Math.cos(LENS.tilt)).sub(ex.mul(Math.sin(LENS.tilt)));
+  const k = clamp(abs(eu).div(LENS.half), 0.0, 1.0);
+  // half-height along it: a point at the inner end, a blunt end at the temple; a flatter top edge than bottom
+  const across = mix(float(1.0).sub(pow(k, 1.3)), pow(max(float(1.0).sub(pow(k, 3.0)), 0.0), 0.6), step(0.0, eu));
+  const height = across.mul(mix(float(LENS.bottom), float(LENS.top), step(0.0, ev)));
+  const lensD = max(abs(ev).sub(height), abs(eu).sub(LENS.half));
   const lens = fillSDF(lensD).mul(faceFront);
-  const rim = fillSDF(lensD.sub(0.0055)).mul(faceFront);
+  const rim = fillSDF(lensD.sub(0.0075)).mul(faceFront);
 
   // Spiders: small and black on the chest (thin legs), big and red on the blue back (a round body, short thick legs
   // with hooked ends)
