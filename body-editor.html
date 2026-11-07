@@ -40,6 +40,8 @@
   .status[data-state="warn"] { color: var(--suit-red-ink); border-color: color-mix(in srgb, var(--suit-red) 50%, var(--rule)); }
 
   .parts { max-width: 1180px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .parts .look { margin-left: auto; }
+  .parts .look button { font: 500 13px/1 var(--body); text-transform: none; letter-spacing: 0; }
   .parts button { font-family: var(--display); font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 14px; }
 
   .bench { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -116,6 +118,10 @@
   <button data-part="torso" aria-pressed="false">Neck &amp; torso</button>
   <button data-part="arm" aria-pressed="false">Arms</button>
   <button data-part="leg" aria-pressed="false">Legs</button>
+  <div class="seg look" role="group" aria-label="What he wears">
+    <button data-look="plain" aria-pressed="true">Plain cloth</button>
+    <button data-look="suit" aria-pressed="false">Suit</button>
+  </div>
 </nav>
 
 <main class="bench">
@@ -226,7 +232,10 @@ const FRAMES = {
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0e1530);
 let geometry = buildPersonGeometry(1, true, body);
-const suit = new THREE.Mesh(geometry, createSpiderSuitMaterial());
+// What he wears: one plain matte cloth (smooth light & shade, so the form reads) or the game's suit
+const suitMaterial = createSpiderSuitMaterial();
+const plainMaterial = new THREE.MeshStandardNodeMaterial({ color: 0x8f9bb8, roughness: 0.82, metalness: 0 });
+const suit = new THREE.Mesh(geometry, plainMaterial);
 const ink = new THREE.Mesh(geometry, createInkOutlineMaterial());
 suit.frustumCulled = ink.frustumCulled = false;
 scene.add(suit, ink);
@@ -234,6 +243,8 @@ const key = new THREE.DirectionalLight(0xffffff, 3.2);
 key.position.set(1.2, 2.8, 2.4);
 key.target.position.set(0, 1, 0);
 scene.add(key, key.target);
+// soft sky & ground light for the plain cloth (the suit's cel shading keeps its own flat ambient)
+scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x3a3f55, 1.1));
 
 let rebuildQueued = false;
 function rebuild() {
@@ -467,6 +478,11 @@ document.querySelectorAll('[data-board]').forEach((b) => b.addEventListener('cli
   board = b.dataset.board; selected = null;
   setPressed('[data-board]', 'board', board);
   placeBoardCam(); drawOverlay(); showRefForBoard(); dirty = true;
+}));
+document.querySelectorAll('[data-look]').forEach((b) => b.addEventListener('click', () => {
+  suit.material = b.dataset.look === 'suit' ? suitMaterial : plainMaterial;
+  setPressed('[data-look]', 'look', b.dataset.look);
+  dirty = true;
 }));
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
   if (b.dataset.view === 'whole') { orbit.whole = !orbit.whole; b.setAttribute('aria-pressed', String(orbit.whole)); }
