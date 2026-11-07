@@ -33,6 +33,9 @@ import {
   acos,
   dot,
   pow,
+  mod,
+  uniform,
+  uniformArray,
   output,
   positionWorld,
   BRDF_Lambert
@@ -991,9 +994,71 @@ function dressPerson(mat, vInfo, isPart, lane, partOf) {
 
 // Share of the ambient light the suit takes (less than a real surface: the cartoon's shadow tones are deep)
 const AMBIENT_SHARE = 2.0;
-// The lenses (bind-pose metres): centre (x either side, y), half length, half heights above & below the axis, and
-// the tilt of the axis (outer end up)
-const LENS = { x: 0.054, y: 1.634, half: 0.037, top: 0.023, bottom: 0.036, tilt: 0.6 };
+// The lenses: one outline, drawn on the face as seen from the front (bind-pose metres: x out from the middle of the
+// face, y up), mirrored for the other eye. A smooth closed curve through the points, sharp at those marked `corner`;
+// `rim` is the black rim's width. Drawn in the lens editor (tools/lens-editor.html), whose "Copy code" writes this.
+const LENS_OUTLINE = {
+  rim: 0.0075,
+  points: [
+    { x: 0.0235, y: 1.6131, corner: true },
+    { x: 0.0297, y: 1.6335, corner: false },
+    { x: 0.041, y: 1.653, corner: false },
+    { x: 0.0572, y: 1.6621, corner: false },
+    { x: 0.0752, y: 1.6621, corner: false },
+    { x: 0.0845, y: 1.6549, corner: false },
+    { x: 0.0914, y: 1.6383, corner: false },
+    { x: 0.0882, y: 1.6168, corner: false },
+    { x: 0.0743, y: 1.6043, corner: false },
+    { x: 0.049, y: 1.6053, corner: false }
+  ]
+};
+// The outline as the shader gets it: the curve sampled into a closed polygon (uniforms, so the editor can reshape it
+// live)
+const LENS_SAMPLES = 48;
+const lensPolygon = uniformArray(Array.from({ length: LENS_SAMPLES }, () => new THREE.Vector2()), 'vec2');
+const lensRim = uniform(LENS_OUTLINE.rim);
+
+// Points along a closed curve through `points` ({x, y, corner}): Hermite segments with Catmull-Rom tangents, a zero
+// tangent (a sharp corner) at the corner points
+function sampleLensOutline(points, count = LENS_SAMPLES) {
+  const n = points.length;
+  const tangent = (i) => {
+    const p = points[i];
+    if (p.corner) return [0, 0];
+    const a = points[(i + n - 1) % n];
+    const b = points[(i + 1) % n];
+    return [(b.x - a.x) * 0.5, (b.y - a.y) * 0.5];
+  };
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    const u = (k / count) * n;
+    const i = Math.floor(u);
+    const t = u - i;
+    const p0 = points[i % n];
+    const p1 = points[(i + 1) % n];
+    const m0 = tangent(i % n);
+    const m1 = tangent((i + 1) % n);
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+    out.push([
+      h00 * p0.x + h10 * m0[0] + h01 * p1.x + h11 * m1[0],
+      h00 * p0.y + h10 * m0[1] + h01 * p1.y + h11 * m1[1]
+    ]);
+  }
+  return out;
+}
+
+// Reshapes the lenses (on every suit material, live): { points, rim }
+function setLensOutline(outline) {
+  sampleLensOutline(outline.points).forEach(([x, y], i) => lensPolygon.array[i].set(x, y));
+  if (outline.rim !== undefined) lensRim.value = outline.rim;
+}
+setLensOutline(LENS_OUTLINE);
+
 const SUIT = {
   red: 0xb42412,
   blue: 0x164cc6,
@@ -1106,18 +1171,22 @@ function suitPattern() {
   // corner at the temple, a tall outer end, the bottom edge curving up to the inner point low by the nose; pale
   // blue-white in a thick black rim
   const faceFront = smoothstep(-0.03, -0.01, q.z).mul(head);
-  // In each lens's own frame: u along it (from the nose out & up, tilted LENS.tilt), v across it
-  const ex = abs(q.x).sub(LENS.x);
-  const ey = q.y.sub(LENS.y);
-  const eu = ex.mul(Math.cos(LENS.tilt)).add(ey.mul(Math.sin(LENS.tilt)));
-  const ev = ey.mul(Math.cos(LENS.tilt)).sub(ex.mul(Math.sin(LENS.tilt)));
-  const k = clamp(abs(eu).div(LENS.half), 0.0, 1.0);
-  // half-height along it: a point at the inner end, a blunt end at the temple; a flatter top edge than bottom
-  const across = mix(float(1.0).sub(pow(k, 1.45)), pow(max(float(1.0).sub(pow(k, 3.0)), 0.0), 0.55), step(0.0, eu));
-  const height = across.mul(mix(float(LENS.bottom), float(LENS.top), step(0.0, ev)));
-  const lensD = max(abs(ev).sub(height), abs(eu).sub(LENS.half));
+  // Signed distance to the outline (negative inside): the nearest of its edges, the sign from how many of them a
+  // ray out along +x crosses
+  const lp = vec2(abs(q.x), q.y);
+  let edge = float(1.0);
+  let inside = float(0.0);
+  for (let i = 0; i < LENS_SAMPLES; i++) {
+    const a = lensPolygon.element(i);
+    const b = lensPolygon.element((i + 1) % LENS_SAMPLES);
+    edge = min(edge, segment(lp, a, b));
+    const spans = abs(step(a.y, lp.y).sub(step(b.y, lp.y)));
+    const crossX = a.x.add(b.x.sub(a.x).mul(lp.y.sub(a.y)).div(b.y.sub(a.y).add(1e-7)));
+    inside = inside.add(spans.mul(step(lp.x, crossX)));
+  }
+  const lensD = edge.mul(float(1.0).sub(mod(inside, 2.0).mul(2.0)));
   const lens = fillSDF(lensD).mul(faceFront);
-  const rim = fillSDF(lensD.sub(0.0075)).mul(faceFront);
+  const rim = fillSDF(lensD.sub(lensRim)).mul(faceFront);
 
   // Spiders: small and black on the chest (thin legs), big and red on the blue back (a round body, short thick legs
   // with hooked ends)
@@ -1991,4 +2060,4 @@ class PersonRig {
   }
 }
 
-export { BONE as PERSON_BONES, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+export { BONE as PERSON_BONES, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
