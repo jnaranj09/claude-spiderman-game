@@ -25,7 +25,12 @@ import {
   step,
   smoothstep,
   normalWorld,
-  diffuseColor
+  diffuseColor,
+  positionLocal,
+  cameraPosition,
+  fwidth,
+  acos,
+  dot
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cityUniforms } from './tsl-materials.js';
@@ -568,6 +573,61 @@ function shoeSkin(z, k) {
   return [toe, toe, 0];
 }
 
+// The hero's build, as multipliers on the base (male) profiles. Torso: [rx, rzFront, rzBack] per TORSO row
+const HERO = {
+  torso: [
+    [1.3, 1.25, 1.25], // neck: thick, running into the traps
+    [1.3, 1.22, 1.22],
+    [1.22, 1.15, 1.2],
+    [1.32, 1.12, 1.25], // traps sloping down to the shoulders
+    [1.24, 1.1, 1.18],
+    [1.13, 1.16, 1.14], // shoulders
+    [1.14, 1.22, 1.12], // pecs & lats
+    [1.12, 1.16, 1.08],
+    [1.05, 1.06, 1.02],
+    [0.97, 0.98, 0.98], // narrow waist
+    [0.93, 0.96, 0.95],
+    [0.94, 0.96, 0.95],
+    [0.97, 0.98, 1.0],
+    [0.98, 1.0, 1.02],
+    [1.0, 1.0, 1.0],
+    [1.0, 1.0, 1.0]
+  ]
+};
+// Arms by distance from the shoulder: round deltoids, big biceps, a slimmer elbow, big forearms
+function heroArm(d) {
+  if (d < 0) return 1.18;
+  if (d < 0.11) return 1.3;
+  if (d < 0.2) return 1.32;
+  if (d < 0.25) return 1.2;
+  if (d < 0.34) return 1.1;
+  if (d < 0.42) return 1.24;
+  if (d < 0.5) return 1.12;
+  return 1.04;
+}
+// Legs by height: big thighs & calves, slim knees & ankles
+function heroLeg(y) {
+  if (y > 0.84) return 1.1;
+  if (y > 0.72) return 1.15;
+  if (y > 0.62) return 1.1;
+  if (y > 0.55) return 1.04;
+  if (y > 0.44) return 0.98;
+  if (y > 0.38) return 1.08;
+  if (y > 0.29) return 1.14;
+  if (y > 0.2) return 1.02;
+  return 0.92;
+}
+// A masked head: no nose or ears through the mask, just the chin's point and a hint of cheekbones
+function maskBump(y) {
+  const front = Math.PI / 2;
+  return (a) => {
+    let b = 0;
+    if (Math.abs(y - 1.592) < 0.02) b += 0.004 * lobe(a, front, 0.4);
+    if (Math.abs(y - 1.514) < 0.012) b += 0.006 * lobe(a, front, 0.35);
+    return b;
+  };
+}
+
 const _geometryCache = new Map();
 
 /**
@@ -575,9 +635,15 @@ const _geometryCache = new Map();
  * pose), skin (two bones & the weight of the second, part id), extra (girth direction, u along the loft) and the
  * femaleDelta & hairDelta morph targets.
  */
-function buildPersonGeometry(detail = 1) {
-  if (_geometryCache.has(detail)) return _geometryCache.get(detail);
+function buildPersonGeometry(detail = 1, hero = false) {
+  const cacheKey = hero ? `hero${detail}` : detail;
+  if (_geometryCache.has(cacheKey)) return _geometryCache.get(cacheKey);
   const hi = detail > 0;
+  // The hero's build (Spider-Man): a cartoon superhero's V (broad shoulders & lats, big chest, thick neck & traps,
+  // narrow waist), big arms and legs, slim ankles, a smooth masked head and bare feet in the suit
+  const torsoK = hero ? HERO.torso : null;
+  const armK = (d) => (hero ? heroArm(d) : 1);
+  const legK = (y) => (hero ? heroLeg(y) : 1);
   const keep = (row, flagIndex) => hi || row[flagIndex] === 1;
   const B = new BodyBuilder();
   const nTorso = hi ? 16 : 8;
@@ -590,8 +656,10 @@ function buildPersonGeometry(detail = 1) {
   // Torso & neck: a soft-cornered chest (superellipse), with a hint of bust on the female target
   const bust = (a) => 0.011 * (lobe(a, Math.PI / 2 - 0.5, 0.38) + lobe(a, Math.PI / 2 + 0.5, 0.38));
   const torsoRows = [];
-  TORSO.m.forEach((m, i) => {
-    if (!keep(m, 5)) return;
+  TORSO.m.forEach((m0, i) => {
+    if (!keep(m0, 5)) return;
+    const k = torsoK ? torsoK[i] : null;
+    const m = k ? [m0[0], m0[1] * k[0], m0[2] * k[1], m0[3] * k[2], m0[4]] : m0;
     const f = TORSO.f[i];
     const ex = m[0] > 1.5 ? 2 : m[0] > 1.0 ? 2.35 : 2.15;
     const fBump = m[0] < 1.37 && m[0] > 1.25 ? bust : null;
@@ -607,8 +675,10 @@ function buildPersonGeometry(detail = 1) {
   // Trouser legs
   SIDES.forEach((side, k) => {
     const rows = [];
-    LEG.m.forEach((m, i) => {
-      if (!keep(m, 5)) return;
+    LEG.m.forEach((m0, i) => {
+      if (!keep(m0, 5)) return;
+      const lk = legK(m0[0]);
+      const m = [m0[0], m0[1] * lk, m0[2] * lk, m0[3] * lk, m0[4]];
       const f = LEG.f[i];
       const cx = side * HIP_X;
       rows.push({
@@ -632,7 +702,10 @@ function buildPersonGeometry(detail = 1) {
     const sleeve = [];
     for (const r of ARM) {
       if (!keep(r, 5)) continue;
-      const [d, rx, rz, ox, oz] = r;
+      const [d, rx0, rz0, ox, oz] = r;
+      const ak = armK(d);
+      const rx = rx0 * ak;
+      const rz = rz0 * ak;
       const c = at(shM, d, ox, oz);
       sleeve.push({
         pts: limbRing(c, dir, rx, rz, nArm),
@@ -647,7 +720,10 @@ function buildPersonGeometry(detail = 1) {
     const twist = -side * HAND_TWIST;
     for (const r of HAND) {
       if (!keep(r, 4)) continue;
-      const [d, rx, rz, oz] = r;
+      const hk = hero ? 1.12 : 1;
+      const [d, rx0, rz0, oz] = r;
+      const rx = rx0 * hk;
+      const rz = rz0 * hk;
       hand.push({
         pts: limbRing(at(shM, d, 0, oz), dir, rx, rz, nHand, 2, twist),
         ptsF: limbRing(at(shF, d * 0.985, 0, oz), dir, rx * 0.88, rz * 0.88, nHand, 2, twist),
@@ -682,7 +758,9 @@ function buildPersonGeometry(detail = 1) {
     if (!keep(m, 5)) return;
     const f = HEAD.f[i];
     headRows.push({
-      pts: ringY(m[0], m[1], m[2], m[3], m[4], nHead, 2, hi ? headBump(m[0]) : null),
+      pts: hero
+        ? ringY(m[0], m[1] * 0.97, m[2], m[3] * 0.97, m[4], nHead, 2, hi ? maskBump(m[0]) : null)
+        : ringY(m[0], m[1], m[2], m[3], m[4], nHead, 2, hi ? headBump(m[0]) : null),
       ptsF: ringY(f[0], f[1], f[2], f[3], f[4], nHead, 2, hi ? headBump(m[0]) : null),
       skin: [BONE.HEAD, BONE.HEAD, 0],
       axis: null
@@ -690,28 +768,30 @@ function buildPersonGeometry(detail = 1) {
   });
   B.loft(headRows, PART.HEAD, { capStart: true, capEnd: true });
 
-  // Hair shell (volume morph) & long hair (length morph, folded away inside the head when short)
-  const shell = (hi ? [0.04, 0.22, 0.45, 0.68, 0.86, 1] : [0.04, 0.45, 1]).map((f) => ({
-    pts: hairShellRing(HEAD.m, f, 0.006, nHead),
-    ptsF: hairShellRing(HEAD.f, f, 0.006, nHead),
-    ptsH: hairShellRing(HEAD.m, f, 0.022, nHead),
-    skin: [BONE.HEAD, BONE.HEAD, 0],
-    axis: null
-  }));
-  B.loft(shell, PART.HAIR, { capStart: true });
-  const nLong = hi ? 14 : 6;
-  const longRows = (hi ? LONG_HAIR : LONG_HAIR.filter((r, i) => i % 2 === 0)).map(([y, rx, rzF, rzB, cz]) => ({
-    pts: ringY(1.64, 0.02, 0.02, 0.02, -0.03, nLong),
-    ptsL: ringY(y, rx, rzF, rzB, cz, nLong, 2.2),
-    skin: y > 1.56 ? [BONE.HEAD, BONE.HEAD, 0] : y > 1.47 ? [BONE.HEAD, BONE.CHEST, 0.4] : [BONE.HEAD, BONE.CHEST, 0.8],
-    axis: null
-  }));
-  B.loft(longRows, PART.LONG_HAIR, { capEnd: true });
+  // Hair shell (volume morph) & long hair (length morph, folded away inside the head when short); none under a mask
+  if (!hero) {
+    const shell = (hi ? [0.04, 0.22, 0.45, 0.68, 0.86, 1] : [0.04, 0.45, 1]).map((f) => ({
+      pts: hairShellRing(HEAD.m, f, 0.006, nHead),
+      ptsF: hairShellRing(HEAD.f, f, 0.006, nHead),
+      ptsH: hairShellRing(HEAD.m, f, 0.022, nHead),
+      skin: [BONE.HEAD, BONE.HEAD, 0],
+      axis: null
+    }));
+    B.loft(shell, PART.HAIR, { capStart: true });
+    const nLong = hi ? 14 : 6;
+    const longRows = (hi ? LONG_HAIR : LONG_HAIR.filter((r, i) => i % 2 === 0)).map(([y, rx, rzF, rzB, cz]) => ({
+      pts: ringY(1.64, 0.02, 0.02, 0.02, -0.03, nLong),
+      ptsL: ringY(y, rx, rzF, rzB, cz, nLong, 2.2),
+      skin: y > 1.56 ? [BONE.HEAD, BONE.HEAD, 0] : y > 1.47 ? [BONE.HEAD, BONE.CHEST, 0.4] : [BONE.HEAD, BONE.CHEST, 0.8],
+      axis: null
+    }));
+    B.loft(longRows, PART.LONG_HAIR, { capEnd: true });
+  }
 
   // Shoes, heel to toe (the toes bend at the ball of the foot)
   SIDES.forEach((side, k) => {
     const rows = SHOE.filter((r) => keep(r, 4)).map(([z, hw, top, sole]) => ({
-      pts: shoeRing(side * HIP_X, z, hw, top, sole, nShoe),
+      pts: hero ? shoeRing(side * HIP_X, z * 0.96, hw * 0.8, top * 0.85, sole * 0.92, nShoe) : shoeRing(side * HIP_X, z, hw, top, sole, nShoe),
       ptsF: shoeRing(side * HIP_X, z * 0.93, hw * 0.88, top * 0.92, sole, nShoe),
       skin: shoeSkin(z, k),
       axis: null
@@ -720,7 +800,7 @@ function buildPersonGeometry(detail = 1) {
   });
 
   const geo = B.build();
-  _geometryCache.set(detail, geo);
+  _geometryCache.set(cacheKey, geo);
   return geo;
 }
 
@@ -904,73 +984,162 @@ function dressPerson(mat, vInfo, isPart, lane, partOf) {
 }
 
 /**
- * Spider-Man's suit on the same body: red with raised black webbing over the head, chest, shoulders, gloves &
- * boots; blue flanks, upper arms & legs; big white lenses rimmed in black; a black spider on the chest. Painted
- * from the bind-pose position, so the pattern stays on the body whatever pose the bones take. With a crowd's
- * `pose` buffer it skins itself like the crowds do; without one it's for an ordinary THREE.SkinnedMesh (which
- * also draws on the WebGL 2 fallback, where the storage-buffer crowds can't).
+ * Spider-Man's suit, drawn like the 1990s animated series: flat bright red and blue, cel-shaded (a toon material:
+ * one hard step from lit to shadow, the shadow side keeping the colour, a deep maroon and navy), thin black webbing
+ * over the red radiating from the face and from the chest spider, big white lenses in thick black rims, a small black
+ * spider on the chest and a big red one on the blue back, a red belt, red boots and red stripes down the inner legs
+ * and the outer arms. Painted from the bind-pose position (and the loft's own axes), so the pattern stays on the body
+ * whatever pose the bones take. Meant for the hero geometry (buildPersonGeometry(detail, true)). With a crowd's
+ * `pose` buffer it skins itself like the crowds do; without one it's for an ordinary THREE.SkinnedMesh (which also
+ * draws on the WebGL 2 fallback, where the storage-buffer crowds can't).
  */
+const SUIT = {
+  red: 0xd2160e,
+  blue: 0x1f3fc0,
+  ink: 0x07060a,
+  lens: 0xeef3f6,
+  line: 0.0021 // half-width of a web line (m)
+};
+
+// Anti-aliased line of half-width w at distance d (both in metres)
+const inkLine = (d, w) => {
+  const fw = min(fwidth(d), 0.01);
+  return smoothstep(fw.add(w), fw.negate().add(w), d);
+};
+// Distance (in units of `period`) from x to the nearest multiple of `period`
+const toGrid = (x, period) => abs(fract(x.div(period).add(0.5)).sub(0.5)).mul(period);
+// Distance from p to the segment a-b (2D)
+const segment = (p, a, b) => {
+  const pa = p.sub(a);
+  const ba = b.sub(a);
+  const h = clamp(dot(pa, ba).div(dot(ba, ba)), 0.0, 1.0);
+  return length(pa.sub(ba.mul(h)));
+};
+// A spider on the suit, in the plane of (u = |x|, w = height above its centre): a body, a head above it and four
+// bent legs a side; `s` scales it, `t` is the legs' half thickness
+function spiderMark(u, w, s, bodyRx, bodyRy, headR, t) {
+  const p = vec2(u, w).div(s);
+  const body = step(length(vec2(p.x.div(bodyRx), p.y.div(bodyRy))), 1.0);
+  const head = step(length(p.sub(vec2(0.0, bodyRy + headR * 0.7))), headR);
+  const leg = (a, b, c) => min(segment(p, vec2(...a), vec2(...b)), segment(p, vec2(...b), vec2(...c)));
+  const legs = min(
+    min(leg([0.02, 0.035], [0.075, 0.07], [0.08, 0.115]), leg([0.03, 0.012], [0.1, 0.03], [0.115, 0.065])),
+    min(leg([0.03, -0.012], [0.1, -0.03], [0.115, -0.065]), leg([0.02, -0.035], [0.075, -0.07], [0.08, -0.115]))
+  );
+  return max(max(body, head), step(legs, t));
+}
+
 function createSpiderSuitMaterial(pose = null) {
-  const mat = new THREE.MeshStandardNodeMaterial({ metalness: 0 });
+  const mat = new THREE.MeshToonNodeMaterial();
   if (pose) applySkinning(mat, pose);
   const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
-  const red = color(0xb0121d);
-  const blue = color(0x1c3a9c);
-  const ink = color(0x1a0406);
+  const red = color(SUIT.red);
+  const blue = color(SUIT.blue);
+  const ink = color(SUIT.ink);
+  const TAU = Math.PI * 2;
 
   mat.colorNode = Fn(() => {
     const partId = attribute('skin', 'vec4').w;
-    const along = attribute('extra', 'vec3').z;
+    const extra = attribute('extra', 'vec3');
+    const along = extra.z;
     const q = attribute('position', 'vec3').toVar();
     const side = step(0.0, q.x).mul(2.0).sub(1.0);
     const head = max(isPart(partId, PART.HEAD), step(PART.HAIR - 0.5, partId));
-    const arm = max(isPart(partId, PART.ARM), isPart(partId, PART.HAND));
-    const leg = max(isPart(partId, PART.LEG), isPart(partId, PART.SHOE));
+    const hand = isPart(partId, PART.HAND);
+    const arm = isPart(partId, PART.ARM);
+    const leg = isPart(partId, PART.LEG);
+    const foot = isPart(partId, PART.SHOE);
+    const torso = isPart(partId, PART.BODY);
+    // Angle round the loft's own axis (torso: 0 at his left side, pi/2 at the front; limbs: 0 on the outside,
+    // +-pi on the inside, front positive)
+    const limbAngle = atan(extra.y, extra.x.mul(side));
+    const torsoAngle = atan(extra.y, extra.x);
 
-    // Red or blue: a red front & back panel that widens from the waist to the shoulders, red head, shoulder caps,
-    // forearms & gloves, boots from just below the knee
-    const panel = step(abs(q.x), float(0.07).add(max(q.y.sub(1.0), 0.0).mul(0.6)));
-    const torsoRed = max(panel, step(1.47, q.y));
-    const armRed = max(max(step(0.5, along), step(1.385, q.y)), isPart(partId, PART.HAND));
-    const legRed = step(q.y, 0.47);
-    const isRed = max(max(head, arm.mul(armRed)), max(leg.mul(legRed), float(1.0).sub(max(arm, leg)).mul(float(1.0).sub(head)).mul(torsoRed)));
+    // Red or blue
+    // torso: a red front that wraps round to the flanks across the chest and narrows to the waist, red over the
+    // tops of the shoulders and the neck, a red belt, and a red V below it running into the inner leg stripes
+    const fromFront = abs(torsoAngle.sub(Math.PI / 2));
+    const frontWidth = mix(float(0.62), float(1.3), smoothstep(1.02, 1.34, q.y));
+    const chest = step(fromFront, frontWidth).mul(step(1.0, q.y));
+    const belt = step(0.985, q.y).mul(step(q.y, 1.03));
+    const trunksV = step(fromFront, q.y.sub(0.86).mul(4.0)).mul(step(q.y, 1.0));
+    const torsoRed = max(max(chest, belt), max(trunksV, step(1.47, q.y)));
+    // arms: red shoulder caps, a stripe down the outside of the upper arm, red forearms & gloves
+    const capY = float(1.415).sub(smoothstep(1.7, 0.75, abs(limbAngle)).mul(0.05));
+    const armRed = max(max(step(0.47, along), step(capY, q.y)), step(abs(limbAngle), 0.75));
+    // legs: red boots (the top dipping to a point at the front of the shin) and stripes down the inside
+    const bootTop = float(0.45).add(smoothstep(0.6, 0.0, abs(limbAngle.sub(Math.PI / 2))).mul(0.045));
+    const innerStripe = step(Math.PI - 0.55, abs(limbAngle));
+    const legRed = max(step(q.y, bootTop), innerStripe);
+    const isRed = max(
+      max(max(head, hand), max(foot, arm.mul(armRed))),
+      max(leg.mul(legRed), torso.mul(torsoRed))
+    ).toVar();
 
-    // Webbing over the red: strands running round each limb's (or the body's) axis, scalloped rings between them
-    const axisX = mix(mix(float(0.0), side.mul(HIP_X), leg), side.mul(float(0.2).add(float(1.43).sub(q.y).mul(0.14))), arm);
-    const angle = atan(q.x.sub(axisX), q.z.add(0.01));
-    const strands = smoothstep(0.44, 0.485, abs(fract(angle.mul(mix(float(14 / 6.2832), float(7 / 6.2832), max(arm, leg)))).sub(0.5)));
-    const rings = smoothstep(0.43, 0.48, abs(fract(q.y.mul(16.0).add(abs(sin(angle.mul(7.0))).mul(0.35))).sub(0.5)));
-    const webbing = max(strands, rings).mul(isRed);
+    // Webbing over the red
+    // head: strands radiating from between the eyes round to the back of the head, crossed by scalloped rings
+    const hv = q.sub(vec3(0.0, 1.622, -0.01));
+    const hr = length(hv);
+    const hPhi = atan(hv.y, hv.x);
+    const hTheta = acos(clamp(hv.z.div(hr), -1.0, 1.0));
+    const hRho = length(hv.xy);
+    const hN = 14;
+    const hSpokes = toGrid(hPhi, TAU / hN).mul(hRho);
+    const hScallop = abs(sin(hPhi.mul(hN / 2))).mul(0.07);
+    const hRings = toGrid(hTheta.mul(1.0).sub(hScallop).sub(0.12), 0.36).mul(hr);
+    const headWeb = max(inkLine(hSpokes, SUIT.line * 0.85), inkLine(hRings, SUIT.line * 0.85));
+    // torso: strands radiating from the chest spider (front) and round it on the back, scalloped rings
+    const tv = vec2(q.x, q.y.sub(1.3));
+    const tr = length(tv);
+    const tPhi = atan(tv.y, tv.x);
+    const tN = 16;
+    const tSpokes = toGrid(tPhi, TAU / tN).mul(tr);
+    const tRings = toGrid(tr.add(abs(sin(tPhi.mul(tN / 2))).mul(0.016)), 0.048);
+    const torsoWeb = max(inkLine(tSpokes, SUIT.line), inkLine(tRings, SUIT.line)).mul(step(0.03, tr));
+    // limbs: strands along them, scalloped rings round them
+    const lN = 7;
+    const lR = length(extra.xy);
+    const lSpokes = toGrid(limbAngle, TAU / lN).mul(lR);
+    const lScallop = abs(sin(limbAngle.mul(lN / 2))).mul(0.014);
+    const armRings = toGrid(along.mul(0.6).add(lScallop), 0.05);
+    const legRings = toGrid(q.y.add(lScallop), 0.055);
+    const armWeb = max(inkLine(lSpokes, SUIT.line), inkLine(armRings, SUIT.line));
+    const legWeb = max(inkLine(lSpokes, SUIT.line), inkLine(legRings, SUIT.line));
+    // gloves & feet: a few lines across and one along
+    const handWeb = max(inkLine(toGrid(q.y, 0.035), SUIT.line * 0.8), inkLine(abs(q.z.sub(0.012)), SUIT.line * 0.8));
+    const footWeb = max(inkLine(toGrid(q.z.add(0.02), 0.05), SUIT.line), inkLine(abs(q.x.sub(side.mul(HIP_X))), SUIT.line))
+      .mul(step(0.03, q.y));
+    const web = max(
+      max(head.mul(headWeb), torso.mul(torsoWeb)),
+      max(max(arm.mul(armWeb), leg.mul(legWeb)), max(hand.mul(handWeb), foot.mul(footWeb)))
+    ).mul(isRed);
 
-    // Lenses: big tilted teardrops, white with a thick black rim
-    const front = smoothstep(0.035, 0.07, q.z).mul(head);
-    const ex = abs(q.x).sub(0.037);
-    const ey = q.y.sub(1.634);
-    const eu = ex.mul(0.9).add(ey.mul(0.44));
-    const ev = ey.mul(0.9).sub(ex.mul(0.44));
-    const e = eu.div(0.029).mul(eu.div(0.029)).add(ev.div(0.017).mul(ev.div(0.017)));
-    const lens = smoothstep(1.0, 0.8, e).mul(front);
-    const rim = smoothstep(1.9, 1.6, e).mul(front);
+    // Lenses: big teardrops, pointed down towards the nose, white in a thick black rim
+    const faceFront = smoothstep(0.03, 0.06, q.z).mul(head);
+    const ex = abs(q.x).sub(0.04);
+    const ey = q.y.sub(1.636);
+    const eu = ex.mul(0.86).add(ey.mul(0.51)); // along the lens, out & up
+    const ev = ey.mul(0.86).sub(ex.mul(0.51));
+    const taper = float(1.0).sub(clamp(eu.negate().div(0.036), 0.0, 1.0).mul(0.55));
+    const eyeShape = (a, b) => length(vec2(eu.div(a), ev.div(taper.mul(b))));
+    const lensD = eyeShape(0.034, 0.02);
+    const lens = smoothstep(1.0, 0.94, lensD).mul(faceFront);
+    const rim = smoothstep(1.0, 0.95, eyeShape(0.044, 0.03)).mul(faceFront);
 
-    // Chest spider: an oval body, a small head and four legs a side
-    const torsoFront = step(0.03, q.z).mul(float(1.0).sub(max(max(arm, leg), head)));
-    const u = abs(q.x);
-    const w = q.y.sub(1.3);
-    const bodyOval = step(length(vec2(u.div(0.017), w.div(0.042))), 1.0);
-    const headDot = step(length(vec2(u, w.sub(0.05))), 0.013);
-    const legBand = (slope, off) => smoothstep(0.0045, 0.002, abs(w.sub(u.mul(slope)).sub(off)));
-    const legs = max(max(legBand(0.75, 0.012), legBand(0.2, 0.004)), max(legBand(-0.25, -0.004), legBand(-0.8, -0.014)))
-      .mul(step(0.012, u)).mul(step(u, 0.07));
-    const emblem = max(max(bodyOval, headDot), legs).mul(torsoFront);
+    // Spiders: small and black on the chest, big and red on the back
+    const front = step(0.02, q.z).mul(torso);
+    const back = step(q.z, -0.02).mul(torso);
+    const chestSpider = spiderMark(abs(q.x), q.y.sub(1.315), 0.62, 0.016, 0.034, 0.012, 0.007).mul(front);
+    const backSpider = spiderMark(abs(q.x), q.y.sub(1.29), 1.0, 0.05, 0.058, 0.018, 0.009).mul(back);
+    isRed.assign(max(isRed, backSpider));
 
-    const sole = isPart(partId, PART.SHOE).mul(smoothstep(0.024, 0.016, q.y));
-    const suit = mix(blue.mul(float(1.0).sub(smoothstep(0.43, 0.48, abs(fract(q.y.mul(16.0)).sub(0.5))).mul(0.18))),
-      mix(red, ink, webbing.mul(0.85)), isRed);
-    const dark = max(max(emblem, rim), sole);
-    return mix(mix(suit, color(0x0a0a0c), dark), color(0xf2f4f8), lens);
+    const suit = mix(blue, mix(red, ink, web.mul(float(1.0).sub(backSpider))), isRed);
+    return mix(mix(suit, ink, max(chestSpider, rim)), color(SUIT.lens), lens);
   })();
 
-  mat.roughnessNode = Fn(() => float(0.5))();
+  // Less of the sky's & the city's ambient light than a real surface takes, so the shadow side reads as the cartoon's
+  // flat dark tone (deep maroon, navy) against the lit side, not a soft blend into it
+  mat.aoNode = float(0.5);
   // At night the suit gets a little soft light from above, shaded with his shape (stronger on what faces up, fading
   // underneath, like a sky fill), so its red and blue still read in the dark without looking lit from inside (nothing
   // by day)
@@ -979,6 +1148,20 @@ function createSpiderSuitMaterial(pose = null) {
     const up = clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0);
     return diffuseColor.rgb.mul(up.mul(up).mul(0.12).add(0.02)).mul(night);
   })();
+  return mat;
+}
+
+// Black, back faces only, every vertex pushed out along its (skinned) normal: what shows round the edge of the body is
+// a line. Its width grows with the distance to the camera (so it stays about two pixels thick on screen), within limits
+// (never a thick black shell far away, never a hairline up close)
+function createInkOutlineMaterial() {
+  const mat = new THREE.MeshBasicNodeMaterial({ color: 0x050407, side: THREE.BackSide });
+  mat.positionNode = Fn(() => {
+    const dist = length(cameraPosition.sub(positionLocal));
+    const width = clamp(dist.mul(0.0032), 0.006, 0.03);
+    return positionLocal.add(normalLocal.mul(width));
+  })();
+  mat.fog = true;
   return mat;
 }
 
@@ -1754,4 +1937,4 @@ class PersonRig {
   }
 }
 
-export { BONE as PERSON_BONES, buildPersonGeometry, createPersonMaterial, createSpiderSuitMaterial, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+export { BONE as PERSON_BONES, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };

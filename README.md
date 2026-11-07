@@ -141,8 +141,13 @@ aimed along your line of travel. The upward fling fades out above ~55 m so chain
 momentum within 25° of an avenue eases onto it (the city's axes follow Manhattan's grid).
 
 **5. The body is the city's pedestrian, in a suit.** Spider-Man is the same skinned, lofted person the sidewalks
-are full of (`js/pedestrians.js`). He wears a costume shader painted from the bind-pose position: red and blue
-panels, raised webbing, lenses and a chest spider. His 15 bones are posed by forward kinematics from joint
+are full of (`js/pedestrians.js`), built as a cartoon hero (`buildPersonGeometry(1, true)`: broad shoulders, big
+chest, arms and legs, a narrow waist, a smooth masked head) and drawn like the 1990s animated series: a toon
+material (one hard step from lit to a flat maroon / navy shadow), a black ink outline (the body again, pushed out
+along its normals and drawn inside out), and a costume painted from the bind-pose position: flat red and blue, thin
+black webbing radiating from the face and the chest, big white lenses in thick black rims, a black chest spider, a
+big red back spider, a red belt, boots and stripes. `_spidey.html?v=front|back|3q|3qb&t=midnight&face=1` previews
+the model on its own. His 15 bones are posed by forward kinematics from joint
 angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass

@@ -1,0 +1,34 @@
+<!doctype html><html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.webgpu.js","three/webgpu":"https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.webgpu.js","three/tsl":"https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.tsl.js","three/addons/":"https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/jsm/"}}</script>
+<style>body{margin:0;background:#000}</style></head><body>
+<script type="module">
+// Spider-Man model preview: ?t=<time preset>&v=front|back|side|3q&d=<camera distance>
+import * as THREE from 'three/webgpu';
+import { LightingSystem } from './js/lighting.js';
+import { createSpiderManEntity, updateSpiderManVisuals } from './js/spiderman.js';
+const q = new URLSearchParams(location.search);
+const W = 600, H = 800;
+const renderer = new THREE.WebGPURenderer({ antialias: true, forceWebGL: q.get('gl') !== '0' });
+renderer.setSize(W, H); renderer.shadowMap.enabled = true; document.body.appendChild(renderer.domElement); await renderer.init();
+const scene = new THREE.Scene();
+const lighting = new LightingSystem(scene, renderer);
+lighting.applyPreset(q.get('t') || 'midday', true);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x4a6a9a, roughness: 0.9 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const wall = new THREE.Mesh(new THREE.BoxGeometry(40, 20, 1), new THREE.MeshStandardMaterial({ color: 0x2c3e66, roughness: 0.9 }));
+wall.position.set(0, 10, -6); scene.add(wall);
+const ent = createSpiderManEntity(scene);
+ent.position.set(0, 0, 0); ent.heading = 0; ent.velocity?.set?.(0, 0, 0);
+for (let i = 0; i < 120; i++) updateSpiderManVisuals(ent, 1 / 30, false);
+const camera = new THREE.PerspectiveCamera(35, W / H, 0.1, 500);
+const v = q.get('v') || 'front', d = +(q.get('d') || 3.6);
+const ang = { front: 0, back: Math.PI, side: Math.PI / 2, '3q': Math.PI / 5, '3qb': Math.PI * 0.8 }[v] ?? 0;
+const fwdZ = Math.cos(ent.heading), fwdX = Math.sin(ent.heading);
+const yc = +(q.get('y') || 1.0);
+camera.position.set(Math.sin(ang) * d, yc + 0.25, Math.cos(ang) * d);
+if (q.get('face')) { camera.position.set(Math.sin(ang) * 0.9, 1.65, Math.cos(ang) * 0.9); camera.lookAt(0, 1.6, 0); } else camera.lookAt(0, yc, 0);
+// (flip if he faces -Z)
+await renderer.renderAsync(scene, camera);
+await renderer.renderAsync(scene, camera);
+document.title = 'ready';
+</script></body></html>

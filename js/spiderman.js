@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
-import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial } from './pedestrians.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './pedestrians.js';
 
 // js/spiderman.js
 // Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
@@ -164,7 +164,7 @@ const BONES = 15;
 function buildSpiderManModel(scene) {
   // The person geometry carries its two-bone skinning in a 'skin' attribute (bone a, bone b, weight of b, part):
   // spelled out as standard skin indices & weights
-  const geometry = buildPersonGeometry(1).clone();
+  const geometry = buildPersonGeometry(1, true).clone();
   const skin = geometry.getAttribute('skin');
   const indices = new Uint16Array(skin.count * 4);
   const weights = new Float32Array(skin.count * 4);
@@ -191,6 +191,12 @@ function buildSpiderManModel(scene) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   scene.add(mesh);
+  // The cartoon's ink outline: the same skinned body again, pushed out along its normals and drawn from the inside
+  const outline = new THREE.SkinnedMesh(geometry, createInkOutlineMaterial());
+  outline.name = 'SpiderManOutline';
+  outline.bind(mesh.skeleton, new THREE.Matrix4());
+  outline.frustumCulled = false;
+  scene.add(outline);
 
   // An athletic build; no hair under the mask
   const rig = new PersonRig({ seed: 1, scale: 1.0, girth: 1.0, hair: 0 });
