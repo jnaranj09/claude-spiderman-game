@@ -998,18 +998,16 @@ const AMBIENT_SHARE = 2.0;
 // face, y up), mirrored for the other eye. A smooth closed curve through the points, sharp at those marked `corner`;
 // `rim` is the black rim's width. Drawn in the lens editor (tools/lens-editor.html), whose "Copy code" writes this.
 const LENS_OUTLINE = {
-  rim: 0.0075,
+  rim: 0.005,
   points: [
-    { x: 0.0235, y: 1.6131, corner: true },
-    { x: 0.0297, y: 1.6335, corner: false },
-    { x: 0.041, y: 1.653, corner: false },
-    { x: 0.0572, y: 1.6621, corner: false },
-    { x: 0.0752, y: 1.6621, corner: false },
-    { x: 0.0845, y: 1.6549, corner: false },
-    { x: 0.0914, y: 1.6383, corner: false },
-    { x: 0.0882, y: 1.6168, corner: false },
-    { x: 0.0743, y: 1.6043, corner: false },
-    { x: 0.049, y: 1.6053, corner: false }
+    { x: 0.0129, y: 1.6244, corner: true },
+    { x: 0.0323, y: 1.6506, corner: false },
+    { x: 0.0581, y: 1.6647, corner: false },
+    { x: 0.0753, y: 1.6677, corner: true },
+    { x: 0.0763, y: 1.643, corner: false },
+    { x: 0.07, y: 1.6205, corner: false },
+    { x: 0.0541, y: 1.6088, corner: false },
+    { x: 0.0304, y: 1.6086, corner: false }
   ]
 };
 // The outline as the shader gets it: the curve sampled into a closed polygon (uniforms, so the editor can reshape it
