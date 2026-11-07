@@ -141,13 +141,23 @@ aimed along your line of travel. The upward fling fades out above ~55 m so chain
 momentum within 25° of an avenue eases onto it (the city's axes follow Manhattan's grid).
 
 **5. The body is the city's pedestrian, in a suit.** Spider-Man is the same skinned, lofted person the sidewalks
-are full of (`js/pedestrians.js`), built as a cartoon hero (`buildPersonGeometry(1, true)`: broad shoulders, big
-chest, arms and legs, a narrow waist, a smooth masked head) and drawn like the 1990s animated series: a toon
-material (one hard step from lit to a flat maroon / navy shadow), a black ink outline (the body again, pushed out
-along its normals and drawn inside out), and a costume painted from the bind-pose position: flat red and blue, thin
-black webbing radiating from the face and the chest, big white lenses in thick black rims, a black chest spider, a
-big red back spider, a red belt, boots and stripes. `_spidey.html?v=front|back|3q|3qb&t=midnight&face=1` previews
-the model on its own. His 15 bones are posed by forward kinematics from joint
+are full of (`js/pedestrians.js`), built as a cartoon hero (`buildPersonGeometry(1, true)`: big traps, deltoids,
+chest, lats, arms and legs, a narrow waist, a broad smooth masked head) and drawn like the 1990s animated series:
+- a toon material with flat cel lighting: one hard step from lit to shadow, one flat ambient colour for the shadow
+  side (`uAmbientFlat`, set by each time of day), and the light's brightness but not its tint (the golden-hour sun
+  would turn the red orange and the lenses cream), kept within the range where the colours stay vivid;
+- shadows from the city looked up a few centimetres off his skin with a hard edge (the city's shadow map is coarse for
+  a body, and its grazing self-shadow broke into dots);
+- a black ink outline: the body again, pushed out along its normals and drawn inside out;
+- the costume painted from the bind-pose position: flat red and blue, thin straight webbing radiating from between the
+  eyes and from the chest spider, big pale almond lenses in thick black rims, a black chest spider, a big red back
+  spider with hooked legs, a red belt, boots and stripes.
+
+The look was matched against two stills from the show, through the game's own pipeline: `_spidey.html?shot=front`
+and `?shot=back` pose him (forward kinematics), frame him and turn the light to match them, and
+`tools/spidey-compare/run.sh <front still> <back still> <out dir>` renders both and sets each beside its still with
+the share and mean colour of every cel tone. `_spidey.html?v=front|back|3q|3qb&t=midnight&face=1` previews him
+standing. His 15 bones are posed by forward kinematics from joint
 angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass

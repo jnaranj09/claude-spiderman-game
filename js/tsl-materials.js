@@ -86,7 +86,10 @@ const cityUniforms = {
   // Extra share of rooms with their lights on (added to each facade's own share): most of the city is home at night
   uNightLit: uniform(0.0),
   uRoadWetness: uniform(0.38),
-  uCanyonBounce: uniform(0.52)
+  uCanyonBounce: uniform(0.52),
+  // The sky's & city's ambient light as one flat colour (the hemisphere light's average plus the sky's share), for
+  // cel-shaded materials whose shadow side must be one flat tone (Spider-Man's suit)
+  uAmbientFlat: uniform(new THREE.Color(0.6, 0.6, 0.6))
 };
 
 /**

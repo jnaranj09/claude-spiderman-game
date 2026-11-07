@@ -137,6 +137,10 @@ const TIME_PRESETS = {
   }
 };
 
+// How much of the sky (by its zenith colour and the preset's environment intensity) the flat ambient takes in
+const AMBIENT_SKY_SHARE = 1.0;
+const _skyTop = new THREE.Color();
+
 class LightingSystem {
   constructor(scene, renderer = null) {
     this.scene = scene;
@@ -280,6 +284,9 @@ class LightingSystem {
     this.hemiLight.color.setHex(p.hemiSky);
     this.hemiLight.groundColor.setHex(p.hemiGround);
     this.hemiLight.intensity = p.hemiIntensity;
+    cityUniforms.uAmbientFlat.value
+      .copy(this.hemiLight.color).lerp(this.hemiLight.groundColor, 0.5).multiplyScalar(p.hemiIntensity)
+      .add(_skyTop.setHex(p.skyTop).multiplyScalar(p.envIntensity * AMBIENT_SKY_SHARE));
 
     this.scene.fog.color.setHex(p.fogColor);
     this.scene.fog.density = p.fogDensity;

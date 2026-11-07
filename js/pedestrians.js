@@ -5,6 +5,7 @@ import {
   int,
   vec2,
   vec3,
+  vec4,
   color,
   attribute,
   instanceIndex,
@@ -30,7 +31,11 @@ import {
   cameraPosition,
   fwidth,
   acos,
-  dot
+  dot,
+  pow,
+  output,
+  positionWorld,
+  BRDF_Lambert
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cityUniforms } from './tsl-materials.js';
@@ -577,14 +582,14 @@ function shoeSkin(z, k) {
 const HERO = {
   torso: [
     [1.3, 1.25, 1.25], // neck: thick, running into the traps
-    [1.3, 1.22, 1.22],
-    [1.22, 1.15, 1.2],
-    [1.32, 1.12, 1.25], // traps sloping down to the shoulders
-    [1.24, 1.1, 1.18],
-    [1.13, 1.16, 1.14], // shoulders
-    [1.14, 1.22, 1.12], // pecs & lats
-    [1.12, 1.16, 1.08],
-    [1.05, 1.06, 1.02],
+    [1.45, 1.22, 1.3],
+    [1.7, 1.15, 1.35],
+    [1.6, 1.12, 1.3], // traps sloping down to the shoulders
+    [1.14, 1.1, 1.2],
+    [1.0, 1.16, 1.16], // shoulders (the arms' deltoids give the width)
+    [1.1, 1.22, 1.2], // pecs & lats
+    [1.26, 1.16, 1.2],
+    [1.18, 1.06, 1.1],
     [0.97, 0.98, 0.98], // narrow waist
     [0.93, 0.96, 0.95],
     [0.94, 0.96, 0.95],
@@ -596,8 +601,8 @@ const HERO = {
 };
 // Arms by distance from the shoulder: round deltoids, big biceps, a slimmer elbow, big forearms
 function heroArm(d) {
-  if (d < 0) return 1.18;
-  if (d < 0.11) return 1.3;
+  if (d < 0) return 1.25;
+  if (d < 0.11) return 1.42;
   if (d < 0.2) return 1.32;
   if (d < 0.25) return 1.2;
   if (d < 0.34) return 1.1;
@@ -617,13 +622,14 @@ function heroLeg(y) {
   if (y > 0.2) return 1.02;
   return 0.92;
 }
+// The cartoon's head: a broad cranium tapering to a narrower jaw
+const headK = (y) => 1.0 + Math.max(-0.1, Math.min(0.12, (y - 1.585) * 2.2));
 // A masked head: no nose or ears through the mask, just the chin's point and a hint of cheekbones
 function maskBump(y) {
   const front = Math.PI / 2;
   return (a) => {
     let b = 0;
     if (Math.abs(y - 1.592) < 0.02) b += 0.004 * lobe(a, front, 0.4);
-    if (Math.abs(y - 1.514) < 0.012) b += 0.006 * lobe(a, front, 0.35);
     return b;
   };
 }
@@ -759,7 +765,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
     const f = HEAD.f[i];
     headRows.push({
       pts: hero
-        ? ringY(m[0], m[1] * 0.97, m[2], m[3] * 0.97, m[4], nHead, 2, hi ? maskBump(m[0]) : null)
+        ? ringY(m[0], m[1] * headK(m[0]), m[2] * (headK(m[0]) * 0.5 + 0.5), m[3] * headK(m[0]), m[4], nHead, 2, hi ? maskBump(m[0]) : null)
         : ringY(m[0], m[1], m[2], m[3], m[4], nHead, 2, hi ? headBump(m[0]) : null),
       ptsF: ringY(f[0], f[1], f[2], f[3], f[4], nHead, 2, hi ? headBump(m[0]) : null),
       skin: [BONE.HEAD, BONE.HEAD, 0],
@@ -983,28 +989,25 @@ function dressPerson(mat, vInfo, isPart, lane, partOf) {
   return mat;
 }
 
-/**
- * Spider-Man's suit, drawn like the 1990s animated series: flat bright red and blue, cel-shaded (a toon material:
- * one hard step from lit to shadow, the shadow side keeping the colour, a deep maroon and navy), thin black webbing
- * over the red radiating from the face and from the chest spider, big white lenses in thick black rims, a small black
- * spider on the chest and a big red one on the blue back, a red belt, red boots and red stripes down the inner legs
- * and the outer arms. Painted from the bind-pose position (and the loft's own axes), so the pattern stays on the body
- * whatever pose the bones take. Meant for the hero geometry (buildPersonGeometry(detail, true)). With a crowd's
- * `pose` buffer it skins itself like the crowds do; without one it's for an ordinary THREE.SkinnedMesh (which also
- * draws on the WebGL 2 fallback, where the storage-buffer crowds can't).
- */
+// Share of the ambient light the suit takes (less than a real surface: the cartoon's shadow tones are deep)
+const AMBIENT_SHARE = 2.0;
 const SUIT = {
-  red: 0xd2160e,
-  blue: 0x1f3fc0,
-  ink: 0x07060a,
-  lens: 0xeef3f6,
-  line: 0.0021 // half-width of a web line (m)
+  red: 0xb42412,
+  blue: 0x164cc6,
+  ink: 0x140d10,
+  lens: 0x8fbdea,
+  line: 0.0017 // half-width of a web line (m)
 };
 
 // Anti-aliased line of half-width w at distance d (both in metres)
 const inkLine = (d, w) => {
   const fw = min(fwidth(d), 0.01);
   return smoothstep(fw.add(w), fw.negate().add(w), d);
+};
+// Inside of a shape from its (approximate) signed distance in metres, anti-aliased
+const fillSDF = (d) => {
+  const fw = min(fwidth(d), 0.01);
+  return smoothstep(fw, fw.negate(), d);
 };
 // Distance (in units of `period`) from x to the nearest multiple of `period`
 const toGrid = (x, period) => abs(fract(x.div(period).add(0.5)).sub(0.5)).mul(period);
@@ -1015,138 +1018,182 @@ const segment = (p, a, b) => {
   const h = clamp(dot(pa, ba).div(dot(ba, ba)), 0.0, 1.0);
   return length(pa.sub(ba.mul(h)));
 };
-// A spider on the suit, in the plane of (u = |x|, w = height above its centre): a body, a head above it and four
-// bent legs a side; `s` scales it, `t` is the legs' half thickness
-function spiderMark(u, w, s, bodyRx, bodyRy, headR, t) {
-  const p = vec2(u, w).div(s);
-  const body = step(length(vec2(p.x.div(bodyRx), p.y.div(bodyRy))), 1.0);
-  const head = step(length(p.sub(vec2(0.0, bodyRy + headR * 0.7))), headR);
-  const leg = (a, b, c) => min(segment(p, vec2(...a), vec2(...b)), segment(p, vec2(...b), vec2(...c)));
-  const legs = min(
-    min(leg([0.02, 0.035], [0.075, 0.07], [0.08, 0.115]), leg([0.03, 0.012], [0.1, 0.03], [0.115, 0.065])),
-    min(leg([0.03, -0.012], [0.1, -0.03], [0.115, -0.065]), leg([0.02, -0.035], [0.075, -0.07], [0.08, -0.115]))
+// Distance to a leg drawn as a polyline (2D points, in metres)
+const polyline = (p, pts) => {
+  let d = segment(p, vec2(...pts[0]), vec2(...pts[1]));
+  for (let i = 2; i < pts.length; i++) d = min(d, segment(p, vec2(...pts[i - 1]), vec2(...pts[i])));
+  return d;
+};
+
+// The suit's pattern from the bind-pose position: { color, lens (mask) } (plain node graph, shared by the colour and
+// the emissive)
+function suitPattern() {
+  const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
+  const TAU = Math.PI * 2;
+  const partId = attribute('skin', 'vec4').w;
+  const extra = attribute('extra', 'vec3');
+  const along = extra.z;
+  const q = attribute('position', 'vec3');
+  const side = step(0.0, q.x).mul(2.0).sub(1.0);
+  const head = max(isPart(partId, PART.HEAD), step(PART.HAIR - 0.5, partId));
+  const hand = isPart(partId, PART.HAND);
+  const arm = isPart(partId, PART.ARM);
+  const leg = isPart(partId, PART.LEG);
+  const foot = isPart(partId, PART.SHOE);
+  const torso = isPart(partId, PART.BODY);
+  // Angle round the loft's own axis (torso: 0 at his left side, pi/2 at the front; limbs: 0 on the outside, pi/2 at
+  // the front, -pi/2 at the back)
+  const limbAngle = atan(extra.y, extra.x.mul(side));
+  const torsoAngle = atan(extra.y, extra.x);
+
+  // Red or blue
+  // torso: a red front that wraps round to the flanks across the chest and narrows to the waist, red over the neck, a
+  // red belt, and a red V below it running into the inner leg stripes; a blue back
+  const fromFront = abs(torsoAngle.sub(Math.PI / 2));
+  const frontWidth = mix(mix(float(0.62), float(1.3), smoothstep(1.02, 1.3, q.y)), float(1.85), smoothstep(1.36, 1.44, q.y));
+  const chest = step(fromFront, frontWidth).mul(step(1.0, q.y));
+  const belt = step(0.975, q.y).mul(step(q.y, 1.035));
+  const trunksV = step(fromFront, q.y.sub(0.86).mul(4.0)).mul(step(q.y, 1.0));
+  const torsoRed = max(max(chest, belt), max(trunksV, step(1.5, q.y)));
+  // arms: blue upper arms under red shoulder caps, a red stripe down the outside of the arm (its top edge when he
+  // holds it out) into the red forearm & glove
+  const toStripe = abs(limbAngle);
+  const capY = float(1.42).sub(smoothstep(1.6, 0.7, toStripe).mul(0.06));
+  const armRed = max(max(step(0.47, along), step(capY, q.y)), step(toStripe, 0.55));
+  // legs: red boots (the top dipping to a point at the front of the shin) and stripes down the inside
+  const bootTop = float(0.45).add(smoothstep(0.6, 0.0, abs(limbAngle.sub(Math.PI / 2))).mul(0.045));
+  const innerStripe = step(Math.PI - 0.55, abs(limbAngle));
+  const legRed = max(step(q.y, bootTop), innerStripe);
+  const red0 = max(max(max(head, hand), max(foot, arm.mul(armRed))), max(leg.mul(legRed), torso.mul(torsoRed)));
+
+  // Webbing over the red: straight strands with only a slight sag between them, as drawn in the cartoon
+  // head: strands radiating from between the eyes round to the back of the head, crossed by rings
+  const hv = q.sub(vec3(0.0, 1.626, -0.01));
+  const hr = length(hv);
+  const hPhi = atan(hv.y, hv.x);
+  const hTheta = acos(clamp(hv.z.div(hr), -1.0, 1.0));
+  const hN = 14;
+  const hSpokes = toGrid(hPhi, TAU / hN).mul(length(hv.xy));
+  const hSag = abs(sin(hPhi.mul(hN / 2))).mul(0.04);
+  const hRings = toGrid(hTheta.sub(hSag).sub(0.1), 0.4).mul(hr);
+  const headWeb = max(inkLine(hSpokes, SUIT.line).mul(step(mix(0.012, 0.03, step(hv.z, 0.0)), length(hv.xy))), inkLine(hRings, SUIT.line));
+  // torso: strands radiating from the chest spider (front) and round it on the back, rings
+  const tv = vec2(q.x, q.y.sub(1.3));
+  const tr = length(tv);
+  const tPhi = atan(tv.y, tv.x);
+  const tN = 16;
+  const tSpokes = toGrid(tPhi, TAU / tN).mul(tr);
+  const tRings = toGrid(tr.add(abs(sin(tPhi.mul(tN / 2))).mul(0.008)), 0.055);
+  const torsoWeb = max(inkLine(tSpokes, SUIT.line), inkLine(tRings, SUIT.line)).mul(step(0.03, tr));
+  // limbs: strands along them, rings round them
+  const lN = 7;
+  const lR = length(extra.xy);
+  const lSpokes = toGrid(limbAngle, TAU / lN).mul(lR);
+  const lSag = abs(sin(limbAngle.mul(lN / 2))).mul(0.008);
+  const armRings = toGrid(along.mul(0.6).add(lSag), 0.055);
+  const legRings = toGrid(q.y.add(lSag), 0.06);
+  const armWeb = max(inkLine(lSpokes, SUIT.line), inkLine(armRings, SUIT.line));
+  const legWeb = max(inkLine(lSpokes, SUIT.line), inkLine(legRings, SUIT.line));
+  // gloves & feet: a few lines across and one along
+  const handWeb = max(inkLine(toGrid(q.y, 0.035), SUIT.line * 0.8), inkLine(abs(q.z.sub(0.012)), SUIT.line * 0.8));
+  const footWeb = max(inkLine(toGrid(q.z.add(0.02), 0.05), SUIT.line), inkLine(abs(q.x.sub(side.mul(HIP_X))), SUIT.line))
+    .mul(step(0.03, q.y));
+
+  // Lenses: big almonds, nearly meeting over the nose: a straight top edge rising to a point at the temple, the inner
+  // point low by the nose, a round bottom edge; pale blue-white in a thick black rim
+  const faceFront = smoothstep(0.015, 0.04, q.z).mul(head);
+  const ax = abs(q.x);
+  const x0 = 0.008;
+  const x1 = 0.086;
+  const t = clamp(ax.sub(x0).div(x1 - x0), 0.0, 1.0);
+  const yTop = float(1.628).add(t.mul(0.027)).add(sin(t.mul(Math.PI)).mul(0.006));
+  const yBot = yTop.sub(pow(sin(pow(t, 0.8).mul(Math.PI)), 0.6).mul(0.066));
+  const lensD = max(max(q.y.sub(yTop), yBot.sub(q.y)), max(ax.sub(x1), float(x0).sub(ax)));
+  const lens = fillSDF(lensD).mul(faceFront);
+  const rim = fillSDF(lensD.sub(0.0055)).mul(faceFront);
+
+  // Spiders: small and black on the chest (thin legs), big and red on the blue back (a round body, short thick legs
+  // with hooked ends)
+  const front = step(0.02, q.z).mul(torso);
+  const back = step(q.z, -0.02).mul(torso);
+  const cp = vec2(abs(q.x), q.y.sub(1.33));
+  const chestBody = max(step(length(vec2(cp.x.div(0.011), cp.y.div(0.024))), 1.0), step(length(cp.sub(vec2(0.0, 0.03))), 0.008));
+  const chestLegs = min(
+    min(polyline(cp, [[0.005, 0.012], [0.03, 0.035], [0.034, 0.06]]), polyline(cp, [[0.008, 0.004], [0.04, 0.012], [0.05, 0.03]])),
+    min(polyline(cp, [[0.008, -0.004], [0.04, -0.014], [0.05, -0.035]]), polyline(cp, [[0.005, -0.012], [0.03, -0.035], [0.034, -0.062]]))
   );
-  return max(max(body, head), step(legs, t));
+  const chestSpider = max(chestBody, inkLine(chestLegs, 0.0026)).mul(front);
+  const bp = vec2(abs(q.x), q.y.sub(1.3));
+  const backLegs = min(
+    min(polyline(bp, [[0.05, 0.05], [0.082, 0.072], [0.082, 0.094]]), polyline(bp, [[0.06, 0.018], [0.1, 0.03], [0.1, 0.052]])),
+    min(polyline(bp, [[0.06, -0.018], [0.1, -0.03], [0.1, -0.052]]), polyline(bp, [[0.05, -0.05], [0.082, -0.072], [0.082, -0.094]]))
+  );
+  const backSpider = max(fillSDF(length(bp).sub(0.07)), fillSDF(backLegs.sub(0.0105))).mul(back);
+  const isRed = max(red0, backSpider);
+
+  const web = max(
+    max(head.mul(headWeb), torso.mul(torsoWeb)),
+    max(max(arm.mul(armWeb), leg.mul(legWeb)), max(hand.mul(handWeb), foot.mul(footWeb)))
+  ).mul(red0).mul(float(1.0).sub(backSpider));
+
+  const suit = mix(color(SUIT.blue), mix(color(SUIT.red), color(SUIT.ink), web), isRed);
+  return { color: mix(mix(suit, color(SUIT.ink), max(chestSpider, rim)), color(SUIT.lens), lens), lens };
 }
 
+/**
+ * Spider-Man's suit, drawn like the 1990s animated series: flat red and blue, cel-shaded (a toon material: one hard
+ * step from lit to shadow), thin dark webbing over the red radiating from the face and from the chest spider, big
+ * pale lenses in thick black rims, a small black spider on the chest and a big red one on the blue back, a red belt,
+ * red boots, red stripes down the inner legs and the outsides of the arms. Painted from the bind-pose position (and the
+ * loft's own axes), so the pattern stays on the body whatever pose the bones take. Meant for the hero geometry
+ * (buildPersonGeometry(detail, true)). With a crowd's `pose` buffer it skins itself like the crowds do; without one
+ * it's for an ordinary THREE.SkinnedMesh (which also draws on the WebGL 2 fallback, where the storage-buffer crowds
+ * can't).
+ */
 function createSpiderSuitMaterial(pose = null) {
   const mat = new THREE.MeshToonNodeMaterial();
   if (pose) applySkinning(mat, pose);
-  const isPart = (partId, id) => step(abs(partId.sub(id)), 0.25);
-  const red = color(SUIT.red);
-  const blue = color(SUIT.blue);
-  const ink = color(SUIT.ink);
-  const TAU = Math.PI * 2;
-
-  mat.colorNode = Fn(() => {
-    const partId = attribute('skin', 'vec4').w;
-    const extra = attribute('extra', 'vec3');
-    const along = extra.z;
-    const q = attribute('position', 'vec3').toVar();
-    const side = step(0.0, q.x).mul(2.0).sub(1.0);
-    const head = max(isPart(partId, PART.HEAD), step(PART.HAIR - 0.5, partId));
-    const hand = isPart(partId, PART.HAND);
-    const arm = isPart(partId, PART.ARM);
-    const leg = isPart(partId, PART.LEG);
-    const foot = isPart(partId, PART.SHOE);
-    const torso = isPart(partId, PART.BODY);
-    // Angle round the loft's own axis (torso: 0 at his left side, pi/2 at the front; limbs: 0 on the outside,
-    // +-pi on the inside, front positive)
-    const limbAngle = atan(extra.y, extra.x.mul(side));
-    const torsoAngle = atan(extra.y, extra.x);
-
-    // Red or blue
-    // torso: a red front that wraps round to the flanks across the chest and narrows to the waist, red over the
-    // tops of the shoulders and the neck, a red belt, and a red V below it running into the inner leg stripes
-    const fromFront = abs(torsoAngle.sub(Math.PI / 2));
-    const frontWidth = mix(float(0.62), float(1.3), smoothstep(1.02, 1.34, q.y));
-    const chest = step(fromFront, frontWidth).mul(step(1.0, q.y));
-    const belt = step(0.985, q.y).mul(step(q.y, 1.03));
-    const trunksV = step(fromFront, q.y.sub(0.86).mul(4.0)).mul(step(q.y, 1.0));
-    const torsoRed = max(max(chest, belt), max(trunksV, step(1.47, q.y)));
-    // arms: red shoulder caps, a stripe down the outside of the upper arm, red forearms & gloves
-    const capY = float(1.415).sub(smoothstep(1.7, 0.75, abs(limbAngle)).mul(0.05));
-    const armRed = max(max(step(0.47, along), step(capY, q.y)), step(abs(limbAngle), 0.75));
-    // legs: red boots (the top dipping to a point at the front of the shin) and stripes down the inside
-    const bootTop = float(0.45).add(smoothstep(0.6, 0.0, abs(limbAngle.sub(Math.PI / 2))).mul(0.045));
-    const innerStripe = step(Math.PI - 0.55, abs(limbAngle));
-    const legRed = max(step(q.y, bootTop), innerStripe);
-    const isRed = max(
-      max(max(head, hand), max(foot, arm.mul(armRed))),
-      max(leg.mul(legRed), torso.mul(torsoRed))
-    ).toVar();
-
-    // Webbing over the red
-    // head: strands radiating from between the eyes round to the back of the head, crossed by scalloped rings
-    const hv = q.sub(vec3(0.0, 1.622, -0.01));
-    const hr = length(hv);
-    const hPhi = atan(hv.y, hv.x);
-    const hTheta = acos(clamp(hv.z.div(hr), -1.0, 1.0));
-    const hRho = length(hv.xy);
-    const hN = 14;
-    const hSpokes = toGrid(hPhi, TAU / hN).mul(hRho);
-    const hScallop = abs(sin(hPhi.mul(hN / 2))).mul(0.07);
-    const hRings = toGrid(hTheta.mul(1.0).sub(hScallop).sub(0.12), 0.36).mul(hr);
-    const headWeb = max(inkLine(hSpokes, SUIT.line * 0.85), inkLine(hRings, SUIT.line * 0.85));
-    // torso: strands radiating from the chest spider (front) and round it on the back, scalloped rings
-    const tv = vec2(q.x, q.y.sub(1.3));
-    const tr = length(tv);
-    const tPhi = atan(tv.y, tv.x);
-    const tN = 16;
-    const tSpokes = toGrid(tPhi, TAU / tN).mul(tr);
-    const tRings = toGrid(tr.add(abs(sin(tPhi.mul(tN / 2))).mul(0.016)), 0.048);
-    const torsoWeb = max(inkLine(tSpokes, SUIT.line), inkLine(tRings, SUIT.line)).mul(step(0.03, tr));
-    // limbs: strands along them, scalloped rings round them
-    const lN = 7;
-    const lR = length(extra.xy);
-    const lSpokes = toGrid(limbAngle, TAU / lN).mul(lR);
-    const lScallop = abs(sin(limbAngle.mul(lN / 2))).mul(0.014);
-    const armRings = toGrid(along.mul(0.6).add(lScallop), 0.05);
-    const legRings = toGrid(q.y.add(lScallop), 0.055);
-    const armWeb = max(inkLine(lSpokes, SUIT.line), inkLine(armRings, SUIT.line));
-    const legWeb = max(inkLine(lSpokes, SUIT.line), inkLine(legRings, SUIT.line));
-    // gloves & feet: a few lines across and one along
-    const handWeb = max(inkLine(toGrid(q.y, 0.035), SUIT.line * 0.8), inkLine(abs(q.z.sub(0.012)), SUIT.line * 0.8));
-    const footWeb = max(inkLine(toGrid(q.z.add(0.02), 0.05), SUIT.line), inkLine(abs(q.x.sub(side.mul(HIP_X))), SUIT.line))
-      .mul(step(0.03, q.y));
-    const web = max(
-      max(head.mul(headWeb), torso.mul(torsoWeb)),
-      max(max(arm.mul(armWeb), leg.mul(legWeb)), max(hand.mul(handWeb), foot.mul(footWeb)))
-    ).mul(isRed);
-
-    // Lenses: big teardrops, pointed down towards the nose, white in a thick black rim
-    const faceFront = smoothstep(0.03, 0.06, q.z).mul(head);
-    const ex = abs(q.x).sub(0.04);
-    const ey = q.y.sub(1.636);
-    const eu = ex.mul(0.86).add(ey.mul(0.51)); // along the lens, out & up
-    const ev = ey.mul(0.86).sub(ex.mul(0.51));
-    const taper = float(1.0).sub(clamp(eu.negate().div(0.036), 0.0, 1.0).mul(0.55));
-    const eyeShape = (a, b) => length(vec2(eu.div(a), ev.div(taper.mul(b))));
-    const lensD = eyeShape(0.034, 0.02);
-    const lens = smoothstep(1.0, 0.94, lensD).mul(faceFront);
-    const rim = smoothstep(1.0, 0.95, eyeShape(0.044, 0.03)).mul(faceFront);
-
-    // Spiders: small and black on the chest, big and red on the back
-    const front = step(0.02, q.z).mul(torso);
-    const back = step(q.z, -0.02).mul(torso);
-    const chestSpider = spiderMark(abs(q.x), q.y.sub(1.315), 0.62, 0.016, 0.034, 0.012, 0.007).mul(front);
-    const backSpider = spiderMark(abs(q.x), q.y.sub(1.29), 1.0, 0.05, 0.058, 0.018, 0.009).mul(back);
-    isRed.assign(max(isRed, backSpider));
-
-    const suit = mix(blue, mix(red, ink, web.mul(float(1.0).sub(backSpider))), isRed);
-    return mix(mix(suit, ink, max(chestSpider, rim)), color(SUIT.lens), lens);
-  })();
-
-  // Less of the sky's & the city's ambient light than a real surface takes, so the shadow side reads as the cartoon's
-  // flat dark tone (deep maroon, navy) against the lit side, not a soft blend into it
-  mat.aoNode = float(0.5);
-  // At night the suit gets a little soft light from above, shaded with his shape (stronger on what faces up, fading
-  // underneath, like a sky fill), so its red and blue still read in the dark without looking lit from inside (nothing
-  // by day)
+  const pattern = suitPattern();
+  mat.colorNode = pattern.color;
+  // Cel shading. The toon model already lights in one hard step (lit or not, no fall-off across the form); what's
+  // left to flatten: the ambient, which a real surface takes more of facing the sky than the ground (and from the
+  // environment map), so the shadow side came out in soft bands: here it's one flat colour for every direction.
+  // Shadows the buildings (or his own head) cast: looked up a few centimetres off the skin along its normal (the city's
+  // shadow map is coarse for a body this size, and its grazing self-shadow broke into a dotted pattern), with a hard
+  // edge like a painted shadow's
+  const toonLighting = mat.setupLightingModel.bind(mat);
+  mat.setupLightingModel = (builder) => {
+    const model = toonLighting(builder);
+    model.indirect = ({ context }) => {
+      context.reflectedLight.indirectDiffuse.addAssign(cityUniforms.uAmbientFlat.mul(BRDF_Lambert({ diffuseColor: diffuseColor.rgb })).mul(AMBIENT_SHARE));
+    };
+    return model;
+  };
+  mat.receivedShadowPositionNode = positionWorld.add(normalWorld.mul(0.07));
+  mat.receivedShadowNode = Fn(([shadow]) => smoothstep(0.4, 0.6, shadow));
+  // The lenses don't shade: pale and bright whichever way they face (dimmer at night). At night the rest of the suit
+  // gets a little soft light from above, shaded with his shape (stronger on what faces up, fading underneath, like a
+  // sky fill), so its red and blue still read in the dark without looking lit from inside (nothing by day)
   mat.emissiveNode = Fn(() => {
     const night = smoothstep(0.6, 1.6, cityUniforms.uInteriorGlow);
     const up = clamp(normalWorld.y.mul(0.5).add(0.5), 0.0, 1.0);
-    return diffuseColor.rgb.mul(up.mul(up).mul(0.12).add(0.02)).mul(night);
+    const fill = diffuseColor.rgb.mul(up.mul(up).mul(0.12).add(0.02)).mul(night);
+    return mix(fill, color(SUIT.lens).mul(mix(0.45, 0.12, night)), pattern.lens);
+  })();
+  // Cartoon colour: the light's brightness, not its tint. The golden-hour sun and the blue sky would turn the red
+  // orange and the lenses cream; the cel colours keep (most of) their own hue at any time of day, only lighter or
+  // darker, with the shadow tones a little greyer, like the painted shadow colours of the cartoon
+  mat.outputNode = Fn(() => {
+    const lw = vec3(0.2126, 0.7152, 0.0722);
+    const albedo = diffuseColor.rgb;
+    const level0 = dot(output.rgb, lw).div(max(dot(albedo, lw), 0.001));
+    // ...and within the range the cartoon's colours keep: a stronger sun (midday) no longer bleaches them pale, and
+    // at night they keep some of their colour instead of sinking into mud (still darker, and still lit by the lamps)
+    const level = min(max(level0, level0.mul(0.5).add(0.22)), 1.3);
+    const neutral = albedo.mul(level);
+    const grey = dot(neutral, lw);
+    const shadowGrey = smoothstep(0.3, 0.06, grey).mul(0.5);
+    return vec4(mix(output.rgb, mix(neutral, vec3(grey), shadowGrey), 0.85), output.a);
   })();
   return mat;
 }
@@ -1155,10 +1202,10 @@ function createSpiderSuitMaterial(pose = null) {
 // a line. Its width grows with the distance to the camera (so it stays about two pixels thick on screen), within limits
 // (never a thick black shell far away, never a hairline up close)
 function createInkOutlineMaterial() {
-  const mat = new THREE.MeshBasicNodeMaterial({ color: 0x050407, side: THREE.BackSide });
+  const mat = new THREE.MeshBasicNodeMaterial({ color: SUIT.ink, side: THREE.BackSide });
   mat.positionNode = Fn(() => {
     const dist = length(cameraPosition.sub(positionLocal));
-    const width = clamp(dist.mul(0.0032), 0.006, 0.03);
+    const width = clamp(dist.mul(0.0024), 0.004, 0.025);
     return positionLocal.add(normalLocal.mul(width));
   })();
   mat.fog = true;
