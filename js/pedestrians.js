@@ -583,7 +583,7 @@ function shoeSkin(z, k) {
 
 // The hero's build (Spider-Man): every ring of his body, in metres, the way the body editor (body-editor.html)
 // shows and writes it. Head, torso & legs: [height, half width, front depth, back depth, front/back offset] per ring;
-// arms: [distance from the shoulder, half width, half depth]. A cartoon superhero: broad traps, deltoids, chest &
+// arms: [distance from the shoulder, half width, half depth]; feet: their size. A cartoon superhero: broad traps, deltoids, chest &
 // lats, a narrow waist, big arms & legs, slim ankles, a rounded masked head.
 const HERO_BODY = {
   head: [
@@ -650,7 +650,9 @@ const HERO_BODY = {
     [0.17, 0.0469, 0.0488, 0.0488, 0.0],
     [0.13, 0.0478, 0.0506, 0.0488, 0.004],
     [0.1, 0.0405, 0.0423, 0.0405, 0.004]
-  ]
+  ],
+  // feet: [length, width, height] as shares of the city's shoe
+  foot: [0.8, 0.7, 0.78]
 };
 // A masked head: no nose or ears through the mask, just the chin's point and a hint of cheekbones
 function maskBump(y) {
@@ -817,10 +819,11 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
     B.loft(longRows, PART.LONG_HAIR, { capEnd: true });
   }
 
+  const foot = body.foot || HERO_BODY.foot;
   // Shoes, heel to toe (the toes bend at the ball of the foot)
   SIDES.forEach((side, k) => {
     const rows = SHOE.filter((r) => keep(r, 4)).map(([z, hw, top, sole]) => ({
-      pts: hero ? shoeRing(side * HIP_X, z * 0.96, hw * 0.8, top * 0.85, sole * 0.92, nShoe) : shoeRing(side * HIP_X, z, hw, top, sole, nShoe),
+      pts: hero ? shoeRing(side * HIP_X, z * foot[0], hw * foot[1], top * foot[2], sole * 0.92, nShoe) : shoeRing(side * HIP_X, z, hw, top, sole, nShoe),
       ptsF: shoeRing(side * HIP_X, z * 0.93, hw * 0.88, top * 0.92, sole, nShoe),
       skin: shoeSkin(z, k),
       axis: null
