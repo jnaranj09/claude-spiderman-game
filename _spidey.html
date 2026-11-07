@@ -63,6 +63,8 @@ else {
   wall.position.set(0, 15, 12); scene.add(wall);
 }
 const ent = createSpiderManEntity(scene);
+if (q.get('plain')) scene.traverse((o) => { if (o.name === 'SpiderMan') o.material = new THREE.MeshStandardNodeMaterial({ color: 0x8f9bb8, roughness: 0.8 }); }); // &plain=1: plain cloth
+if (q.get('noink')) scene.traverse((o) => { if (o.name === 'SpiderManOutline') o.visible = false; }); // &noink=1: no ink outline
 ent.position.set(0, 0, 0); ent.heading = 0;
 for (let i = 0; i < 120; i++) updateSpiderManVisuals(ent, 1 / 30, false);
 const camera = new THREE.PerspectiveCamera(S ? S.fov : 35, W / H, 0.05, 500);

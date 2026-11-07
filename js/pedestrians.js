@@ -30,6 +30,8 @@ import {
   positionLocal,
   cameraPosition,
   fwidth,
+  dFdx,
+  dFdy,
   acos,
   dot,
   pow,
@@ -587,72 +589,72 @@ function shoeSkin(z, k) {
 // lats, a narrow waist, big arms & legs, slim ankles, a rounded masked head.
 const HERO_BODY = {
   head: [
-    [1.752, 0.022, 0.0191, 0.0224, -0.024],
-    [1.738, 0.062, 0.0615, 0.0717, -0.025],
-    [1.712, 0.085, 0.0869, 0.103, -0.025],
-    [1.682, 0.093, 0.0954, 0.1142, -0.023],
-    [1.652, 0.094, 0.0986, 0.1154, -0.021],
-    [1.622, 0.092, 0.0978, 0.106, -0.019],
-    [1.592, 0.088, 0.0957, 0.0914, -0.017],
-    [1.562, 0.082, 0.0887, 0.0741, -0.014],
-    [1.537, 0.074, 0.0808, 0.0594, -0.01],
-    [1.514, 0.06, 0.0703, 0.0486, -0.004],
-    [1.497, 0.036, 0.0456, 0.0288, 0.004]
+    [1.7499, 0.0239, 0.0092, 0.0224, -0.013],
+    [1.7345, 0.065, 0.0487, 0.0586, -0.0138],
+    [1.7128, 0.0791, 0.0737, 0.082, -0.0124],
+    [1.6871, 0.0903, 0.093, 0.0935, -0.0152],
+    [1.6437, 0.094, 0.1047, 0.09, -0.021],
+    [1.6045, 0.092, 0.1044, 0.0894, -0.019],
+    [1.5635, 0.0816, 0.0985, 0.0748, -0.017],
+    [1.5386, 0.0648, 0.0788, 0.0609, -0.014],
+    [1.5346, 0.0507, 0.0552, 0.0514, -0.01],
+    [1.527, 0.0458, 0.0173, 0.0457, -0.0061],
+    [1.5181, 0.025, 0.004, 0.0288, -0.0048]
   ],
   torso: [
-    [1.615, 0.0515, 0.0484, 0.0456, -0.004],
-    [1.575, 0.0586, 0.0539, 0.0466, -0.008],
-    [1.53, 0.065, 0.0562, 0.0485, -0.013],
-    [1.5, 0.122, 0.0666, 0.0616, -0.018],
-    [1.47, 0.1956, 0.0848, 0.0779, -0.02],
-    [1.44, 0.188, 0.1083, 0.0872, -0.018],
-    [1.4, 0.2046, 0.1318, 0.0911, -0.014],
-    [1.34, 0.223, 0.1369, 0.0941, -0.01],
-    [1.27, 0.1971, 0.124, 0.0911, -0.006],
+    [1.579, 0.0605, 0.0484, 0.0456, -0.004],
+    [1.4918, 0.0394, 0.0539, 0.0466, -0.008],
+    [1.4834, 0.1003, 0.0562, 0.0423, -0.013],
+    [1.467, 0.1419, 0.0666, 0.0391, -0.018],
+    [1.4429, 0.1919, 0.0848, 0.0467, -0.02],
+    [1.402, 0.1893, 0.1139, 0.0765, -0.018],
+    [1.3339, 0.1807, 0.1342, 0.1046, -0.014],
+    [1.2771, 0.1675, 0.1317, 0.1028, -0.01],
+    [1.2296, 0.1563, 0.124, 0.0911, -0.006],
     [1.2, 0.1523, 0.1078, 0.0872, -0.002],
     [1.13, 0.1395, 0.0998, 0.0817, 0.0],
-    [1.06, 0.1448, 0.097, 0.0845, 0.0],
-    [0.99, 0.1581, 0.097, 0.099, 0.0],
-    [0.935, 0.1627, 0.095, 0.1081, 0.0],
+    [1.0623, 0.1349, 0.097, 0.0845, 0.0],
+    [0.9914, 0.1373, 0.097, 0.099, 0.0],
+    [0.9296, 0.1433, 0.095, 0.1081, 0.0],
     [0.885, 0.152, 0.078, 0.1, 0.0],
     [0.845, 0.1, 0.055, 0.075, 0.0]
   ],
   arm: [
     [-0.022, 0.0312, 0.0384],
-    [-0.008, 0.0504, 0.06],
-    [0.012, 0.0686, 0.0752],
-    [0.05, 0.0726, 0.0752],
-    [0.1, 0.0686, 0.0686],
-    [0.16, 0.0634, 0.0647],
-    [0.23, 0.0528, 0.0552],
-    [0.272, 0.0462, 0.0473],
-    [0.3, 0.0451, 0.0462],
-    [0.328, 0.0462, 0.0473],
-    [0.39, 0.0533, 0.0521],
-    [0.465, 0.0426, 0.0392],
-    [0.525, 0.0354, 0.0322],
-    [0.542, 0.0374, 0.0343],
-    [0.55, 0.0291, 0.027]
+    [-0.008, 0.0415, 0.06],
+    [0.012, 0.0544, 0.0752],
+    [0.05, 0.0597, 0.0752],
+    [0.1, 0.0578, 0.0686],
+    [0.16, 0.0511, 0.0647],
+    [0.23, 0.0441, 0.0552],
+    [0.272, 0.0412, 0.0473],
+    [0.3, 0.0371, 0.0462],
+    [0.328, 0.0404, 0.0473],
+    [0.39, 0.0452, 0.0521],
+    [0.465, 0.0371, 0.0392],
+    [0.525, 0.0264, 0.0322],
+    [0.542, 0.0291, 0.0343],
+    [0.55, 0.0247, 0.027]
   ],
   leg: [
-    [0.975, 0.0594, 0.0594, 0.0594, 0.0],
-    [0.925, 0.0682, 0.0792, 0.0825, 0.0],
-    [0.865, 0.0913, 0.0968, 0.1001, 0.003],
-    [0.77, 0.0897, 0.0954, 0.0954, 0.006],
+    [0.9267, 0.0073, 0.0594, 0.0594, 0.0],
+    [0.9106, 0.0558, 0.0792, 0.0825, 0.0],
+    [0.8458, 0.0785, 0.0968, 0.1001, 0.003],
+    [0.7596, 0.0804, 0.0954, 0.0954, 0.006],
     [0.67, 0.0781, 0.0825, 0.0803, 0.008],
     [0.59, 0.0666, 0.0697, 0.0666, 0.008],
     [0.535, 0.0568, 0.0608, 0.0568, 0.008],
     [0.5, 0.0549, 0.0598, 0.0549, 0.008],
     [0.465, 0.0529, 0.0568, 0.0549, 0.004],
     [0.415, 0.0583, 0.0605, 0.0648, 0.0],
-    [0.335, 0.0604, 0.0616, 0.0695, -0.004],
-    [0.245, 0.052, 0.053, 0.0551, -0.003],
-    [0.17, 0.0469, 0.0488, 0.0488, 0.0],
-    [0.13, 0.0478, 0.0506, 0.0488, 0.004],
-    [0.1, 0.0405, 0.0423, 0.0405, 0.004]
+    [0.4028, 0.0574, 0.0616, 0.0695, -0.004],
+    [0.3104, 0.0602, 0.053, 0.0551, -0.003],
+    [0.2271, 0.0448, 0.0488, 0.0488, 0.0],
+    [0.143, 0.0376, 0.0327, 0.0391, 0.004],
+    [0.0574, 0.0264, 0.0423, 0.0642, 0.004]
   ],
   // feet: [length, width, height] as shares of the city's shoe
-  foot: [0.8, 0.7, 0.78]
+  foot: [0.66, 0.76, 0.98]
 };
 // A masked head: no nose or ears through the mask, just the chin's point and a hint of cheekbones
 function maskBump(y) {
@@ -1088,10 +1090,13 @@ const SUIT = {
   line: 0.0017 // half-width of a web line (m)
 };
 
-// Anti-aliased line of half-width w at distance d (both in metres)
+// Anti-aliased line of half-width w at distance d (both in metres). Where the surface is seen edge-on (or folds
+// sharply) the distance changes fast across a pixel: the line is softened over that width but fades in proportion, so
+// it keeps about the same amount of ink instead of swelling into a solid black band
 const inkLine = (d, w) => {
   const fw = min(fwidth(d), 0.01);
-  return smoothstep(fw.add(w), fw.negate().add(w), d);
+  const fade = clamp(float(w * 2).div(fw.add(w)), 0.0, 1.0);
+  return smoothstep(fw.add(w), fw.negate().add(w), d).mul(fade);
 };
 // Inside of a shape from its (approximate) signed distance in metres, anti-aliased
 const fillSDF = (d) => {
@@ -1099,6 +1104,16 @@ const fillSDF = (d) => {
   return smoothstep(fw, fw.negate(), d);
 };
 // Distance (in units of `period`) from x to the nearest multiple of `period`
+// A web line painted by a pattern projected straight on from the front: where the surface runs front to back (the
+// side of the chest, a shelf at the shoulders) the projection stretches and one line would cover a broad strip.
+// Measured on the surface (how fast the distance changes per metre of skin, from the screen derivatives of both),
+// the line keeps its width wherever it lands
+const projectedLine = (d, w, q) => {
+  const perSkin = max(abs(dFdx(d)).div(max(length(dFdx(q)), 1e-7)), abs(dFdy(d)).div(max(length(dFdy(q)), 1e-7)));
+  // (only where it really is stretched: elsewhere the measurement's pixel-to-pixel noise would break lines into dots)
+  const stretch = mix(float(1.0), clamp(perSkin, 0.2, 1.0), smoothstep(0.65, 0.4, perSkin));
+  return inkLine(d.div(stretch), w);
+};
 const toGrid = (x, period) => abs(fract(x.div(period).add(0.5)).sub(0.5)).mul(period);
 // Distance from p to the segment a-b (2D)
 const segment = (p, a, b) => {
@@ -1173,7 +1188,7 @@ function suitPattern() {
   const tN = 16;
   const tSpokes = toGrid(tPhi, TAU / tN).mul(tr);
   const tRings = toGrid(tr.add(abs(sin(tPhi.mul(tN / 2))).mul(0.008)), 0.055);
-  const torsoWeb = max(inkLine(tSpokes, SUIT.line), inkLine(tRings, SUIT.line)).mul(step(0.03, tr));
+  const torsoWeb = max(projectedLine(tSpokes, SUIT.line, q), projectedLine(tRings, SUIT.line, q)).mul(step(0.03, tr));
   // limbs: strands along them, rings round them
   const lN = 7;
   const lR = length(extra.xy);
@@ -1181,7 +1196,9 @@ function suitPattern() {
   const lSag = abs(sin(limbAngle.mul(lN / 2))).mul(0.008);
   const armRings = toGrid(along.mul(0.6).add(lSag), 0.055);
   const legRings = toGrid(q.y.add(lSag), 0.06);
-  const armWeb = max(inkLine(lSpokes, SUIT.line), inkLine(armRings, SUIT.line));
+  // (none on the arm's rounded top end: it sits inside the shoulder, and the first ring would paint it solid black
+  // where a slimmer chest lets it show)
+  const armWeb = max(inkLine(lSpokes, SUIT.line), inkLine(armRings, SUIT.line)).mul(step(0.03, along));
   const legWeb = max(inkLine(lSpokes, SUIT.line), inkLine(legRings, SUIT.line));
   // gloves & feet: a few lines across and one along
   const handWeb = max(inkLine(toGrid(q.y, 0.035), SUIT.line * 0.8), inkLine(abs(q.z.sub(0.012)), SUIT.line * 0.8));
