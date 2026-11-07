@@ -159,7 +159,9 @@ and `?shot=back` pose him (forward kinematics), frame him and turn the light to 
 the share and mean colour of every cel tone. `_spidey.html?v=front|back|3q|3qb&t=midnight&face=1` previews him
 standing. The lenses are an outline (`LENS_OUTLINE` in `js/pedestrians.js`: control points, sharp or smooth,
 mirrored for the other eye), drawn in `lens-editor.html`: drag the handles on the game's own head (head-on, with a
-reference picture traced underneath), see it in 3D, then Copy code or Save for Claude. His 15 bones are posed by forward kinematics from joint
+reference picture traced underneath), see it in 3D, then Copy code or Save for Claude. His shape is one table of rings (`HERO_BODY`: head, torso,
+arms and legs, in metres), shaped the same way in `body-editor.html`: a handle on every ring, head-on for width and
+height, from the side for front, back and forward/back placement. His 15 bones are posed by forward kinematics from joint
 angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass

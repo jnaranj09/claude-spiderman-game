@@ -1,0 +1,604 @@
+<meta charset="utf-8">
+<title>Spidey Body Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a drawing board (one body part, head-on or from the side, with a handle on every ring) beside a column
+     holding the live 3D view and the controls; stacked on a phone. Same night-rooftop look as the lens editor. */
+  :root {
+    --night: #0b1020;
+    --panel: #121a31;
+    --panel-2: #18223f;
+    --rule: #26335c;
+    --fg: #e9edf8;
+    --muted: #94a0c4;
+    --suit-red: #e0402e;
+    --suit-red-ink: #ff6a55;
+    --lens: #cfe4f6;
+    --ok: #59d18c;
+    --display: "Anton", "Impact", "Arial Narrow", sans-serif;
+    --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--night); color: var(--fg); }
+  body {
+    font-family: var(--body); font-size: 14px; line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px 28px;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; max-width: 1180px; margin: 0 auto 14px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 4vw, 36px); letter-spacing: 0.02em; text-transform: uppercase; margin: 0; line-height: 1; text-wrap: balance; }
+  h1 span { color: var(--suit-red); }
+  .lede { color: var(--muted); margin: 6px 0 0; max-width: 64ch; }
+  .lede a { color: var(--lens); }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+  .status[data-state="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--rule)); }
+  .status[data-state="warn"] { color: var(--suit-red-ink); border-color: color-mix(in srgb, var(--suit-red) 50%, var(--rule)); }
+
+  .parts { max-width: 1180px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .parts button { font-family: var(--display); font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 14px; }
+
+  .bench { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+  .col { display: grid; gap: 16px; min-width: 0; }
+  .pane { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; min-width: 0; }
+  .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+  .pane-head h2 { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 7px 12px; }
+  .seg button + button { border-left: 1px solid var(--rule); }
+
+  .stage { position: relative; width: 100%; aspect-ratio: 1 / 1; max-width: 100%; background: #0e1530; touch-action: none; user-select: none; }
+  .stage canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+  .stage img.ref { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: center; pointer-events: none; }
+  .stage svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  #viewStage { aspect-ratio: 4 / 3; cursor: grab; }
+  #viewStage:active { cursor: grabbing; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--rule); align-items: center; }
+  .readout { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  button, .file { font: 500 13px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 7px; padding: 9px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  button:hover, .file:hover { border-color: #3a4a80; }
+  button:focus-visible, .file:focus-within, input:focus-visible { outline: 2px solid var(--lens); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: color-mix(in srgb, var(--suit-red) 28%, var(--panel-2)); border-color: var(--suit-red); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--suit-red); border-color: var(--suit-red); color: #fff; }
+  button.primary:hover { background: #ec5240; }
+  .file { position: relative; }
+  .file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .controls { display: grid; gap: 14px; padding: 12px; }
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+  legend { font-family: var(--display); font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 0; margin-bottom: 8px; }
+  .row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 64px; gap: 10px; align-items: center; }
+  .row label { color: var(--muted); font-size: 12.5px; }
+  .row output { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--suit-red); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .note { color: var(--muted); font-size: 12px; margin: 0; }
+  textarea { width: 100%; min-height: 150px; resize: vertical; font: 12px/1.45 var(--mono); color: var(--fg); background: var(--night); border: 1px solid var(--rule); border-radius: 7px; padding: 10px; box-sizing: border-box; }
+  .err { color: var(--suit-red-ink); padding: 12px; margin: 0; }
+  .legend-keys { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; }
+  .legend-keys i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; border: 2px solid var(--suit-red); }
+  .legend-keys i.back { border-color: var(--lens); }
+  .legend-keys i.mid { border-radius: 2px; border-color: var(--ok); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+    "./js/tsl-materials.js": "./js/lens-editor-stub.js"
+  }
+}
+</script>
+
+<header>
+  <div>
+    <h1>Spidey <span>Body</span> Editor</h1>
+    <p class="lede">Every handle is one ring of his body. Head-on, drag to set how wide it is and how high it sits; from the side, how far it reaches forward and back. Both sides of him follow. The lenses have <a href="https://claude.ai/artifact/FPugiwF4zQ6FHzUjaAyooY" target="_blank" rel="noopener">their own editor</a>.</p>
+  </div>
+  <span class="status" id="status" role="status">Loading the body…</span>
+</header>
+
+<nav class="parts" aria-label="Body part">
+  <button data-part="head" aria-pressed="true">Head</button>
+  <button data-part="torso" aria-pressed="false">Neck &amp; torso</button>
+  <button data-part="arm" aria-pressed="false">Arms</button>
+  <button data-part="leg" aria-pressed="false">Legs</button>
+</nav>
+
+<main class="bench">
+  <section class="pane" aria-labelledby="draw-title">
+    <div class="pane-head">
+      <h2 id="draw-title">Drawing board</h2>
+      <div class="seg" role="group" aria-label="Board view">
+        <button data-board="front" aria-pressed="true">Head-on</button>
+        <button data-board="side" aria-pressed="false">From the side</button>
+      </div>
+    </div>
+    <div class="stage" id="drawStage">
+      <canvas id="boardCanvas" aria-hidden="true"></canvas>
+      <img class="ref" id="refImg" alt="" hidden>
+      <svg id="overlay" aria-label="Body ring handles"></svg>
+    </div>
+    <div class="toolbar">
+      <div class="legend-keys" id="keys"></div>
+      <button id="undoBtn" disabled>Undo</button>
+      <span class="readout" id="readout">—</span>
+    </div>
+  </section>
+
+  <div class="col">
+    <section class="pane" aria-labelledby="view-title">
+      <div class="pane-head">
+        <h2 id="view-title">3D view</h2>
+        <span class="hint">Drag to turn him</span>
+      </div>
+      <div class="stage" id="viewStage"><canvas id="viewCanvas" aria-hidden="true"></canvas></div>
+      <div class="toolbar">
+        <button data-view="front">Front</button>
+        <button data-view="three">¾</button>
+        <button data-view="side">Side</button>
+        <button data-view="back">Back</button>
+        <button data-view="whole" aria-pressed="false">Whole body</button>
+      </div>
+    </section>
+
+    <section class="pane controls" aria-label="Settings">
+      <fieldset>
+        <legend>Reference picture (this board)</legend>
+        <div class="btns">
+          <label class="file">Load a picture<input type="file" id="refFile" accept="image/*"></label>
+          <button id="refMoveBtn" aria-pressed="false" disabled>Move picture</button>
+          <button id="refFlipBtn" disabled>Mirror</button>
+          <button id="refClearBtn" disabled>Remove</button>
+        </div>
+        <div class="row"><label for="refOpacity">See-through</label><input type="range" id="refOpacity" min="0" max="100" value="50" disabled><output id="refOpacityOut" for="refOpacity">50%</output></div>
+        <div class="row"><label for="refScale">Size</label><input type="range" id="refScale" min="10" max="400" value="100" disabled><output id="refScaleOut" for="refScale">100%</output></div>
+        <div class="row"><label for="refRotate">Turn</label><input type="range" id="refRotate" min="-45" max="45" step="0.5" value="0" disabled><output id="refRotateOut" for="refRotate">0°</output></div>
+        <p class="note">Head-on and side boards each keep their own picture. Pictures stay on this device and are never saved.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Keep it</legend>
+        <div class="btns">
+          <button class="primary" id="saveBtn" disabled>Save for Claude</button>
+          <button id="copyBtn">Copy code</button>
+          <button id="resetPartBtn">Reset this part</button>
+          <button id="resetBtn">Reset everything</button>
+        </div>
+        <p class="note" id="saveNote">Save, then tell Claude “use my body” and it goes into the game.</p>
+        <textarea id="code" readonly hidden aria-label="Body code"></textarea>
+      </fieldset>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+import * as THREE from 'three/webgpu';
+import { HERO_BODY, HERO_FRAME, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
+
+const $ = (id) => document.getElementById(id);
+const status = (text, state = '') => { $('status').textContent = text; $('status').dataset.state = state; };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const r4 = (v) => Math.round(v * 10000) / 10000;
+const mm = (v) => `${(v * 1000).toFixed(0)}`;
+
+// ---- The body being shaped --------------------------------------------------------------------------------------
+let body = clone(HERO_BODY);
+let part = 'head';
+let board = 'front';
+let selected = null; // { kind, row }
+const history = [];
+const DRAFT_KEY = 'spidey-body-draft';
+function pushHistory() { history.push(clone(body)); if (history.length > 80) history.shift(); $('undoBtn').disabled = false; }
+function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ body, at: Date.now() })); } catch (e) { /* storage off */ } }
+function loadDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+    return d && validBody(d.body) ? d : null;
+  } catch (e) { return null; }
+}
+function validBody(b) {
+  return b && ['head', 'torso', 'arm', 'leg'].every((k) => Array.isArray(b[k]) && b[k].length === HERO_BODY[k].length);
+}
+
+// Where each part's board looks (metres): centre across (x head-on, z from the side), centre height, half size
+const FRAMES = {
+  head: { front: [0, 1.62, 0.16], side: [-0.01, 1.62, 0.16], view: [0, 1.6, 0], dist: 1.0 },
+  torso: { front: [0, 1.2, 0.42], side: [0, 1.2, 0.42], view: [0, 1.2, 0], dist: 2.2 },
+  arm: { front: [0.26, 1.16, 0.36], side: [0, 1.16, 0.36], view: [0.2, 1.15, 0], dist: 2.0 },
+  leg: { front: [0, 0.5, 0.52], side: [0, 0.5, 0.52], view: [0, 0.55, 0], dist: 2.6 }
+};
+
+// ---- 3D -----------------------------------------------------------------------------------------------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1530);
+let geometry = buildPersonGeometry(1, true, body);
+const suit = new THREE.Mesh(geometry, createSpiderSuitMaterial());
+const ink = new THREE.Mesh(geometry, createInkOutlineMaterial());
+suit.frustumCulled = ink.frustumCulled = false;
+scene.add(suit, ink);
+const key = new THREE.DirectionalLight(0xffffff, 3.2);
+key.position.set(1.2, 2.8, 2.4);
+key.target.position.set(0, 1, 0);
+scene.add(key, key.target);
+
+let rebuildQueued = false;
+function rebuild() {
+  if (rebuildQueued) return;
+  rebuildQueued = true;
+  requestAnimationFrame(() => {
+    rebuildQueued = false;
+    const g = buildPersonGeometry(1, true, body);
+    suit.geometry = g;
+    ink.geometry = g;
+    if (geometry !== g) geometry.dispose();
+    geometry = g;
+    dirty = true;
+  });
+}
+
+async function makeRenderer(canvas) {
+  const r = new THREE.WebGPURenderer({ canvas, antialias: true });
+  r.toneMapping = THREE.ACESFilmicToneMapping;
+  r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  await r.init();
+  return r;
+}
+
+const boardCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 10);
+function placeBoardCam() {
+  const [u, v, h] = FRAMES[part][board];
+  boardCam.left = -h; boardCam.right = h; boardCam.top = h; boardCam.bottom = -h;
+  if (board === 'front') { boardCam.position.set(u, v, 4); boardCam.lookAt(u, v, 0); }
+  else { boardCam.position.set(4, v, -u); boardCam.lookAt(0, v, -u); } // from his left: screen right is his back
+  boardCam.updateProjectionMatrix();
+}
+
+const view = new THREE.PerspectiveCamera(30, 4 / 3, 0.05, 30);
+const orbit = { yaw: 0.6, pitch: -0.1, whole: false };
+const VIEWS = { front: [0, -0.05], three: [0.6, -0.1], side: [1.57, -0.05], back: [3.14, -0.08] };
+function placeView() {
+  const f = orbit.whole ? { view: [0, 0.95, 0], dist: 3.6 } : FRAMES[part];
+  const [cx, cy, cz] = f.view;
+  const d = f.dist;
+  view.position.set(cx + Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * d, cy - Math.sin(orbit.pitch) * d, cz + Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * d);
+  view.lookAt(cx, cy, cz);
+}
+
+let boardR, viewR;
+let dirty = true;
+function frame() {
+  if (dirty && boardR && viewR) { dirty = false; boardR.render(scene, boardCam); viewR.render(scene, view); }
+  requestAnimationFrame(frame);
+}
+function sizeRenderers() {
+  if (!boardR) return;
+  const a = $('drawStage').getBoundingClientRect();
+  boardR.setSize(a.width, a.height, false);
+  const b = $('viewStage').getBoundingClientRect();
+  viewR.setSize(b.width, b.height, false);
+  view.aspect = b.width / Math.max(1, b.height);
+  view.updateProjectionMatrix();
+  drawOverlay();
+  placeRef();
+  dirty = true;
+}
+
+// ---- Rings on the board ------------------------------------------------------------------------------------------
+// Board coordinates: (s, y), s across the board to the right: x head-on, -z from the side (his front on the left)
+const A = HERO_FRAME.armAbduction;
+const ARM_DIR = new THREE.Vector3(Math.sin(A), -Math.cos(A), 0); // his left arm, hanging
+const ARM_OUT = new THREE.Vector3(Math.cos(A), Math.sin(A), 0); // across it, outwards
+const armCentre = (i) => {
+  const [d, , , ox, oz] = HERO_FRAME.arm[i];
+  const [sx, sy, sz] = HERO_FRAME.shoulder;
+  return new THREE.Vector3(sx, sy, sz).addScaledVector(ARM_DIR, d).add(new THREE.Vector3(ox, 0, oz));
+};
+const legX = () => HERO_FRAME.hipX;
+
+// The handles for the current part & board: { kind, row, s, y, cls }
+function handles() {
+  const out = [];
+  const rows = body[part];
+  rows.forEach((r, i) => {
+    if (part === 'arm') {
+      const c = armCentre(i);
+      if (board === 'front') out.push({ kind: 'armW', row: i, s: c.x + ARM_OUT.x * r[1], y: c.y + ARM_OUT.y * r[1], cls: 'front' });
+      else out.push({ kind: 'armD', row: i, s: -(c.z + r[2]), y: c.y, cls: 'front' });
+      return;
+    }
+    const [y, rx, rzF, rzB, cz] = r;
+    const cx = part === 'leg' ? legX() : 0;
+    if (board === 'front') out.push({ kind: 'w', row: i, s: cx + rx, y, cls: 'front' });
+    else {
+      out.push({ kind: 'f', row: i, s: -(cz + rzF), y, cls: 'front' });
+      out.push({ kind: 'b', row: i, s: -(cz - rzB), y, cls: 'back' });
+      out.push({ kind: 'c', row: i, s: -cz, y, cls: 'mid' });
+    }
+  });
+  return out;
+}
+
+// Outline curves to draw: arrays of [s, y] with a style
+function curves() {
+  const rows = body[part];
+  const solid = [], dashed = [];
+  if (part === 'arm') {
+    if (board === 'front') {
+      solid.push(rows.map((r, i) => { const c = armCentre(i); return [c.x + ARM_OUT.x * r[1], c.y + ARM_OUT.y * r[1]]; }));
+      dashed.push(rows.map((r, i) => { const c = armCentre(i); return [c.x - ARM_OUT.x * r[1], c.y - ARM_OUT.y * r[1]]; }));
+    } else {
+      solid.push(rows.map((r, i) => { const c = armCentre(i); return [-(c.z + r[2]), c.y]; }));
+      dashed.push(rows.map((r, i) => { const c = armCentre(i); return [-(c.z - r[2]), c.y]; }));
+    }
+  } else if (board === 'front') {
+    const cx = part === 'leg' ? legX() : 0;
+    solid.push(rows.map((r) => [cx + r[1], r[0]]));
+    dashed.push(rows.map((r) => [cx - r[1], r[0]]));
+    if (part === 'leg') { dashed.push(rows.map((r) => [-cx + r[1], r[0]]), rows.map((r) => [-cx - r[1], r[0]])); }
+  } else {
+    solid.push(rows.map((r) => [-(r[4] + r[2]), r[0]]), rows.map((r) => [-(r[4] - r[3]), r[0]]));
+  }
+  return { solid, dashed };
+}
+
+const svg = $('overlay');
+const NS = 'http://www.w3.org/2000/svg';
+const el = (name, attrs) => { const e = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+const KEYS = {
+  front: '<span><i></i>width &amp; height</span>',
+  side: '<span><i></i>front</span><span><i class="back"></i>back</span><span><i class="mid"></i>move the ring forward / back</span>'
+};
+const ARM_KEYS = { front: '<span><i></i>thickness (head-on)</span>', side: '<span><i></i>thickness (front to back)</span>' };
+
+function drawOverlay() {
+  const [u, v, h] = FRAMES[part][board];
+  svg.setAttribute('viewBox', `${u - h} ${-(v + h)} ${h * 2} ${h * 2}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const mpp = (h * 2) / Math.max(1, svg.getBoundingClientRect().width);
+  svg.replaceChildren();
+  const path = (pts) => pts.map(([s, y], i) => `${i ? 'L' : 'M'}${s} ${-y}`).join(' ');
+  const { solid, dashed } = curves();
+  dashed.forEach((p) => svg.append(el('path', { d: path(p), fill: 'none', stroke: '#cfe4f6', 'stroke-opacity': 0.5, 'stroke-dasharray': `${5 * mpp} ${4 * mpp}`, 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' })));
+  solid.forEach((p) => svg.append(el('path', { d: path(p), fill: 'none', stroke: '#cfe4f6', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' })));
+  const hs = handles();
+  const colour = { front: '#e0402e', back: '#cfe4f6', mid: '#59d18c' };
+  hs.forEach((hd) => {
+    const isSel = selected && selected.kind === hd.kind && selected.row === hd.row;
+    const r = (isSel ? 8 : hd.cls === 'mid' ? 4.5 : 6) * mpp;
+    const attrs = { fill: isSel ? colour[hd.cls] : '#0b1020', stroke: isSel ? '#ffffff' : colour[hd.cls], 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' };
+    svg.append(hd.cls === 'mid' ? el('rect', { x: hd.s - r, y: -hd.y - r, width: r * 2, height: r * 2, ...attrs }) : el('circle', { cx: hd.s, cy: -hd.y, r, ...attrs }));
+  });
+  // hit areas on top (bigger, for fingers); the selected handle's last, so it wins where they overlap
+  const order = hs.slice().sort((a, b) => (selected && a.kind === selected.kind && a.row === selected.row ? 1 : 0) - (selected && b.kind === selected.kind && b.row === selected.row ? 1 : 0));
+  order.forEach((hd) => svg.append(el('circle', { cx: hd.s, cy: -hd.y, r: (hd.cls === 'mid' ? 9 : 13) * mpp, fill: 'transparent', 'data-kind': hd.kind, 'data-row': hd.row, style: 'cursor: grab' })));
+  $('keys').innerHTML = part === 'arm' ? ARM_KEYS[board] : KEYS[board];
+  updateReadout();
+}
+
+function updateReadout() {
+  if (!selected) { $('readout').textContent = 'tap or drag a handle'; return; }
+  const r = body[part][selected.row];
+  const n = body[part].length;
+  if (part === 'arm') $('readout').textContent = `ring ${selected.row + 1}/${n} · ${mm(r[0])} mm down the arm · ${mm(r[1] * 2)} × ${mm(r[2] * 2)} mm`;
+  else $('readout').textContent = `ring ${selected.row + 1}/${n} · height ${mm(r[0])} · width ${mm(r[1] * 2)} · depth ${mm(r[2] + r[3])} mm`;
+}
+
+const toBoard = (ev) => {
+  const [u, v, h] = FRAMES[part][board];
+  const b = svg.getBoundingClientRect();
+  return { s: u - h + ((ev.clientX - b.left) / b.width) * h * 2, y: v + h - ((ev.clientY - b.top) / b.height) * h * 2 };
+};
+
+// Moves a ring's height, staying between its neighbours (rows run top to bottom)
+function setHeight(rows, i, y) {
+  const above = i > 0 ? rows[i - 1][0] - 0.004 : Infinity;
+  const below = i < rows.length - 1 ? rows[i + 1][0] + 0.004 : -Infinity;
+  rows[i][0] = r4(Math.min(above, Math.max(below, y)));
+}
+
+function applyDrag(p) {
+  const rows = body[part];
+  const r = rows[selected.row];
+  const MIN = 0.004;
+  switch (selected.kind) {
+    case 'w': r[1] = r4(Math.max(MIN, Math.abs(p.s - (part === 'leg' ? legX() : 0)))); setHeight(rows, selected.row, p.y); break;
+    case 'f': r[2] = r4(Math.max(MIN, -p.s - r[4])); setHeight(rows, selected.row, p.y); break;
+    case 'b': r[3] = r4(Math.max(MIN, r[4] + p.s)); setHeight(rows, selected.row, p.y); break;
+    case 'c': r[4] = r4(-p.s); break;
+    case 'armW': { const c = armCentre(selected.row); r[1] = r4(Math.max(MIN, (p.s - c.x) * ARM_OUT.x + (p.y - c.y) * ARM_OUT.y)); break; }
+    case 'armD': { const c = armCentre(selected.row); r[2] = r4(Math.max(MIN, -p.s - c.z)); break; }
+  }
+}
+
+let drag = null;
+svg.addEventListener('pointerdown', (ev) => {
+  if (refMove) { startRefDrag(ev); return; }
+  const kind = ev.target.getAttribute && ev.target.getAttribute('data-kind');
+  if (!kind) return;
+  selected = { kind, row: +ev.target.getAttribute('data-row') };
+  pushHistory();
+  drag = { id: ev.pointerId, moved: false };
+  svg.setPointerCapture(ev.pointerId);
+  drawOverlay();
+  ev.preventDefault();
+});
+svg.addEventListener('pointermove', (ev) => {
+  if (refDrag) { moveRefDrag(ev); return; }
+  if (!drag || drag.id !== ev.pointerId) return;
+  applyDrag(toBoard(ev));
+  drag.moved = true;
+  drawOverlay();
+  rebuild();
+});
+const endDrag = (ev) => {
+  if (refDrag) { refDrag = null; return; }
+  if (!drag || drag.id !== ev.pointerId) return;
+  if (!drag.moved) history.pop();
+  $('undoBtn').disabled = history.length === 0;
+  drag = null;
+  $('code').value = codeFor(body);
+  saveDraft();
+};
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+
+// ---- Part, board & view switching ----------------------------------------------------------------------------------
+function setPressed(sel, attr, value) { document.querySelectorAll(sel).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value))); }
+document.querySelectorAll('[data-part]').forEach((b) => b.addEventListener('click', () => {
+  part = b.dataset.part; selected = null;
+  setPressed('[data-part]', 'part', part);
+  placeBoardCam(); placeView(); drawOverlay(); dirty = true;
+}));
+document.querySelectorAll('[data-board]').forEach((b) => b.addEventListener('click', () => {
+  board = b.dataset.board; selected = null;
+  setPressed('[data-board]', 'board', board);
+  placeBoardCam(); drawOverlay(); showRefForBoard(); dirty = true;
+}));
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.view === 'whole') { orbit.whole = !orbit.whole; b.setAttribute('aria-pressed', String(orbit.whole)); }
+  else [orbit.yaw, orbit.pitch] = VIEWS[b.dataset.view];
+  placeView(); dirty = true;
+}));
+let orbitDrag = null;
+$('viewStage').addEventListener('pointerdown', (ev) => { orbitDrag = { x: ev.clientX, y: ev.clientY, yaw: orbit.yaw, pitch: orbit.pitch, id: ev.pointerId }; $('viewStage').setPointerCapture(ev.pointerId); });
+$('viewStage').addEventListener('pointermove', (ev) => {
+  if (!orbitDrag || orbitDrag.id !== ev.pointerId) return;
+  orbit.yaw = orbitDrag.yaw - (ev.clientX - orbitDrag.x) * 0.008;
+  orbit.pitch = Math.max(-1.2, Math.min(0.9, orbitDrag.pitch - (ev.clientY - orbitDrag.y) * 0.006));
+  placeView(); dirty = true;
+});
+['pointerup', 'pointercancel'].forEach((t) => $('viewStage').addEventListener(t, () => { orbitDrag = null; }));
+
+$('undoBtn').addEventListener('click', () => {
+  if (!history.length) return;
+  body = history.pop();
+  $('undoBtn').disabled = history.length === 0;
+  drawOverlay(); rebuild(); saveDraft();
+});
+$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
+$('resetBtn').addEventListener('click', () => { pushHistory(); body = clone(HERO_BODY); drawOverlay(); rebuild(); saveDraft(); status('Everything is back to the game’s'); });
+
+// ---- Reference pictures (one per board) ----------------------------------------------------------------------------
+const refs = { front: { src: null, scale: 1, rotate: 0, x: 0, y: 0, flip: false, opacity: 0.5 }, side: { src: null, scale: 1, rotate: 0, x: 0, y: 0, flip: false, opacity: 0.5 } };
+let refMove = false, refDrag = null;
+const refControls = ['refMoveBtn', 'refFlipBtn', 'refClearBtn', 'refOpacity', 'refScale', 'refRotate'];
+function placeRef() {
+  const img = $('refImg'); const ref = refs[board];
+  if (!ref.src || img.hidden) return;
+  const stage = $('drawStage').getBoundingClientRect();
+  img.style.width = `${stage.width}px`;
+  img.style.transform = `translate(-50%, -50%) translate(${ref.x * stage.width}px, ${ref.y * stage.height}px) rotate(${ref.rotate}deg) scale(${ref.flip ? -ref.scale : ref.scale}, ${ref.scale})`;
+  img.style.opacity = ref.opacity;
+}
+function showRefForBoard() {
+  const ref = refs[board]; const img = $('refImg');
+  refMove = false; $('refMoveBtn').setAttribute('aria-pressed', 'false');
+  refControls.forEach((id) => { $(id).disabled = !ref.src; });
+  $('refOpacity').value = Math.round(ref.opacity * 100); $('refOpacityOut').textContent = `${Math.round(ref.opacity * 100)}%`;
+  $('refScale').value = Math.round(ref.scale * 100); $('refScaleOut').textContent = `${Math.round(ref.scale * 100)}%`;
+  $('refRotate').value = ref.rotate; $('refRotateOut').textContent = `${ref.rotate}°`;
+  if (ref.src) { img.src = ref.src; img.hidden = false; img.onload = placeRef; placeRef(); } else { img.hidden = true; img.removeAttribute('src'); }
+}
+$('refFile').addEventListener('change', () => {
+  const file = $('refFile').files[0];
+  if (!file) return;
+  refs[board].src = URL.createObjectURL(file);
+  $('refFile').value = '';
+  showRefForBoard();
+  status('Picture loaded · line it up with the body', 'ok');
+});
+const bindRange = (id, out, fn, fmt) => $(id).addEventListener('input', () => { fn(+$(id).value); $(out).textContent = fmt(+$(id).value); placeRef(); });
+bindRange('refOpacity', 'refOpacityOut', (v) => { refs[board].opacity = v / 100; }, (v) => `${v}%`);
+bindRange('refScale', 'refScaleOut', (v) => { refs[board].scale = v / 100; }, (v) => `${v}%`);
+bindRange('refRotate', 'refRotateOut', (v) => { refs[board].rotate = v; }, (v) => `${v}°`);
+$('refFlipBtn').addEventListener('click', () => { refs[board].flip = !refs[board].flip; placeRef(); });
+$('refMoveBtn').addEventListener('click', () => { refMove = !refMove; $('refMoveBtn').setAttribute('aria-pressed', String(refMove)); status(refMove ? 'Drag on the board to move the picture' : 'Drag the handles to shape him'); });
+$('refClearBtn').addEventListener('click', () => { refs[board].src = null; showRefForBoard(); });
+function startRefDrag(ev) { refDrag = { x: ev.clientX, y: ev.clientY, rx: refs[board].x, ry: refs[board].y }; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+function moveRefDrag(ev) {
+  const s = $('drawStage').getBoundingClientRect();
+  refs[board].x = refDrag.rx + (ev.clientX - refDrag.x) / s.width;
+  refs[board].y = refDrag.ry + (ev.clientY - refDrag.y) / s.height;
+  placeRef();
+}
+
+// ---- Code & saving ---------------------------------------------------------------------------------------------------
+function codeFor(b) {
+  const rows = (k) => b[k].map((r) => `    [${r.map(r4).join(', ')}]`).join(',\n');
+  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ]\n};\n`;
+}
+$('copyBtn').addEventListener('click', () => {
+  const text = codeFor(body); const area = $('code'); area.value = text;
+  const fallback = () => { area.hidden = false; area.focus(); area.select(); status('Select-all and copy the code below', 'warn'); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => status('Code copied', 'ok'), fallback);
+  else fallback();
+});
+
+let db = null;
+const BODY_DOC = 'body/current';
+async function connectStore() {
+  try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+  if (!db) { $('saveNote').textContent = 'Saving for Claude works when this page is open on claude.ai; Copy code works anywhere.'; return; }
+  $('saveBtn').disabled = false;
+  try {
+    const snap = await db.doc(BODY_DOC).get();
+    const draft = loadDraft();
+    if (snap.exists) {
+      const saved = snap.data();
+      const savedAt = Date.parse(saved.savedAt || '') || 0;
+      if (draft && draft.at > savedAt) status('Picked up your unsaved changes');
+      else if (validBody(saved.body)) {
+        body = clone(saved.body);
+        drawOverlay(); rebuild();
+        status(`Loaded the body saved ${new Date(savedAt).toLocaleString()}`, 'ok');
+      }
+    }
+  } catch (e) { /* first visit or no access */ }
+}
+$('saveBtn').addEventListener('click', async () => {
+  if (!db) return;
+  $('saveBtn').disabled = true;
+  try {
+    await db.doc(BODY_DOC).set({ body: clone(body), savedAt: new Date().toISOString() });
+    status('Saved · tell Claude “use my body”', 'ok');
+  } catch (e) {
+    status(e && e.code === 'not_granted' ? 'Saving isn’t allowed for you here · use Copy code' : 'Couldn’t save · try again or use Copy code', 'warn');
+  } finally { $('saveBtn').disabled = false; }
+});
+
+// ---- Start -------------------------------------------------------------------------------------------------------------
+async function start() {
+  const draft = loadDraft();
+  if (draft) { body = draft.body; geometry = buildPersonGeometry(1, true, body); suit.geometry = ink.geometry = geometry; }
+  $('code').value = codeFor(body);
+  placeBoardCam(); placeView();
+  try {
+    [boardR, viewR] = await Promise.all([makeRenderer($('boardCanvas')), makeRenderer($('viewCanvas'))]);
+  } catch (e) {
+    status('This browser can’t draw 3D here', 'warn');
+    $('drawStage').insertAdjacentHTML('afterend', '<p class="err">3D drawing isn’t available in this browser, so the body can’t be shown. Copy code still works.</p>');
+    return;
+  }
+  sizeRenderers();
+  new ResizeObserver(sizeRenderers).observe(document.querySelector('.bench'));
+  requestAnimationFrame(frame);
+  status(draft ? 'Picked up your unsaved changes' : 'Ready · drag a handle');
+  connectStore();
+  window.__bodyEditorReady = true;
+}
+start();
+</script>

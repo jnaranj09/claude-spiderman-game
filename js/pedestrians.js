@@ -581,52 +581,77 @@ function shoeSkin(z, k) {
   return [toe, toe, 0];
 }
 
-// The hero's build, as multipliers on the base (male) profiles. Torso: [rx, rzFront, rzBack] per TORSO row
-const HERO = {
+// The hero's build (Spider-Man): every ring of his body, in metres, the way the body editor (body-editor.html)
+// shows and writes it. Head, torso & legs: [height, half width, front depth, back depth, front/back offset] per ring;
+// arms: [distance from the shoulder, half width, half depth]. A cartoon superhero: broad traps, deltoids, chest &
+// lats, a narrow waist, big arms & legs, slim ankles, a rounded masked head.
+const HERO_BODY = {
+  head: [
+    [1.752, 0.022, 0.0191, 0.0224, -0.024],
+    [1.738, 0.062, 0.0615, 0.0717, -0.025],
+    [1.712, 0.085, 0.0869, 0.103, -0.025],
+    [1.682, 0.093, 0.0954, 0.1142, -0.023],
+    [1.652, 0.094, 0.0986, 0.1154, -0.021],
+    [1.622, 0.092, 0.0978, 0.106, -0.019],
+    [1.592, 0.088, 0.0957, 0.0914, -0.017],
+    [1.562, 0.082, 0.0887, 0.0741, -0.014],
+    [1.537, 0.074, 0.0808, 0.0594, -0.01],
+    [1.514, 0.06, 0.0703, 0.0486, -0.004],
+    [1.497, 0.036, 0.0456, 0.0288, 0.004]
+  ],
   torso: [
-    [1.12, 1.1, 0.95], // neck: a strong column, still a neck (its back in line under the skull)
-    [1.15, 1.1, 0.88],
-    [1.12, 1.06, 0.85],
-    [1.22, 1.04, 0.88], // traps sloping out to the shoulders (sideways, not back: no hump), below a visible neck
-    [1.2, 1.06, 0.95],
-    [1.0, 1.14, 0.98], // shoulders (the arms' deltoids give the width)
-    [1.1, 1.22, 0.98], // pecs & lats (wide, not deep: a flat back)
-    [1.26, 1.16, 0.98],
-    [1.18, 1.06, 0.98],
-    [0.97, 0.98, 0.98], // narrow waist
-    [0.93, 0.96, 0.95],
-    [0.94, 0.96, 0.95],
-    [0.97, 0.98, 1.0],
-    [0.98, 1.0, 1.02],
-    [1.0, 1.0, 1.0],
-    [1.0, 1.0, 1.0]
+    [1.615, 0.0515, 0.0484, 0.0456, -0.004],
+    [1.575, 0.0586, 0.0539, 0.0466, -0.008],
+    [1.53, 0.065, 0.0562, 0.0485, -0.013],
+    [1.5, 0.122, 0.0666, 0.0616, -0.018],
+    [1.47, 0.1956, 0.0848, 0.0779, -0.02],
+    [1.44, 0.188, 0.1083, 0.0872, -0.018],
+    [1.4, 0.2046, 0.1318, 0.0911, -0.014],
+    [1.34, 0.223, 0.1369, 0.0941, -0.01],
+    [1.27, 0.1971, 0.124, 0.0911, -0.006],
+    [1.2, 0.1523, 0.1078, 0.0872, -0.002],
+    [1.13, 0.1395, 0.0998, 0.0817, 0.0],
+    [1.06, 0.1448, 0.097, 0.0845, 0.0],
+    [0.99, 0.1581, 0.097, 0.099, 0.0],
+    [0.935, 0.1627, 0.095, 0.1081, 0.0],
+    [0.885, 0.152, 0.078, 0.1, 0.0],
+    [0.845, 0.1, 0.055, 0.075, 0.0]
+  ],
+  arm: [
+    [-0.022, 0.0312, 0.0384],
+    [-0.008, 0.0504, 0.06],
+    [0.012, 0.0686, 0.0752],
+    [0.05, 0.0726, 0.0752],
+    [0.1, 0.0686, 0.0686],
+    [0.16, 0.0634, 0.0647],
+    [0.23, 0.0528, 0.0552],
+    [0.272, 0.0462, 0.0473],
+    [0.3, 0.0451, 0.0462],
+    [0.328, 0.0462, 0.0473],
+    [0.39, 0.0533, 0.0521],
+    [0.465, 0.0426, 0.0392],
+    [0.525, 0.0354, 0.0322],
+    [0.542, 0.0374, 0.0343],
+    [0.55, 0.0291, 0.027]
+  ],
+  leg: [
+    [0.975, 0.0594, 0.0594, 0.0594, 0.0],
+    [0.925, 0.0682, 0.0792, 0.0825, 0.0],
+    [0.865, 0.0913, 0.0968, 0.1001, 0.003],
+    [0.77, 0.0897, 0.0954, 0.0954, 0.006],
+    [0.67, 0.0781, 0.0825, 0.0803, 0.008],
+    [0.59, 0.0666, 0.0697, 0.0666, 0.008],
+    [0.535, 0.0568, 0.0608, 0.0568, 0.008],
+    [0.5, 0.0549, 0.0598, 0.0549, 0.008],
+    [0.465, 0.0529, 0.0568, 0.0549, 0.004],
+    [0.415, 0.0583, 0.0605, 0.0648, 0.0],
+    [0.335, 0.0604, 0.0616, 0.0695, -0.004],
+    [0.245, 0.052, 0.053, 0.0551, -0.003],
+    [0.17, 0.0469, 0.0488, 0.0488, 0.0],
+    [0.13, 0.0478, 0.0506, 0.0488, 0.004],
+    [0.1, 0.0405, 0.0423, 0.0405, 0.004]
   ]
 };
-// Arms by distance from the shoulder: round deltoids, big biceps, a slimmer elbow, big forearms
-function heroArm(d) {
-  if (d < 0) return 1.2;
-  if (d < 0.11) return 1.32;
-  if (d < 0.2) return 1.32;
-  if (d < 0.25) return 1.2;
-  if (d < 0.34) return 1.1;
-  if (d < 0.42) return 1.24;
-  if (d < 0.5) return 1.12;
-  return 1.04;
-}
-// Legs by height: big thighs & calves, slim knees & ankles
-function heroLeg(y) {
-  if (y > 0.84) return 1.1;
-  if (y > 0.72) return 1.15;
-  if (y > 0.62) return 1.1;
-  if (y > 0.55) return 1.04;
-  if (y > 0.44) return 0.98;
-  if (y > 0.38) return 1.08;
-  if (y > 0.29) return 1.14;
-  if (y > 0.2) return 1.02;
-  return 0.92;
-}
-// The cartoon's head: a broad cranium tapering to a narrower jaw
-const headK = (y) => 1.0 + Math.max(-0.1, Math.min(0.12, (y - 1.585) * 2.2));
 // A masked head: no nose or ears through the mask, just the chin's point and a hint of cheekbones
 function maskBump(y) {
   const front = Math.PI / 2;
@@ -644,15 +669,12 @@ const _geometryCache = new Map();
  * pose), skin (two bones & the weight of the second, part id), extra (girth direction, u along the loft) and the
  * femaleDelta & hairDelta morph targets.
  */
-function buildPersonGeometry(detail = 1, hero = false) {
+function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
+  // (a hero body other than HERO_BODY, from the body editor, is built fresh every time)
   const cacheKey = hero ? `hero${detail}` : detail;
-  if (_geometryCache.has(cacheKey)) return _geometryCache.get(cacheKey);
+  const cached = !hero || body === HERO_BODY;
+  if (cached && _geometryCache.has(cacheKey)) return _geometryCache.get(cacheKey);
   const hi = detail > 0;
-  // The hero's build (Spider-Man): a cartoon superhero's V (broad shoulders & lats, big chest, thick neck & traps,
-  // narrow waist), big arms and legs, slim ankles, a smooth masked head and bare feet in the suit
-  const torsoK = hero ? HERO.torso : null;
-  const armK = (d) => (hero ? heroArm(d) : 1);
-  const legK = (y) => (hero ? heroLeg(y) : 1);
   const keep = (row, flagIndex) => hi || row[flagIndex] === 1;
   const B = new BodyBuilder();
   const nTorso = hi ? 16 : 8;
@@ -667,8 +689,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
   const torsoRows = [];
   TORSO.m.forEach((m0, i) => {
     if (!keep(m0, 5)) return;
-    const k = torsoK ? torsoK[i] : null;
-    const m = k ? [m0[0], m0[1] * k[0], m0[2] * k[1], m0[3] * k[2], m0[4]] : m0;
+    const m = hero ? body.torso[i] : m0;
     const f = TORSO.f[i];
     const ex = m[0] > 1.5 ? 2 : m[0] > 1.0 ? 2.35 : 2.15;
     const fBump = m[0] < 1.37 && m[0] > 1.25 ? bust : null;
@@ -686,8 +707,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
     const rows = [];
     LEG.m.forEach((m0, i) => {
       if (!keep(m0, 5)) return;
-      const lk = legK(m0[0]);
-      const m = [m0[0], m0[1] * lk, m0[2] * lk, m0[3] * lk, m0[4]];
+      const m = hero ? body.leg[i] : m0;
       const f = LEG.f[i];
       const cx = side * HIP_X;
       rows.push({
@@ -709,12 +729,11 @@ function buildPersonGeometry(detail = 1, hero = false) {
     shF.x *= side;
     const at = (sh, d, ox, oz) => sh.clone().addScaledVector(dir, d).add(new THREE.Vector3(side * ox, 0, oz));
     const sleeve = [];
-    for (const r of ARM) {
-      if (!keep(r, 5)) continue;
+    ARM.forEach((r, i) => {
+      if (!keep(r, 5)) return;
       const [d, rx0, rz0, ox, oz] = r;
-      const ak = armK(d);
-      const rx = rx0 * ak;
-      const rz = rz0 * ak;
+      const rx = hero ? body.arm[i][1] : rx0;
+      const rz = hero ? body.arm[i][2] : rz0;
       const c = at(shM, d, ox, oz);
       sleeve.push({
         pts: limbRing(c, dir, rx, rz, nArm),
@@ -722,7 +741,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
         skin: armSkin(d, k),
         axis: c
       });
-    }
+    });
     B.loft(sleeve, PART.ARM, { capStart: true, capEnd: true });
 
     const hand = [];
@@ -766,9 +785,10 @@ function buildPersonGeometry(detail = 1, hero = false) {
   HEAD.m.forEach((m, i) => {
     if (!keep(m, 5)) return;
     const f = HEAD.f[i];
+    const h = body.head[i];
     headRows.push({
       pts: hero
-        ? ringY(m[0], m[1] * headK(m[0]), m[2] * (headK(m[0]) * 0.5 + 0.5), m[3] * headK(m[0]), m[4] - 0.012, nHead, 2, hi ? maskBump(m[0]) : null)
+        ? ringY(h[0], h[1], h[2], h[3], h[4], nHead, 2, hi ? maskBump(h[0]) : null)
         : ringY(m[0], m[1], m[2], m[3], m[4], nHead, 2, hi ? headBump(m[0]) : null),
       ptsF: ringY(f[0], f[1], f[2], f[3], f[4], nHead, 2, hi ? headBump(m[0]) : null),
       skin: [BONE.HEAD, BONE.HEAD, 0],
@@ -809,7 +829,7 @@ function buildPersonGeometry(detail = 1, hero = false) {
   });
 
   const geo = B.build();
-  _geometryCache.set(cacheKey, geo);
+  if (cached) _geometryCache.set(cacheKey, geo);
   return geo;
 }
 
@@ -2058,4 +2078,8 @@ class PersonRig {
   }
 }
 
-export { BONE as PERSON_BONES, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+// Where the hero's rings sit (for the body editor): the legs' centre lines, each arm's shoulder, its hanging angle and
+// its rings' offsets
+const HERO_FRAME = { hipX: HIP_X, shoulder: shoulderJoint(false), armAbduction: ARM_BIND_ABDUCTION, arm: ARM.map((r) => r.slice(0, 5)) };
+
+export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
