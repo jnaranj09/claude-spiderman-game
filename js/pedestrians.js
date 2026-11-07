@@ -993,7 +993,7 @@ function dressPerson(mat, vInfo, isPart, lane, partOf) {
 const AMBIENT_SHARE = 2.0;
 // The lenses (bind-pose metres): centre (x either side, y), half length, half heights above & below the axis, and
 // the tilt of the axis (outer end up)
-const LENS = { x: 0.05, y: 1.636, half: 0.039, top: 0.022, bottom: 0.029, tilt: 0.6 };
+const LENS = { x: 0.054, y: 1.634, half: 0.037, top: 0.023, bottom: 0.036, tilt: 0.6 };
 const SUIT = {
   red: 0xb42412,
   blue: 0x164cc6,
@@ -1113,7 +1113,7 @@ function suitPattern() {
   const ev = ey.mul(Math.cos(LENS.tilt)).sub(ex.mul(Math.sin(LENS.tilt)));
   const k = clamp(abs(eu).div(LENS.half), 0.0, 1.0);
   // half-height along it: a point at the inner end, a blunt end at the temple; a flatter top edge than bottom
-  const across = mix(float(1.0).sub(pow(k, 1.3)), pow(max(float(1.0).sub(pow(k, 3.0)), 0.0), 0.6), step(0.0, eu));
+  const across = mix(float(1.0).sub(pow(k, 1.45)), pow(max(float(1.0).sub(pow(k, 3.0)), 0.0), 0.55), step(0.0, eu));
   const height = across.mul(mix(float(LENS.bottom), float(LENS.top), step(0.0, ev)));
   const lensD = max(abs(ev).sub(height), abs(eu).sub(LENS.half));
   const lens = fillSDF(lensD).mul(faceFront);
