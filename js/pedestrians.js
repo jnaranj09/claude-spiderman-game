@@ -596,7 +596,7 @@ const HERO_BODY = {
     [1.7363, 0.0526, 0.0487, 0.0509, -0.0138],
     [1.7177, 0.0732, 0.0726, 0.082, -0.0084],
     [1.6871, 0.0903, 0.093, 0.0935, -0.0152],
-    [1.6499, 0.0898, 0.1047, 0.09, -0.0178],
+    [1.6369, 0.0898, 0.1047, 0.0949, -0.0178],
     [1.6041, 0.0857, 0.1101, 0.0843, -0.019],
     [1.5671, 0.0725, 0.0985, 0.0631, -0.0128],
     [1.5358, 0.0557, 0.0942, 0.0389, -0.014],
@@ -657,21 +657,21 @@ const HERO_BODY = {
     [0.0574, 0.0264, 0.0423, 0.0642, 0.004]
   ],
   // where the arms hang: how far out from the middle their line runs (m)
-  armRoot: 0.155,
+  armRoot: 0.15,
   // how much of the arm's turn the chest round each armpit & shoulder follows (0 none .. 1 all), fading out from the
   // joint
-  armpit: 0.8,
+  armpit: 0.4,
   // how far round each shoulder joint the chest follows the arm (m)
   armpitReach: 0.15,
   // how much further down the flank than elsewhere the chest follows (the lat)
-  latReach: 1,
+  latReach: 1.0,
   // how much more of the arm's turn its root rings take (0 as the city's, 1 all of it)
-  armRootFollow: 0,
+  armRootFollow: 0.0,
   // how much deeper inside the shoulder than the arm's line the joint it turns about sits (m)
-  armDepth: 0,
+  armDepth: 0.0,
   // corrective shapes per arm pose ('out': raised level, 'up': overhead): ring changes on top of the rest shape,
   // { part: { ringIndex: [changes] } }, faded in for each arm as it reaches that pose (the body editor's Shape for)
-  poses: {},
+  poses: {"up": {"head": {"4": [-0.0074, 0, 0, 0.0035, 0]}}},
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
