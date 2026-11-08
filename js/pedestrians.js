@@ -741,7 +741,11 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
       const dy = y < jy ? (y - jy) / (body.latReach ?? HERO_BODY.latReach) : y - jy;
       const d = Math.hypot(Math.abs(x) - jx, dy, z - jz);
       const t = Math.min(1, Math.max(0, (reach - d) / (reach * 0.77)));
-      const w = share * t * t * (3 - 2 * t);
+      // (not the trapezius: skin above the joint on the neck side turns down as the arm goes up sideways, where a real
+      // trapezius bunches up; it stays with the chest)
+      const ease = (a, b, v) => { const c = Math.min(1, Math.max(0, (v - a) / (b - a))); return c * c * (3 - 2 * c); };
+      const trap = ease(jy - 0.03, jy + 0.02, y) * ease(jx - 0.005, jx - 0.05, Math.abs(x));
+      const w = share * t * t * (3 - 2 * t) * (1 - trap);
       return w > 0.001 ? [BONE.CHEST, SHOULDER_HELPER[k], w] : sk;
     };
   }
