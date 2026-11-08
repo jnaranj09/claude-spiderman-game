@@ -174,7 +174,7 @@
       <fieldset>
         <legend>Shoulders</legend>
         <div class="row"><label for="armRoot">Arm joint</label><input type="range" id="armRoot" min="110" max="210" step="0.5" value="155"><output id="armRootOut" for="armRoot">155 mm</output></div>
-        <div class="row"><label for="armpit">Armpit blend</label><input type="range" id="armpit" min="0" max="100" value="50"><output id="armpitOut" for="armpit">50%</output></div>
+        <div class="row"><label for="armpit">Armpit blend</label><input type="range" id="armpit" min="0" max="100" value="80"><output id="armpitOut" for="armpit">80%</output></div>
         <p class="note">Armpit blend: how much the chest round each shoulder moves with the arm, so a raised arm bends smoothly out of the chest (0 hard crease, 100 the chest follows the arm fully). Arm joint: how far out from his middle each arm turns. Keep it just inside the shoulder's edge: then a raised arm turns inside the body instead of pulling away from it. Check it with the poses in the 3D view.</p>
       </fieldset>
 
@@ -217,7 +217,7 @@
 
 <script type="module">
 import * as THREE from 'three/webgpu';
-import { HERO_BODY, HERO_FRAME, PersonRig, heroBind, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
+import { HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, PersonRig, heroBind, heroHelperPoses, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (text, state = '') => { $('status').textContent = text; $('status').dataset.state = state; };
@@ -295,7 +295,7 @@ const viewMaterials = { suit: createSpiderSuitMaterial(), plain: new THREE.MeshS
 let viewGeometry = skinnedGeometry(geometry);
 const viewBody = new THREE.SkinnedMesh(viewGeometry, viewMaterials.plain);
 const viewInk = new THREE.SkinnedMesh(viewGeometry, createInkOutlineMaterial());
-const bones = Array.from({ length: 15 }, () => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; b.matrixWorldAutoUpdate = false; return b; });
+const bones = Array.from({ length: HERO_BONE_COUNT }, () => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; b.matrixWorldAutoUpdate = false; return b; });
 viewBody.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
 viewInk.bind(viewBody.skeleton, new THREE.Matrix4());
 viewBody.frustumCulled = viewInk.frustumCulled = false;
@@ -314,6 +314,7 @@ const POSES = {
   crouch: { pelvis: 0.5, pitch: 0.75, j: J({ spine: [0.2], neck: [-1.25], shL: [-0.7, 0, 0.75], elL: [-0.9], shR: [-0.35, 0, -1.25], elR: [-0.25], hipL: [-2.1, 0, 0.45], knL: [2.3], ftL: [0.2], hipR: [-2.1, 0, -0.45], knR: [2.3], ftR: [0.2] }) }
 };
 let pose = 'stand';
+const helpers = [0, 1].map(() => ({ q: new THREE.Quaternion(), t: new THREE.Vector3(), s: 1 }));
 const _q = new THREE.Quaternion(), _t = new THREE.Vector3(), _s = new THREE.Vector3();
 function applyPose() {
   const P = POSES[pose];
@@ -325,6 +326,8 @@ function applyPose() {
     _q.set(a[o], a[o + 1], a[o + 2], a[o + 3]); _t.set(a[o + 4], a[o + 5], a[o + 6]); _s.setScalar(a[o + 7]);
     bones[b].matrixWorld.compose(_t, _q, _s);
   }
+  heroHelperPoses(rig, helpers);
+  helpers.forEach((h, k) => bones[15 + k].matrixWorld.compose(h.t, h.q, _s.setScalar(h.s)));
   dirty = true;
 }
 
@@ -695,7 +698,8 @@ function codeFor(b) {
   const foot = (b.foot || HERO_BODY.foot).map(r4).join(', ');
   const armRoot = r4(b.armRoot ?? HERO_BODY.armRoot);
   const armpit = r4(b.armpit ?? HERO_BODY.armpit);
-  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  armpit: ${armpit},\n  foot: [${foot}]\n};\n`;
+  const armpitReach = r4(b.armpitReach ?? HERO_BODY.armpitReach);
+  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  armpit: ${armpit},\n  armpitReach: ${armpitReach},\n  foot: [${foot}]\n};\n`;
 }
 $('copyBtn').addEventListener('click', () => {
   const text = codeFor(body); const area = $('code'); area.value = text;

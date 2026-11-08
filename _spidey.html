@@ -12,6 +12,10 @@ import { pass, vec4 } from 'three/tsl';
 import { LightingSystem } from './js/lighting.js';
 import { createPostProcessing } from './js/post-processing.js';
 import { createSpiderManEntity, updateSpiderManVisuals } from './js/spiderman.js';
+import { HERO_BODY, heroHelperPoses } from './js/pedestrians.js';
+// &body={"armpit":0.7,...}: try body settings without saving them
+if (q0().get('body')) Object.assign(HERO_BODY, JSON.parse(q0().get('body')));
+function q0() { return new URLSearchParams(location.search); }
 const q = new URLSearchParams(location.search);
 const shot = q.get('shot');
 const SHOTS = {
@@ -83,7 +87,7 @@ if (S) {
   const m = ent.model;
   m.rig.poseFK(root, at(S.pelvis), pose, m.hands);
   const a = m.rig.pose, Q = new THREE.Quaternion(), T = new THREE.Vector3(), Sc = new THREE.Vector3();
-  for (let b = 0; b < m.bones.length; b++) {
+  for (let b = 0; b < 15; b++) {
     const o = b * 8;
     Q.set(a[o], a[o + 1], a[o + 2], a[o + 3]); T.set(a[o + 4], a[o + 5], a[o + 6]); Sc.setScalar(a[o + 7]);
     m.bones[b].matrixWorld.compose(T, Q, Sc);
@@ -92,6 +96,8 @@ if (S) {
   // its bone (whose matrix takes bind-pose points to the world), plus an offset in the shot's frame
   const CENTRES = { 1: [0, 1.3, 0], 2: [0, 1.63, 0] };
   const onBody = ([bone, off]) => new THREE.Vector3(...CENTRES[bone]).applyMatrix4(m.bones[bone].matrixWorld).add(at(off));
+  const hp = heroHelperPoses(m.rig, [0, 1].map(() => ({ q: new THREE.Quaternion(), t: new THREE.Vector3(), s: 1 })));
+  hp.forEach((h, k) => m.bones[15 + k].matrixWorld.compose(h.t, h.q, new THREE.Vector3().setScalar(h.s)));
   camera.position.copy(onBody(S.cam));
   camera.lookAt(onBody(S.look));
 } else {

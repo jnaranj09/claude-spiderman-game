@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
-import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind } from './pedestrians.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind, heroHelperPoses, HERO_BONE_COUNT } from './pedestrians.js';
 
 // js/spiderman.js
 // Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
@@ -159,7 +159,7 @@ function createWebSplatTexture() {
 // ---------------------------------------------------------------------------------------------------------------
 
 const JOINTS = ['spine', 'neck', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'ftL', 'hipR', 'knR', 'ftR'];
-const BONES = 15;
+const BONES = HERO_BONE_COUNT; // the city's 15 and his two shoulder helpers
 
 function buildSpiderManModel(scene) {
   // The person geometry carries its two-bone skinning in a 'skin' attribute (bone a, bone b, weight of b, part):
@@ -213,14 +213,20 @@ const _boneS = new THREE.Vector3();
 // Copies the rig's pose (per bone: rotation, translation, scale) into the skeleton
 function applyRigToBones(model) {
   const a = model.rig.pose;
-  for (let b = 0; b < BONES; b++) {
+  for (let b = 0; b < 15; b++) {
     const o = b * 8;
     _boneQ.set(a[o], a[o + 1], a[o + 2], a[o + 3]);
     _boneT.set(a[o + 4], a[o + 5], a[o + 6]);
     _boneS.setScalar(a[o + 7]);
     model.bones[b].matrixWorld.compose(_boneT, _boneQ, _boneS);
   }
+  // his shoulder helpers (half the arm's turn, about each shoulder joint)
+  heroHelperPoses(model.rig, _helpers);
+  for (let k = 0; k < 2; k++) {
+    model.bones[15 + k].matrixWorld.compose(_helpers[k].t, _helpers[k].q, _boneS.setScalar(_helpers[k].s));
+  }
 }
+const _helpers = [0, 1].map(() => ({ q: new THREE.Quaternion(), t: new THREE.Vector3(), s: 1 }));
 
 // ---------------------------------------------------------------------------------------------------------------
 // Webs: the strand from the hand to the anchor, and splats that stay on the walls for a few seconds

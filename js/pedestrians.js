@@ -661,7 +661,9 @@ const HERO_BODY = {
   armRoot: 0.155,
   // how much of the arm's turn the chest round each armpit & shoulder follows (0 none .. 1 all), fading out from the
   // joint
-  armpit: 0.5,
+  armpit: 0.8,
+  // how far round each shoulder joint the chest follows the arm (m)
+  armpitReach: 0.15,
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -713,21 +715,24 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
       axis: new THREE.Vector3(0, m[0], m[4])
     });
   });
-  // The hero's armpits & shoulders: the chest near each shoulder joint follows the arm part of the way (fading out over
-  // ~13 cm), as the arm's own root already follows the chest part of the way, so a raised arm bends smoothly out of
-  // the chest instead of the two surfaces pivoting past each other and opening a crease
+  // The hero's armpits & shoulders: the chest near each shoulder joint follows the shoulder helper bone (which turns
+  // half as far as the arm, about the joint), fading out over armpitReach, and the arm's root is shared between that
+  // helper and the arm instead of the chest and the arm. A raised arm then bends smoothly out of the chest instead of
+  // the two surfaces pivoting past each other (a crease), and nothing is averaged between rotations far apart (which
+  // pinches the skin in towards the joint when the arm goes overhead)
   let skinAt = null;
   if (hero) {
     const share = body.armpit ?? HERO_BODY.armpit;
     const jx = body.armRoot ?? HERO_BODY.armRoot;
+    const reach = body.armpitReach ?? HERO_BODY.armpitReach;
     const [, jy, jz] = shoulderJoint(false);
     skinAt = (x, y, z, sk) => {
       if (sk[0] !== BONE.CHEST || sk[1] !== BONE.CHEST || share <= 0) return sk;
       const k = x >= 0 ? 0 : 1;
       const d = Math.hypot(Math.abs(x) - jx, y - jy, z - jz);
-      const t = Math.min(1, Math.max(0, (0.13 - d) / 0.1));
+      const t = Math.min(1, Math.max(0, (reach - d) / (reach * 0.77)));
       const w = share * t * t * (3 - 2 * t);
-      return w > 0.001 ? [BONE.CHEST, LIMB.upperArm[k], w] : sk;
+      return w > 0.001 ? [BONE.CHEST, SHOULDER_HELPER[k], w] : sk;
     };
   }
   B.loft(torsoRows, PART.BODY, { capEnd: true, flattenBelow: 0.95, skinAt });
@@ -769,7 +774,7 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
       sleeve.push({
         pts: limbRing(c, dir, rx, rz, nArm),
         ptsF: limbRing(at(shF, d, ox * 0.9, oz), dir, rx * 0.84, rz * 0.84, nArm),
-        skin: armSkin(d, k),
+        skin: hero ? armSkin(d, k).map((v, n) => (n < 2 && v === BONE.CHEST ? SHOULDER_HELPER[k] : v)) : armSkin(d, k),
         axis: c
       });
     });
@@ -2128,6 +2133,36 @@ class PersonRig {
 
 // Where the hero's rings sit (for the body editor): the legs' centre lines, each arm's shoulder, its hanging angle and
 // its rings' offsets
+// The hero's two extra bones (after the city's 15): a shoulder helper per side, at the shoulder joint, turning half as
+// far as the upper arm (from the chest's rotation). Only the hero's own SkinnedMesh has them; the crowds' never do
+const SHOULDER_HELPER = [BONE_COUNT, BONE_COUNT + 1];
+const HERO_BONE_COUNT = BONE_COUNT + 2;
+const _hq = new THREE.Quaternion();
+const _hqA = new THREE.Quaternion();
+const _hqC = new THREE.Quaternion();
+const _hj = new THREE.Vector3();
+const _hp = new THREE.Vector3();
+// Writes each helper's pose ({q, t, s}: world = q * (s * bindPoint) + t, as the rig's pose buffer) from a posed rig
+function heroHelperPoses(rig, out) {
+  const a = rig.pose;
+  const read = (b, q) => q.set(a[b * 8], a[b * 8 + 1], a[b * 8 + 2], a[b * 8 + 3]);
+  for (let k = 0; k < 2; k++) {
+    const ua = LIMB.upperArm[k];
+    const s = a[ua * 8 + 7];
+    read(BONE.CHEST, _hqC);
+    read(ua, _hqA);
+    _hq.slerpQuaternions(_hqC, _hqA, 0.5);
+    // the joint where the arm puts it, and the helper turning about it
+    _hj.copy(rig.bind[ua]).multiplyScalar(s);
+    _hp.set(a[ua * 8 + 4], a[ua * 8 + 5], a[ua * 8 + 6]).add(_hj.clone().applyQuaternion(_hqA));
+    const t = _hp.sub(_hj.applyQuaternion(_hq));
+    out[k].q.copy(_hq);
+    out[k].t.copy(t);
+    out[k].s = s;
+  }
+  return out;
+}
+
 // The hero's skeleton in the bind pose: the city's, with the shoulder joints where his body puts them
 function heroBind(body = HERO_BODY) {
   return bindJoints(false, body.armRoot ?? HERO_BODY.armRoot);
@@ -2136,4 +2171,4 @@ function heroBind(body = HERO_BODY) {
 const HERO_FRAME = { hipX: HIP_X, shoulder: shoulderJoint(false), // (x: the city's; the hero's is HERO_BODY.armRoot)
    armAbduction: ARM_BIND_ABDUCTION, arm: ARM.map((r) => r.slice(0, 5)) };
 
-export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, heroBind, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, heroBind, heroHelperPoses, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
