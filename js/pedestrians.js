@@ -241,7 +241,7 @@ class BodyBuilder {
   // rows: { pts, ptsF (female), ptsH (more hair volume), ptsL (long hair), skin: [boneA, boneB, weightB], axis }
   // flattenBelow: normals of vertices lower than this face less downwards (the crotch of the trousers reads as cloth,
   // not as a dark gap between the legs)
-  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1 } = {}) {
+  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1, along = null } = {}) {
     const lo = loftRings(rows.map((r) => r.pts), capStart, capEnd);
     const variant = (key) => (rows.some((r) => r[key]) ? loftRings(rows.map((r) => r[key] || r.pts), capStart, capEnd).positions : null);
     const fem = variant('ptsF');
@@ -288,7 +288,7 @@ class BodyBuilder {
         extra[v * 3] = pos[v * 3] - row.axis.x;
         extra[v * 3 + 1] = pos[v * 3 + 2] - row.axis.z;
       }
-      extra[v * 3 + 2] = lo.uvs[v * 2];
+      extra[v * 3 + 2] = along ?? lo.uvs[v * 2];
       for (let k = 0; k < 3; k++) {
         if (fem) femaleDelta[v * 3 + k] = fem[v * 3 + k] - pos[v * 3 + k];
         if (hair) hairDelta[v * 3 + k] = hair[v * 3 + k] - pos[v * 3 + k];
@@ -653,6 +653,8 @@ const HERO_BODY = {
     [0.143, 0.0376, 0.0327, 0.0391, 0.004],
     [0.0574, 0.0264, 0.0423, 0.0642, 0.004]
   ],
+  // shoulders: the radius of the joint ball that fills between shoulder and arm (0: none)
+  shoulder: 0.046,
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -747,6 +749,26 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
       });
     });
     B.loft(sleeve, PART.ARM, { capStart: true, capEnd: true });
+
+    if (hero && (body.shoulder ?? HERO_BODY.shoulder) > 0) {
+      // The shoulder's joint ball: a sphere centred on the joint the arm turns about, carried by the upper arm. Turned
+      // about its own centre a sphere stays the same sphere, so it fills between a slim shoulder and a slim arm in
+      // every pose without stretching or poking out (painted as the top of the arm, with no web rings)
+      const radius = body.shoulder ?? HERO_BODY.shoulder;
+      const ball = [];
+      for (let i = 0; i <= 10; i++) {
+        const lat = Math.PI / 2 - (Math.PI * (i + 0.5)) / 11; // top to bottom, like the body's other lofts (faces out)
+        const r = radius * Math.cos(lat);
+        const y = shM.y + radius * Math.sin(lat);
+        ball.push({
+          pts: ringY(y, r, r, r, shM.z, nArm + 2, 2, null, shM.x),
+          ptsF: ringY(y, r * 0.84, r * 0.84, r * 0.84, shM.z, nArm + 2, 2, null, shM.x),
+          skin: [LIMB.upperArm[k], LIMB.upperArm[k], 0],
+          axis: new THREE.Vector3(shM.x, y, shM.z)
+        });
+      }
+      B.loft(ball, PART.ARM, { capStart: true, capEnd: true, along: 0 });
+    }
 
     const hand = [];
     const twist = -side * HAND_TWIST;
