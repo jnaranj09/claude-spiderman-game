@@ -1,0 +1,509 @@
+<meta charset="utf-8">
+<title>Spidey Suit Editor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: the suit on the game's 3D body, lit by the game's own sky & colour grade, beside a column of grouped
+     controls; stacked on a phone. Same night-rooftop look as the lens & body editors. */
+  :root {
+    --night: #0b1020;
+    --panel: #121a31;
+    --panel-2: #18223f;
+    --rule: #26335c;
+    --fg: #e9edf8;
+    --muted: #94a0c4;
+    --suit-red: #e0402e;
+    --suit-red-ink: #ff6a55;
+    --lens: #cfe4f6;
+    --ok: #59d18c;
+    --display: "Anton", "Impact", "Arial Narrow", sans-serif;
+    --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { background: var(--night); color: var(--fg); }
+  body {
+    font-family: var(--body); font-size: 14px; line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px 28px;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; max-width: 1180px; margin: 0 auto 14px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 4vw, 36px); letter-spacing: 0.02em; text-transform: uppercase; margin: 0; line-height: 1; }
+  h1 span { color: var(--suit-red); }
+  .lede { color: var(--muted); margin: 6px 0 0; max-width: 64ch; }
+  .lede a { color: var(--lens); }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+  .status[data-state="ok"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--rule)); }
+  .status[data-state="warn"] { color: var(--suit-red-ink); border-color: color-mix(in srgb, var(--suit-red) 50%, var(--rule)); }
+
+  .bench { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+  .pane { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; min-width: 0; }
+  .viewer { position: sticky; top: 12px; }
+  @media (max-width: 820px) { .viewer { position: static; } }
+  .stage { position: relative; width: 100%; aspect-ratio: 4 / 5; max-width: 100%; background: #0e1530; touch-action: none; user-select: none; cursor: grab; overflow: hidden; }
+  .stage:active { cursor: grabbing; }
+  .stage canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+  .stage img.ref { position: absolute; left: 50%; top: 50%; max-width: none; transform-origin: center; pointer-events: none; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--rule); align-items: center; }
+  .toolbar .lab { color: var(--muted); font-size: 12px; min-width: 40px; }
+
+  button, .file { font: 500 13px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 7px; padding: 8px 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  button:hover, .file:hover { border-color: #3a4a80; }
+  button:focus-visible, .file:focus-within, input:focus-visible, summary:focus-visible { outline: 2px solid var(--lens); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: color-mix(in srgb, var(--suit-red) 28%, var(--panel-2)); border-color: var(--suit-red); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: var(--suit-red); border-color: var(--suit-red); color: #fff; }
+  button.primary:hover { background: #ec5240; }
+  .file { position: relative; }
+  .file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .controls { display: grid; gap: 0; }
+  details { border-bottom: 1px solid var(--rule); }
+  details:last-child { border-bottom: 0; }
+  summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; }
+  summary::-webkit-details-marker { display: none; }
+  summary h2 { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: 0.07em; text-transform: uppercase; margin: 0; }
+  summary .chev { color: var(--muted); transition: transform 0.15s; }
+  details[open] summary .chev { transform: rotate(90deg); }
+  .group { display: grid; gap: 9px; padding: 0 12px 14px; }
+  .row { display: grid; grid-template-columns: 108px minmax(0, 1fr) 62px; gap: 10px; align-items: center; }
+  .row label { color: var(--muted); font-size: 12.5px; line-height: 1.2; }
+  .row output { font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--suit-red); }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .swatch { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+  .swatch input { width: 40px; height: 30px; border: 1px solid var(--rule); border-radius: 6px; background: none; padding: 0; cursor: pointer; }
+  .group-foot { display: flex; justify-content: flex-end; }
+  .group-foot button { font-size: 12px; padding: 6px 9px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .note { color: var(--muted); font-size: 12px; margin: 0; }
+  textarea { width: 100%; min-height: 150px; resize: vertical; font: 12px/1.45 var(--mono); color: var(--fg); background: var(--night); border: 1px solid var(--rule); border-radius: 7px; padding: 10px; box-sizing: border-box; }
+  .err { color: var(--suit-red-ink); padding: 12px; margin: 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.webgpu.js",
+    "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.tsl.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+    "./js/tsl-materials.js": "./js/lens-editor-stub.js"
+  }
+}
+</script>
+
+<header>
+  <div>
+    <h1>Spidey <span>Suit</span> Editor</h1>
+    <p class="lede">Every setting changes the suit live on his body, lit like the game. Drag the view to turn him, try him in the poses and times of day. His shape has the <a href="https://claude.ai/artifact/E3NbRQBKpGszStpMpQFs8M" target="_blank" rel="noopener">body editor</a>, his lenses the <a href="https://claude.ai/artifact/FPugiwF4zQ6FHzUjaAyooY" target="_blank" rel="noopener">lens editor</a>.</p>
+  </div>
+  <span class="status" id="status" role="status">Loading the suit…</span>
+</header>
+
+<main class="bench">
+  <section class="pane viewer" aria-label="3D view">
+    <div class="stage" id="stage">
+      <canvas id="canvas" aria-hidden="true"></canvas>
+      <img class="ref" id="refImg" alt="" hidden>
+    </div>
+    <div class="toolbar" role="group" aria-label="View">
+      <span class="lab">View</span>
+      <button data-view="front">Front</button>
+      <button data-view="three">¾</button>
+      <button data-view="side">Side</button>
+      <button data-view="back">Back</button>
+      <button data-view="face">Face</button>
+      <button data-view="whole" aria-pressed="true">Whole</button>
+    </div>
+    <div class="toolbar" role="group" aria-label="Pose" id="poses"><span class="lab">Pose</span></div>
+    <div class="toolbar" role="group" aria-label="Time of day">
+      <span class="lab">Light</span>
+      <button data-time="midday" aria-pressed="true">Midday</button>
+      <button data-time="golden">Golden hour</button>
+      <button data-time="twilight">Blue hour</button>
+      <button data-time="midnight">Night</button>
+    </div>
+  </section>
+
+  <section class="pane controls" aria-label="Suit settings" id="controls"></section>
+</main>
+
+<script type="module">
+import * as THREE from 'three/webgpu';
+import { pass, vec4 } from 'three/tsl';
+import { SUIT_STYLE, setSuitStyle } from './js/pedestrians.js';
+import { HERO_POSE_SET, createHeroPreview } from './js/hero-preview.js';
+import { LightingSystem } from './js/lighting.js';
+import { createPostProcessing } from './js/post-processing.js';
+
+const $ = (id) => document.getElementById(id);
+const status = (text, state = '') => { $('status').textContent = text; $('status').dataset.state = state; };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const r4 = (v) => Math.round(v * 10000) / 10000;
+const DEG = 180 / Math.PI;
+
+// ---- The settings: what each control edits and how it reads -----------------------------------------------------
+// [key, label, min, max, step, unit] in the units shown: deg (radians stored), cm (metres stored), % (share stored),
+// mm (metres stored), x (as is), n (a count)
+const GROUPS = [
+  { id: 'colours', title: 'Colours', colours: [['red', 'Red'], ['blue', 'Blue'], ['ink', 'Ink & lines'], ['lens', 'Lenses']] },
+  { id: 'torso', title: 'Chest & torso', rows: [
+    ['chestWrap', 'Red at chest', 20, 180, 1, 'deg'],
+    ['waistWrap', 'Red at waist', 0, 180, 1, 'deg'],
+    ['shoulderWrap', 'Red over shoulders', 20, 180, 1, 'deg'],
+    ['waistY', 'Waist height', 90, 125, 0.5, 'cm'],
+    ['chestY', 'Chest height', 115, 145, 0.5, 'cm'],
+    ['shoulderY', 'Shoulder height', 130, 155, 0.5, 'cm'],
+    ['yoke', 'All red above', 135, 165, 0.5, 'cm'],
+    ['beltBottom', 'Belt bottom', 85, 110, 0.5, 'cm'],
+    ['beltTop', 'Belt top', 90, 115, 0.5, 'cm'],
+    ['trunksV', 'Trunks V', 1, 12, 0.5, 'x']
+  ] },
+  { id: 'arms', title: 'Arms', rows: [
+    ['capLength', 'Shoulder cap', 0, 25, 0.5, 'cm'],
+    ['capWrap', 'Cap round arm', 0, 180, 1, 'deg'],
+    ['stripeWrap', 'Red stripe width', 0, 180, 1, 'deg'],
+    ['stripeCenter', 'Stripe direction', -180, 180, 1, 'deg'],
+    ['gloveStart', 'Red glove from', 20, 90, 1, '%']
+  ], note: 'Stripe direction: 0° down the outside of the arm, +90° down the front, −90° down the back.' },
+  { id: 'legs', title: 'Legs & boots', rows: [
+    ['bootTop', 'Boot top', 20, 70, 0.5, 'cm'],
+    ['bootPoint', 'Boot point', 0, 12, 0.5, 'cm'],
+    ['innerStripe', 'Inner leg stripe', 0, 120, 1, 'deg']
+  ] },
+  { id: 'web', title: 'Webbing', rows: [
+    ['line', 'Line width', 0.5, 4, 0.1, 'mm'],
+    ['chestSpokes', 'Chest spokes', 6, 32, 1, 'n'],
+    ['chestRings', 'Chest ring gap', 2, 10, 0.1, 'cm'],
+    ['limbSpokes', 'Arm & leg spokes', 3, 16, 1, 'n'],
+    ['limbRings', 'Arm & leg ring gap', 2, 10, 0.1, 'cm'],
+    ['headSpokes', 'Head spokes', 6, 28, 1, 'n'],
+    ['headRings', 'Head ring gap', 10, 45, 1, 'deg']
+  ] },
+  { id: 'spiders', title: 'Spiders', rows: [
+    ['chestSpider', 'Chest spider size', 30, 250, 1, '%'],
+    ['chestSpiderY', 'Chest spider height', 115, 148, 0.5, 'cm'],
+    ['backSpider', 'Back spider size', 30, 200, 1, '%'],
+    ['backSpiderY', 'Back spider height', 110, 148, 0.5, 'cm']
+  ] }
+];
+const UNIT = {
+  deg: { to: (v) => v * DEG, from: (v) => v / DEG, fmt: (v) => `${Math.round(v)}°` },
+  cm: { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${v.toFixed(1)} cm` },
+  mm: { to: (v) => v * 1000, from: (v) => v / 1000, fmt: (v) => `${v.toFixed(1)} mm` },
+  '%': { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${Math.round(v)}%` },
+  x: { to: (v) => v, from: (v) => v, fmt: (v) => `${v.toFixed(1)}` },
+  n: { to: (v) => v, from: (v) => Math.round(v), fmt: (v) => `${Math.round(v)}` }
+};
+const ROW_OF = Object.fromEntries(GROUPS.flatMap((g) => (g.rows || []).map((r) => [r[0], r])));
+const hex = (v) => `#${new THREE.Color(v).getHexString()}`;
+
+// ---- State ----------------------------------------------------------------------------------------------------------
+let style = clone(SUIT_STYLE);
+const DRAFT_KEY = 'spidey-suit-draft';
+function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ style, at: Date.now() })); } catch (e) { /* storage off */ } }
+function loadDraft() { try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); return d && d.style ? d : null; } catch (e) { return null; } }
+
+// ---- Controls ---------------------------------------------------------------------------------------------------------
+function buildControls() {
+  const root = $('controls');
+  GROUPS.forEach((g, gi) => {
+    const det = document.createElement('details');
+    if (gi < 2) det.open = true;
+    const sum = document.createElement('summary');
+    sum.innerHTML = `<h2>${g.title}</h2><span class="chev" aria-hidden="true">›</span>`;
+    det.append(sum);
+    const box = document.createElement('div');
+    box.className = 'group';
+    if (g.colours) {
+      const sw = document.createElement('div');
+      sw.className = 'swatches';
+      g.colours.forEach(([key, label]) => {
+        const l = document.createElement('label');
+        l.className = 'swatch';
+        l.innerHTML = `<input type="color" id="c-${key}"><span>${label}</span>`;
+        sw.append(l);
+      });
+      box.append(sw);
+    }
+    (g.rows || []).forEach(([key, label, min, max, stepv, unit]) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<label for="s-${key}">${label}</label><input type="range" id="s-${key}" min="${min}" max="${max}" step="${stepv}"><output id="o-${key}" for="s-${key}"></output>`;
+      box.append(row);
+    });
+    if (g.note) { const n = document.createElement('p'); n.className = 'note'; n.textContent = g.note; box.append(n); }
+    const foot = document.createElement('div');
+    foot.className = 'group-foot';
+    foot.innerHTML = `<button data-reset="${g.id}">Reset ${g.title.toLowerCase()}</button>`;
+    box.append(foot);
+    det.append(box);
+    root.append(det);
+  });
+  // Reference picture & keeping
+  const ref = document.createElement('details');
+  ref.innerHTML = `<summary><h2>Reference picture</h2><span class="chev" aria-hidden="true">›</span></summary>
+    <div class="group">
+      <div class="btns">
+        <label class="file">Load a picture<input type="file" id="refFile" accept="image/*"></label>
+        <button id="refMoveBtn" aria-pressed="false" disabled>Move picture</button>
+        <button id="refFlipBtn" disabled>Mirror</button>
+        <button id="refClearBtn" disabled>Remove</button>
+      </div>
+      <div class="row"><label for="refOpacity">See-through</label><input type="range" id="refOpacity" min="0" max="100" value="45" disabled><output id="refOpacityOut" for="refOpacity">45%</output></div>
+      <div class="row"><label for="refScale">Size</label><input type="range" id="refScale" min="10" max="400" value="100" disabled><output id="refScaleOut" for="refScale">100%</output></div>
+      <p class="note">Laid over the 3D view to compare. It stays on this device and is never saved.</p>
+    </div>`;
+  root.append(ref);
+  const keep = document.createElement('details');
+  keep.open = true;
+  keep.innerHTML = `<summary><h2>Keep it</h2><span class="chev" aria-hidden="true">›</span></summary>
+    <div class="group">
+      <div class="btns">
+        <button class="primary" id="saveBtn" disabled>Save for Claude</button>
+        <button id="copyBtn">Copy code</button>
+        <button id="resetBtn">Reset everything</button>
+      </div>
+      <p class="note" id="saveNote">Save, then tell Claude “use my suit” and it goes into the game.</p>
+      <textarea id="code" readonly hidden aria-label="Suit code"></textarea>
+    </div>`;
+  root.append(keep);
+}
+
+function showValues() {
+  for (const [key, , , , , unit] of Object.values(ROW_OF)) {
+    const v = UNIT[unit].to(style[key]);
+    $(`s-${key}`).value = v;
+    $(`o-${key}`).textContent = UNIT[unit].fmt(v);
+  }
+  for (const g of GROUPS) for (const [key] of g.colours || []) $(`c-${key}`).value = hex(style[key]);
+}
+function apply() { setSuitStyle(style); dirty = true; }
+
+let pushed = false;
+function wireControls() {
+  for (const [key, , , , , unit] of Object.values(ROW_OF)) {
+    const el = $(`s-${key}`);
+    el.addEventListener('input', () => {
+      style[key] = r4(UNIT[unit].from(+el.value));
+      $(`o-${key}`).textContent = UNIT[unit].fmt(+el.value);
+      apply(); saveDraft();
+    });
+  }
+  for (const g of GROUPS) for (const [key] of g.colours || []) {
+    $(`c-${key}`).addEventListener('input', (e) => { style[key] = parseInt(e.target.value.slice(1), 16); apply(); saveDraft(); });
+  }
+  document.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => {
+    const g = GROUPS.find((x) => x.id === b.dataset.reset);
+    for (const [key] of [...(g.rows || []), ...(g.colours || [])]) style[key] = SUIT_STYLE[key];
+    showValues(); apply(); saveDraft();
+    status(`${g.title} back to the game’s`);
+  }));
+  $('resetBtn').addEventListener('click', () => { style = clone(SUIT_STYLE); showValues(); apply(); saveDraft(); status('Everything back to the game’s'); });
+}
+
+// ---- 3D: the game's lighting, colour grade and his posed body ------------------------------------------------------
+const scene = new THREE.Scene();
+const hero = createHeroPreview();
+scene.add(hero.group);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x51627e, roughness: 0.92 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+// A ring of building-coloured walls round him, as in a street: the city mostly hides the sky behind him, and a bright
+// open sky would bloom over him (it doesn't cast shadows or light him: the sun and sky still do)
+const street = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 60, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x5a6070, roughness: 0.9, side: THREE.BackSide }));
+street.position.y = 30;
+scene.add(street);
+const camera = new THREE.PerspectiveCamera(30, 4 / 5, 0.05, 2000);
+const orbit = { yaw: 0.6, pitch: -0.08, mode: 'whole' };
+const FRAMING = { whole: { at: [0, 0.98, 0], dist: 4.2 }, face: { at: [0, 1.62, 0], dist: 0.95 } };
+const VIEWS = { front: 0, three: 0.6, side: 1.57, back: Math.PI };
+function placeCamera() {
+  const f = FRAMING[orbit.mode];
+  const [x, y, z] = f.at;
+  const lift = orbit.mode === 'whole' && (pose === 'up' || pose === 'swing') ? 0.15 : 0;
+  camera.position.set(x + Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * f.dist, y + lift - Math.sin(orbit.pitch) * f.dist, z + Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * f.dist);
+  camera.lookAt(x, y + lift, z);
+  dirty = true;
+}
+let pose = 'stand';
+let renderer, lighting, grade, pipeline;
+let dirty = true;
+let time = 'midday';
+
+// (the lighting bakes its sky reflections over a few frames after a change: keep drawing for a moment)
+let settleUntil = 0;
+function settle(ms = 2000) { settleUntil = performance.now() + ms; }
+function frame() {
+  if ((dirty || performance.now() < settleUntil) && pipeline) { dirty = false; pipeline.render(); }
+  requestAnimationFrame(frame);
+}
+function size() {
+  if (!renderer) return;
+  const b = $('stage').getBoundingClientRect();
+  renderer.setSize(b.width, b.height, false);
+  camera.aspect = b.width / Math.max(1, b.height);
+  camera.updateProjectionMatrix();
+  placeRef();
+  dirty = true;
+}
+
+function setPressed(sel, attr, value) { document.querySelectorAll(sel).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === value))); }
+function wireView() {
+  const bar = $('poses');
+  for (const [name, P] of Object.entries(HERO_POSE_SET)) {
+    const b = document.createElement('button');
+    b.dataset.pose = name;
+    b.textContent = P.label;
+    b.setAttribute('aria-pressed', String(name === pose));
+    b.addEventListener('click', () => { pose = name; setPressed('[data-pose]', 'pose', pose); hero.setPose(pose); placeCamera(); });
+    bar.append(b);
+  }
+  document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
+    const v = b.dataset.view;
+    if (v === 'face') { orbit.mode = 'face'; orbit.yaw = 0.35; orbit.pitch = -0.05; }
+    else if (v === 'whole') { orbit.mode = 'whole'; }
+    else { orbit.yaw = VIEWS[v]; orbit.pitch = -0.08; }
+    document.querySelector('[data-view="whole"]').setAttribute('aria-pressed', String(orbit.mode === 'whole'));
+    document.querySelector('[data-view="face"]').setAttribute('aria-pressed', String(orbit.mode === 'face'));
+    placeCamera();
+  }));
+  document.querySelectorAll('[data-time]').forEach((b) => b.addEventListener('click', () => {
+    time = b.dataset.time;
+    setPressed('[data-time]', 'time', time);
+    if (lighting) { lighting.applyPreset(time, true); grade.applyPreset(time); }
+    dirty = true;
+    settle();
+  }));
+  let drag = null;
+  $('stage').addEventListener('pointerdown', (ev) => {
+    if (refMove) { refDrag = { x: ev.clientX, y: ev.clientY, rx: ref.x, ry: ref.y }; $('stage').setPointerCapture(ev.pointerId); return; }
+    drag = { x: ev.clientX, y: ev.clientY, yaw: orbit.yaw, pitch: orbit.pitch, id: ev.pointerId };
+    $('stage').setPointerCapture(ev.pointerId);
+  });
+  $('stage').addEventListener('pointermove', (ev) => {
+    if (refDrag) { const s = $('stage').getBoundingClientRect(); ref.x = refDrag.rx + (ev.clientX - refDrag.x) / s.width; ref.y = refDrag.ry + (ev.clientY - refDrag.y) / s.height; placeRef(); return; }
+    if (!drag || drag.id !== ev.pointerId) return;
+    orbit.yaw = drag.yaw - (ev.clientX - drag.x) * 0.008;
+    orbit.pitch = Math.max(-1.1, Math.min(0.9, drag.pitch - (ev.clientY - drag.y) * 0.006));
+    placeCamera();
+  });
+  ['pointerup', 'pointercancel'].forEach((t) => $('stage').addEventListener(t, () => { drag = null; refDrag = null; }));
+}
+
+// ---- Reference picture over the view ------------------------------------------------------------------------------------
+const ref = { scale: 1, x: 0, y: 0, flip: false, opacity: 0.45 };
+let refMove = false, refDrag = null;
+function placeRef() {
+  const img = $('refImg');
+  if (img.hidden) return;
+  const s = $('stage').getBoundingClientRect();
+  img.style.width = `${s.width}px`;
+  img.style.transform = `translate(-50%, -50%) translate(${ref.x * s.width}px, ${ref.y * s.height}px) scale(${ref.flip ? -ref.scale : ref.scale}, ${ref.scale})`;
+  img.style.opacity = ref.opacity;
+}
+function wireRef() {
+  const ctl = ['refMoveBtn', 'refFlipBtn', 'refClearBtn', 'refOpacity', 'refScale'];
+  $('refFile').addEventListener('change', () => {
+    const f = $('refFile').files[0];
+    if (!f) return;
+    const img = $('refImg');
+    img.onload = () => { img.hidden = false; ctl.forEach((id) => { $(id).disabled = false; }); placeRef(); status('Picture loaded · Move picture to line it up', 'ok'); };
+    img.onerror = () => status('That file isn’t a picture this browser can open', 'warn');
+    img.src = URL.createObjectURL(f);
+    $('refFile').value = '';
+  });
+  $('refOpacity').addEventListener('input', () => { ref.opacity = $('refOpacity').value / 100; $('refOpacityOut').textContent = `${$('refOpacity').value}%`; placeRef(); });
+  $('refScale').addEventListener('input', () => { ref.scale = $('refScale').value / 100; $('refScaleOut').textContent = `${$('refScale').value}%`; placeRef(); });
+  $('refFlipBtn').addEventListener('click', () => { ref.flip = !ref.flip; placeRef(); });
+  $('refMoveBtn').addEventListener('click', () => { refMove = !refMove; $('refMoveBtn').setAttribute('aria-pressed', String(refMove)); status(refMove ? 'Drag the view to move the picture' : 'Drag the view to turn him'); });
+  $('refClearBtn').addEventListener('click', () => { $('refImg').hidden = true; $('refImg').removeAttribute('src'); refMove = false; $('refMoveBtn').setAttribute('aria-pressed', 'false'); ctl.forEach((id) => { $(id).disabled = true; }); });
+}
+
+// ---- Code & saving -----------------------------------------------------------------------------------------------------
+function codeFor(s) {
+  const lines = Object.keys(SUIT_STYLE).map((k) => {
+    const v = s[k] ?? SUIT_STYLE[k];
+    return `  ${k}: ${['red', 'blue', 'ink', 'lens'].includes(k) ? `0x${new THREE.Color(v).getHexString()}` : r4(v)}`;
+  });
+  return `const SUIT_STYLE = {\n${lines.join(',\n')}\n};\n`;
+}
+let db = null;
+const SUIT_DOC = 'suit/current';
+async function connectStore() {
+  try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+  if (!db) { $('saveNote').textContent = 'Saving for Claude works when this page is open on claude.ai; Copy code works anywhere.'; return; }
+  $('saveBtn').disabled = false;
+  try {
+    const snap = await db.doc(SUIT_DOC).get();
+    const draft = loadDraft();
+    if (snap.exists) {
+      const saved = snap.data();
+      const savedAt = Date.parse(saved.savedAt || '') || 0;
+      if (draft && draft.at > savedAt) status('Picked up your unsaved changes');
+      else if (saved.style) { style = { ...clone(SUIT_STYLE), ...saved.style }; showValues(); apply(); status(`Loaded the suit saved ${new Date(savedAt).toLocaleString()}`, 'ok'); }
+    }
+  } catch (e) { /* first visit or no access */ }
+}
+function wireKeep() {
+  $('copyBtn').addEventListener('click', () => {
+    const text = codeFor(style); const area = $('code'); area.value = text;
+    const fallback = () => { area.hidden = false; area.focus(); area.select(); status('Select-all and copy the code below', 'warn'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => status('Code copied', 'ok'), fallback);
+    else fallback();
+  });
+  $('saveBtn').addEventListener('click', async () => {
+    if (!db) return;
+    $('saveBtn').disabled = true;
+    try {
+      await db.doc(SUIT_DOC).set({ style: clone(style), savedAt: new Date().toISOString() });
+      status('Saved · tell Claude “use my suit”', 'ok');
+    } catch (e) {
+      status(e && e.code === 'not_granted' ? 'Saving isn’t allowed for you here · use Copy code' : 'Couldn’t save · try again or use Copy code', 'warn');
+    } finally { $('saveBtn').disabled = false; }
+  });
+}
+
+// ---- Start ----------------------------------------------------------------------------------------------------------------
+async function start() {
+  buildControls();
+  const draft = loadDraft();
+  if (draft) style = { ...clone(SUIT_STYLE), ...draft.style };
+  showValues(); apply();
+  wireControls(); wireView(); wireRef(); wireKeep();
+  try {
+    renderer = new THREE.WebGPURenderer({ canvas: $('canvas'), antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    renderer.shadowMap.enabled = true;
+    await renderer.init();
+    lighting = new LightingSystem(scene, renderer);
+    lighting.applyPreset(time, true);
+    const scenePass = pass(scene, camera);
+    grade = createPostProcessing(renderer, scenePass.getTextureNode('output'), vec4(0));
+    grade.applyPreset(time);
+    pipeline = new THREE.RenderPipeline(renderer, grade.outputNode);
+  } catch (e) {
+    console.error(e);
+    status('This browser can’t draw 3D here', 'warn');
+    $('stage').insertAdjacentHTML('afterend', '<p class="err">3D drawing isn’t available in this browser, so the suit can’t be shown. Copy code still works.</p>');
+    return;
+  }
+  hero.setPose(pose);
+  placeCamera();
+  size();
+  new ResizeObserver(size).observe($('stage'));
+  settle(3000);
+  requestAnimationFrame(frame);
+  status(draft ? 'Picked up your unsaved changes' : 'Ready');
+  connectStore();
+  window.__suitEditorReady = true;
+}
+start();
+</script>

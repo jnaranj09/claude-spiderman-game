@@ -161,7 +161,8 @@ standing. The lenses are an outline (`LENS_OUTLINE` in `js/pedestrians.js`: cont
 mirrored for the other eye), drawn in `lens-editor.html`: drag the handles on the game's own head (head-on, with a
 reference picture traced underneath), see it in 3D, then Copy code or Save for Claude. His shape is one table of rings (`HERO_BODY`: head, torso,
 arms and legs, in metres), shaped the same way in `body-editor.html`: a handle on every ring, head-on for width and
-height, from the side for front, back and forward/back placement. His 15 bones are posed by forward kinematics from joint
+height, from the side for front, back and forward/back placement. The suit's every setting (colours, where red meets blue, webbing, spiders) is `SUIT_STYLE`, shaped live in
+`suit-editor.html` on his posed body under the game's own lighting and grade. His 15 bones are posed by forward kinematics from joint
 angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
