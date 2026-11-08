@@ -628,8 +628,8 @@ document.querySelectorAll('[data-look]').forEach((b) => b.addEventListener('clic
 document.querySelectorAll('[data-fix]').forEach((b) => b.addEventListener('click', () => {
   fix = b.dataset.fix;
   setPressed('[data-fix]', 'fix', fix);
-  // (copying lands on the shape being edited, from the other arm pose by default)
-  if (fix !== 'rest') { $('copyTo').value = fix; $('copyFrom').value = fix === 'out' ? 'up' : 'out'; }
+  // (by default the copy takes the shape being edited to the other arm pose)
+  if (fix !== 'rest') { $('copyFrom').value = fix; $('copyTo').value = fix === 'out' ? 'up' : 'out'; }
   selected = null;
   if (fix !== 'rest') { pose = FIX_POSE[fix]; setPressed('[data-pose]', 'pose', pose); placeView(); applyPose(); if (part === 'head' || part === 'leg') { part = 'arm'; setPressed('[data-part]', 'part', part); placeBoardCam(); placeView(); } }
   const note = $('fixNote');
