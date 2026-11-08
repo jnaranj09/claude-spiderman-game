@@ -1178,7 +1178,7 @@ const SUIT_STYLE = {
   red: 0x8f0032, blue: 0x001ea6, ink: 0x140d10, lens: 0xd4d4d4,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
   // flanks), where it narrows (waist height, chest height), the belt
-  chestWrap: 0.8727, waistWrap: 0.5236, waistY: 1.04, chestY: 1.285, beltBottom: 0.98, beltTop: 1.035,
+  chestWrap: 0.6283, waistWrap: 0.5236, waistY: 1.04, chestY: 1.235, beltBottom: 0.98, beltTop: 1.035,
   // ... and over the tops of the shoulders: how far round from the front, at what height
   shoulderWrap: 1.85, shoulderY: 1.5,
   // the top of the blue back: its height in the middle of the back, and how much the edge drops (negative) or rises
@@ -1188,13 +1188,13 @@ const SUIT_STYLE = {
   trunksDepth: 0.03, trunksWidth: 0.9425,
   // arms: the red shoulder cap down the outside of the arm (length from the shoulder, how far round), the red stripe
   // down the arm (how wide, and where round it: 0 the outside, towards the front positive), where the red glove & forearm start (share of the arm's length)
-  capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.71,
+  capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.65,
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
-  bootTop: 0.45, bootPoint: 0, innerStripe: 0.55,
+  bootTop: 0.45, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; chest: spokes & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0017, chestSpokes: 16, chestRings: 0.055, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
+  line: 0.0014, chestSpokes: 12, chestRings: 0.058, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
-  chestSpider: 1, chestSpiderY: 1.33, backSpider: 1, backSpiderY: 1.3
+  chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31
 };
 // Live uniforms for every setting (the suit editor changes them without rebuilding anything)
 const suitUniforms = Object.fromEntries(Object.entries(SUIT_STYLE).map(([k, v]) => [k, uniform(['red', 'blue', 'ink', 'lens'].includes(k) ? new THREE.Color(v) : v)]));
