@@ -1194,7 +1194,9 @@ const SUIT_STYLE = {
   // webbing: line half-width; chest: spokes & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
   line: 0.0014, chestSpokes: 12, chestRings: 0.058, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
-  chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31
+  chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
+  // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
+  outline: 1
 };
 // Live uniforms for every setting (the suit editor changes them without rebuilding anything)
 const suitUniforms = Object.fromEntries(Object.entries(SUIT_STYLE).map(([k, v]) => [k, uniform(['red', 'blue', 'ink', 'lens'].includes(k) ? new THREE.Color(v) : v)]));
@@ -1392,13 +1394,13 @@ function createSpiderSuitMaterial(pose = null) {
 
 // Black, back faces only, every vertex pushed out along its (skinned) normal: what shows round the edge of the body is
 // a line. Its width grows with the distance to the camera (so it stays about two pixels thick on screen), within limits
-// (never a thick black shell far away, never a hairline up close)
+// (never a thick black shell far away, never a hairline up close), all of it scaled by SUIT_STYLE.outline
 function createInkOutlineMaterial() {
   const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide });
   mat.colorNode = suitUniforms.ink;
   mat.positionNode = Fn(() => {
     const dist = length(cameraPosition.sub(positionLocal));
-    const width = clamp(dist.mul(0.0024), 0.004, 0.025);
+    const width = clamp(dist.mul(0.0024), 0.004, 0.025).mul(suitUniforms.outline);
     return positionLocal.add(normalLocal.mul(width));
   })();
   mat.fog = true;

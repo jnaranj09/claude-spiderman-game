@@ -193,7 +193,10 @@ const GROUPS = [
     ['chestSpiderY', 'Chest spider height', 115, 148, 0.5, 'cm'],
     ['backSpider', 'Back spider size', 30, 200, 1, '%'],
     ['backSpiderY', 'Back spider height', 110, 148, 0.5, 'cm']
-  ] }
+  ] },
+  { id: 'outline', title: 'Ink outline', rows: [
+    ['outline', 'Outline thickness', 10, 200, 5, '%']
+  ], note: 'The black line round his silhouette. 100% is the original: about two pixels at play distance, never thinner than 4 mm or thicker than 2.5 cm on his body (both scale with this).' }
 ];
 const UNIT = {
   deg: { to: (v) => v * DEG, from: (v) => v / DEG, fmt: (v) => `${Math.round(v)}°` },
