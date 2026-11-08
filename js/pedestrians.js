@@ -1075,9 +1075,9 @@ const LENS_OUTLINE = {
     { x: 0.0129, y: 1.6244, corner: true },
     { x: 0.0323, y: 1.6506, corner: false },
     { x: 0.0581, y: 1.6647, corner: false },
-    { x: 0.0753, y: 1.6677, corner: true },
-    { x: 0.0763, y: 1.643, corner: false },
-    { x: 0.07, y: 1.6205, corner: false },
+    { x: 0.069, y: 1.6719, corner: true },
+    { x: 0.0717, y: 1.6482, corner: false },
+    { x: 0.0655, y: 1.6232, corner: false },
     { x: 0.0541, y: 1.6088, corner: false },
     { x: 0.0304, y: 1.6086, corner: false }
   ]
