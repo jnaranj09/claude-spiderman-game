@@ -1196,7 +1196,7 @@ const SUIT_STYLE = {
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
-  outline: 1
+  outline: 0.2
 };
 // Live uniforms for every setting (the suit editor changes them without rebuilding anything)
 const suitUniforms = Object.fromEntries(Object.entries(SUIT_STYLE).map(([k, v]) => [k, uniform(['red', 'blue', 'ink', 'lens'].includes(k) ? new THREE.Color(v) : v)]));
