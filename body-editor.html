@@ -43,6 +43,9 @@
   .parts .fix { margin-left: auto; }
   .parts .fix button, .parts .look button { font: 500 13px/1 var(--body); text-transform: none; letter-spacing: 0; }
   .fix-note { max-width: 1180px; margin: -4px auto 12px; color: var(--lens); font-size: 13px; }
+  .copy-shape { max-width: 1180px; margin: -4px auto 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--muted); font-size: 13px; }
+  .copy-shape select { font: 500 13px/1 var(--body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 7px; padding: 8px 10px; max-width: 100%; }
+  .copy-shape select:focus-visible { outline: 2px solid var(--lens); outline-offset: 2px; }
   .parts .look button { font: 500 13px/1 var(--body); text-transform: none; letter-spacing: 0; }
   .parts button { font-family: var(--display); font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 14px; }
 
@@ -131,6 +134,15 @@
   </div>
 </nav>
 
+<div class="copy-shape" role="group" aria-label="Copy a shape between rest and the arm poses">
+  <label for="copyWhat">Copy</label>
+  <select id="copyWhat"><option value="part" id="copyWhatPart">this part</option><option value="all">the whole body</option></select>
+  <label for="copyFrom">from</label>
+  <select id="copyFrom"><option value="rest">Rest</option><option value="out" selected>Arms out</option><option value="up">Arms up</option></select>
+  <label for="copyTo">to</label>
+  <select id="copyTo"><option value="rest">Rest</option><option value="out">Arms out</option><option value="up" selected>Arms up</option></select>
+  <button id="copyShapeBtn">Copy</button>
+</div>
 <p class="fix-note" id="fixNote" hidden></p>
 <main class="bench">
   <section class="pane" aria-labelledby="draw-title">
@@ -599,6 +611,7 @@ function setPressed(sel, attr, value) { document.querySelectorAll(sel).forEach((
 document.querySelectorAll('[data-part]').forEach((b) => b.addEventListener('click', () => {
   part = b.dataset.part; selected = null;
   setPressed('[data-part]', 'part', part);
+  showCopy();
   placeBoardCam(); placeView(); drawOverlay(); dirty = true;
 }));
 document.querySelectorAll('[data-board]').forEach((b) => b.addEventListener('click', () => {
@@ -615,12 +628,14 @@ document.querySelectorAll('[data-look]').forEach((b) => b.addEventListener('clic
 document.querySelectorAll('[data-fix]').forEach((b) => b.addEventListener('click', () => {
   fix = b.dataset.fix;
   setPressed('[data-fix]', 'fix', fix);
+  // (copying lands on the shape being edited, from the other arm pose by default)
+  if (fix !== 'rest') { $('copyTo').value = fix; $('copyFrom').value = fix === 'out' ? 'up' : 'out'; }
   selected = null;
   if (fix !== 'rest') { pose = FIX_POSE[fix]; setPressed('[data-pose]', 'pose', pose); placeView(); applyPose(); if (part === 'head' || part === 'leg') { part = 'arm'; setPressed('[data-part]', 'part', part); placeBoardCam(); placeView(); } }
   const note = $('fixNote');
   note.hidden = fix === 'rest';
   note.textContent = fix === 'rest' ? '' : `Editing his shape with the arms ${fix === 'out' ? 'raised level' : 'overhead'}: the handles change only how he looks as each arm reaches that pose (it fades in on the way). The board shows the body before it's bent; check the result in the 3D view.`;
-  drawOverlay(); rebuild();
+  drawOverlay(); rebuild(); showCopy();
 }));
 document.querySelectorAll('[data-pose]').forEach((b) => b.addEventListener('click', () => {
   pose = b.dataset.pose;
@@ -706,6 +721,52 @@ $('resetPartBtn').addEventListener('click', () => {
   if (fix !== 'rest') { pushHistory(); if (body.poses && body.poses[fix]) delete body.poses[fix][part]; drawOverlay(); rebuild(); saveDraft(); status('This part’s correction for the pose is cleared'); return; }
   pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') { body.armRoot = HERO_BODY.armRoot; body.armpit = HERO_BODY.armpit; body.armDepth = HERO_BODY.armDepth; } showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
 $('resetBtn').addEventListener('click', () => { pushHistory(); body = clone(HERO_BODY); showFoot(); drawOverlay(); rebuild(); saveDraft(); status('Everything is back to the game’s'); });
+
+// ---- Copying a shape between rest and the arm poses ------------------------------------------------------------------
+// Each pose's shape is the rest shape plus its correction, so copying "A to B" makes B look exactly as A does: into a
+// pose it rewrites that pose's correction; into rest it changes the rest shape and rewrites the poses' corrections so
+// they keep looking as they did (except the source pose, which now matches rest)
+const SHAPE_NAMES = { rest: 'Rest', out: 'Arms out', up: 'Arms up' };
+const PART_NAMES = { head: 'the head', torso: 'the neck & torso', arm: 'the arms', leg: 'the legs' };
+function shapeRows(k, s) { return (s === 'rest' ? body[k] : correctedBody(body, (body.poses || {})[s])[k]).map((r) => r.slice()); }
+function setPoseRows(s, k, rows) {
+  body.poses = body.poses || {};
+  const d = (body.poses[s] = body.poses[s] || {});
+  const delta = {};
+  rows.forEach((row, i) => {
+    const diff = row.map((v, j) => r4(v - body[k][i][j]));
+    if (diff.some((v) => Math.abs(v) > 0.00005)) delta[i] = diff;
+  });
+  if (Object.keys(delta).length) d[k] = delta; else delete d[k];
+  if (!Object.keys(d).length) delete body.poses[s];
+}
+function copyShape(from, to, parts) {
+  for (const k of parts) {
+    const src = shapeRows(k, from);
+    if (to === 'rest') {
+      const keep = ['out', 'up'].filter((s) => s !== from).map((s) => [s, shapeRows(k, s)]);
+      body[k] = src;
+      keep.forEach(([s, rows]) => setPoseRows(s, k, rows));
+      if (from !== 'rest') setPoseRows(from, k, src);
+    } else setPoseRows(to, k, src);
+  }
+}
+function showCopy() {
+  $('copyWhatPart').textContent = PART_NAMES[part];
+  $('copyShapeBtn').disabled = $('copyFrom').value === $('copyTo').value;
+}
+['copyFrom', 'copyTo'].forEach((id) => $(id).addEventListener('change', showCopy));
+$('copyShapeBtn').addEventListener('click', () => {
+  const from = $('copyFrom').value, to = $('copyTo').value;
+  if (from === to) return;
+  const all = $('copyWhat').value === 'all';
+  pushHistory();
+  copyShape(from, to, all ? ['head', 'torso', 'arm', 'leg'] : [part]);
+  drawOverlay(); rebuild(); saveDraft();
+  $('code').value = codeFor(body);
+  status(`${SHAPE_NAMES[to]} now has ${all ? 'the whole body' : PART_NAMES[part]} of ${SHAPE_NAMES[from]} (Undo takes it back)`, 'ok');
+});
+showCopy();
 
 // ---- Reference pictures (one per board) ----------------------------------------------------------------------------
 const refs = { front: { src: null, scale: 1, rotate: 0, x: 0, y: 0, flip: false, opacity: 0.5 }, side: { src: null, scale: 1, rotate: 0, x: 0, y: 0, flip: false, opacity: 0.5 } };
