@@ -1178,7 +1178,7 @@ const SUIT_STYLE = {
   red: 0xb42412, blue: 0x164cc6, ink: 0x140d10, lens: 0x8fbdea,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
   // flanks), where it narrows (waist height, chest height), everything above `yoke` red, the belt
-  chestWrap: 1.45, waistWrap: 1.0, waistY: 1.04, chestY: 1.3, yoke: 1.5, beltBottom: 0.975, beltTop: 1.035,
+  chestWrap: 1.45, waistWrap: 1.0, waistY: 1.04, chestY: 1.3, yoke: 1.41, beltBottom: 0.975, beltTop: 1.035,
   // ... and over the tops of the shoulders: how far round from the front, at what height
   shoulderWrap: 2.2, shoulderY: 1.43,
   // red V below the belt into the inner legs: how sharp

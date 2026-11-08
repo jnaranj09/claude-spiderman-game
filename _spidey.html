@@ -12,7 +12,9 @@ import { pass, vec4 } from 'three/tsl';
 import { LightingSystem } from './js/lighting.js';
 import { createPostProcessing } from './js/post-processing.js';
 import { createSpiderManEntity, updateSpiderManVisuals } from './js/spiderman.js';
-import { HERO_BODY, heroHelperPoses, heroPoseWeights } from './js/pedestrians.js';
+import { HERO_BODY, heroHelperPoses, heroPoseWeights, setSuitStyle } from './js/pedestrians.js';
+// &suit={"yoke":1.42,...}: try suit settings without saving them
+if (q0().get('suit')) setSuitStyle(JSON.parse(q0().get('suit')));
 // &body={"armpit":0.7,...}: try body settings without saving them
 if (q0().get('body')) Object.assign(HERO_BODY, JSON.parse(q0().get('body')));
 function q0() { return new URLSearchParams(location.search); }
