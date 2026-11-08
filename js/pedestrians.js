@@ -592,12 +592,12 @@ function shoeSkin(z, k) {
 // lats, a narrow waist, big arms & legs, slim ankles, a rounded masked head.
 const HERO_BODY = {
   head: [
-    [1.7483, 0.0242, 0.012, 0.0224, -0.013],
-    [1.7378, 0.0526, 0.0487, 0.0469, -0.0138],
-    [1.7168, 0.0722, 0.0741, 0.0783, -0.0084],
-    [1.6883, 0.0876, 0.0986, 0.0809, -0.0152],
-    [1.6468, 0.0898, 0.1089, 0.0818, -0.0178],
-    [1.6108, 0.0857, 0.1121, 0.0772, -0.019],
+    [1.7426, 0.0242, 0.0303, 0.004, -0.013],
+    [1.7328, 0.0479, 0.0603, 0.0469, -0.0138],
+    [1.713, 0.0722, 0.0803, 0.0783, -0.0084],
+    [1.6748, 0.0876, 0.0986, 0.0881, -0.0152],
+    [1.6383, 0.0898, 0.1089, 0.0896, -0.0178],
+    [1.606, 0.0857, 0.1121, 0.0822, -0.019],
     [1.5615, 0.075, 0.0985, 0.0559, -0.0128],
     [1.5301, 0.0527, 0.099, 0.0388, -0.014],
     [1.5261, 0.0484, 0.0817, 0.0237, -0.01],
@@ -671,7 +671,7 @@ const HERO_BODY = {
   armDepth: 0.0,
   // corrective shapes per arm pose ('out': raised level, 'up': overhead): ring changes on top of the rest shape,
   // { part: { ringIndex: [changes] } }, faded in for each arm as it reaches that pose (the body editor's Shape for)
-  poses: {"up": {"head": {"4": [-0.0074, 0, 0, 0.0035, 0]}}},
+  poses: {},
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
