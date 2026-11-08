@@ -108,8 +108,9 @@ function shoulderJoint(female) {
   return female ? [0.165, 1.415, -0.015] : [0.185, 1.43, -0.015];
 }
 
-function bindJoints(female) {
+function bindJoints(female, shoulderX = null) {
   const sh = shoulderJoint(female);
+  if (shoulderX !== null) sh[0] = shoulderX;
   const ax = Math.sin(ARM_BIND_ABDUCTION) * UPPER_ARM;
   const ay = -Math.cos(ARM_BIND_ABDUCTION) * UPPER_ARM;
   const j = [];
@@ -241,7 +242,7 @@ class BodyBuilder {
   // rows: { pts, ptsF (female), ptsH (more hair volume), ptsL (long hair), skin: [boneA, boneB, weightB], axis }
   // flattenBelow: normals of vertices lower than this face less downwards (the crotch of the trousers reads as cloth,
   // not as a dark gap between the legs)
-  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1, along = null } = {}) {
+  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1 } = {}) {
     const lo = loftRings(rows.map((r) => r.pts), capStart, capEnd);
     const variant = (key) => (rows.some((r) => r[key]) ? loftRings(rows.map((r) => r[key] || r.pts), capStart, capEnd).positions : null);
     const fem = variant('ptsF');
@@ -288,7 +289,7 @@ class BodyBuilder {
         extra[v * 3] = pos[v * 3] - row.axis.x;
         extra[v * 3 + 1] = pos[v * 3 + 2] - row.axis.z;
       }
-      extra[v * 3 + 2] = along ?? lo.uvs[v * 2];
+      extra[v * 3 + 2] = lo.uvs[v * 2];
       for (let k = 0; k < 3; k++) {
         if (fem) femaleDelta[v * 3 + k] = fem[v * 3 + k] - pos[v * 3 + k];
         if (hair) hairDelta[v * 3 + k] = hair[v * 3 + k] - pos[v * 3 + k];
@@ -653,8 +654,9 @@ const HERO_BODY = {
     [0.143, 0.0376, 0.0327, 0.0391, 0.004],
     [0.0574, 0.0264, 0.0423, 0.0642, 0.004]
   ],
-  // shoulders: the radius of the joint ball that fills between shoulder and arm (0: none)
-  shoulder: 0.046,
+  // the shoulder joints the arms turn about: how far out from the middle (m). Inside the shoulder's surface, so a
+  // raised arm's top end turns inside the body instead of pulling away from it
+  armRoot: 0.155,
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -730,6 +732,7 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
   SIDES.forEach((side, k) => {
     const dir = new THREE.Vector3(side * Math.sin(ARM_BIND_ABDUCTION), -Math.cos(ARM_BIND_ABDUCTION), 0);
     const shM = new THREE.Vector3(...shoulderJoint(false));
+    if (hero) shM.x = body.armRoot ?? HERO_BODY.armRoot;
     const shF = new THREE.Vector3(...shoulderJoint(true));
     shM.x *= side;
     shF.x *= side;
@@ -750,25 +753,6 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
     });
     B.loft(sleeve, PART.ARM, { capStart: true, capEnd: true });
 
-    if (hero && (body.shoulder ?? HERO_BODY.shoulder) > 0) {
-      // The shoulder's joint ball: a sphere centred on the joint the arm turns about, carried by the upper arm. Turned
-      // about its own centre a sphere stays the same sphere, so it fills between a slim shoulder and a slim arm in
-      // every pose without stretching or poking out (painted as the top of the arm, with no web rings)
-      const radius = body.shoulder ?? HERO_BODY.shoulder;
-      const ball = [];
-      for (let i = 0; i <= 10; i++) {
-        const lat = Math.PI / 2 - (Math.PI * (i + 0.5)) / 11; // top to bottom, like the body's other lofts (faces out)
-        const r = radius * Math.cos(lat);
-        const y = shM.y + radius * Math.sin(lat);
-        ball.push({
-          pts: ringY(y, r, r, r, shM.z, nArm + 2, 2, null, shM.x),
-          ptsF: ringY(y, r * 0.84, r * 0.84, r * 0.84, shM.z, nArm + 2, 2, null, shM.x),
-          skin: [LIMB.upperArm[k], LIMB.upperArm[k], 0],
-          axis: new THREE.Vector3(shM.x, y, shM.z)
-        });
-      }
-      B.loft(ball, PART.ARM, { capStart: true, capEnd: true, along: 0 });
-    }
 
     const hand = [];
     const twist = -side * HAND_TWIST;
@@ -1489,7 +1473,7 @@ class PersonRig {
    * @param {object} o - seed (dresses them), scale (height / 1.75 m), female, girth (build, ~0.9-1.15),
    *   hair (0 short .. 0.5 voluminous .. 1 long), armSwing & stride (gait personality, ~1)
    */
-  constructor({ seed = 0, scale = 1, female = false, girth = 1, hair = 0.2, armSwing = 1, stride = 1 } = {}) {
+  constructor({ seed = 0, scale = 1, female = false, girth = 1, hair = 0.2, armSwing = 1, stride = 1, bind = null } = {}) {
     this.seed = seed;
     this.s = scale;
     this.female = female ? 1 : 0;
@@ -1497,7 +1481,7 @@ class PersonRig {
     this.hair = hair;
     this.armSwing = armSwing;
     this.stride = stride;
-    this.bind = BIND[this.female];
+    this.bind = bind || BIND[this.female]; // (a hero's own skeleton: heroBind)
     this.placed = false;
     this.x = 0;
     this.z = 0;
@@ -2122,6 +2106,12 @@ class PersonRig {
 
 // Where the hero's rings sit (for the body editor): the legs' centre lines, each arm's shoulder, its hanging angle and
 // its rings' offsets
-const HERO_FRAME = { hipX: HIP_X, shoulder: shoulderJoint(false), armAbduction: ARM_BIND_ABDUCTION, arm: ARM.map((r) => r.slice(0, 5)) };
+// The hero's skeleton in the bind pose: the city's, with the shoulder joints where his body puts them
+function heroBind(body = HERO_BODY) {
+  return bindJoints(false, body.armRoot ?? HERO_BODY.armRoot);
+}
 
-export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+const HERO_FRAME = { hipX: HIP_X, shoulder: shoulderJoint(false), // (x: the city's; the hero's is HERO_BODY.armRoot)
+   armAbduction: ARM_BIND_ABDUCTION, arm: ARM.map((r) => r.slice(0, 5)) };
+
+export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, heroBind, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };

@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
-import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './pedestrians.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind } from './pedestrians.js';
 
 // js/spiderman.js
 // Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
@@ -199,7 +199,7 @@ function buildSpiderManModel(scene) {
   scene.add(outline);
 
   // An athletic build; no hair under the mask
-  const rig = new PersonRig({ seed: 1, scale: 1.0, girth: 1.0, hair: 0 });
+  const rig = new PersonRig({ seed: 1, scale: 1.0, girth: 1.0, hair: 0, bind: heroBind() });
   // The entity's mesh: an empty anchor the controller manager moves around (the body is skinned in world space)
   const root = new THREE.Group();
   root.name = 'PlayerSpiderMan';

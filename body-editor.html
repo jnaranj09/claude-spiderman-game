@@ -173,8 +173,8 @@
     <section class="pane controls" aria-label="Settings">
       <fieldset>
         <legend>Shoulders</legend>
-        <div class="row"><label for="ball">Joint ball</label><input type="range" id="ball" min="0" max="80" step="0.5" value="46"><output id="ballOut" for="ball">46 mm</output></div>
-        <p class="note">A ball on each shoulder joint that fills between a slim shoulder and a slim arm in every pose (it turns with the arm without stretching). 0 removes it.</p>
+        <div class="row"><label for="armRoot">Arm joint</label><input type="range" id="armRoot" min="110" max="210" step="0.5" value="155"><output id="armRootOut" for="armRoot">155 mm</output></div>
+        <p class="note">How far out from his middle each arm turns. Keep it just inside the shoulder's edge: then a raised arm turns inside the body instead of pulling away from it. Check it with the poses in the 3D view.</p>
       </fieldset>
 
       <fieldset>
@@ -216,7 +216,7 @@
 
 <script type="module">
 import * as THREE from 'three/webgpu';
-import { HERO_BODY, HERO_FRAME, PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
+import { HERO_BODY, HERO_FRAME, PersonRig, heroBind, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (text, state = '') => { $('status').textContent = text; $('status').dataset.state = state; };
@@ -299,7 +299,7 @@ viewBody.bind(new THREE.Skeleton(bones), new THREE.Matrix4());
 viewInk.bind(viewBody.skeleton, new THREE.Matrix4());
 viewBody.frustumCulled = viewInk.frustumCulled = false;
 viewScene.add(viewBody, viewInk);
-const rig = new PersonRig({ seed: 1, scale: 1, girth: 1, hair: 0 });
+const rig = new PersonRig({ seed: 1, scale: 1, girth: 1, hair: 0, bind: heroBind(body) });
 
 // Poses: joint angles as the game uses them (x swings a limb forward when negative, z raises the left arm sideways
 // when positive and the right when negative), the pelvis's height and forward tilt
@@ -316,6 +316,7 @@ let pose = 'stand';
 const _q = new THREE.Quaternion(), _t = new THREE.Vector3(), _s = new THREE.Vector3();
 function applyPose() {
   const P = POSES[pose];
+  rig.bind = heroBind(body);
   rig.poseFK(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), P.pitch), new THREE.Vector3(0, P.pelvis, 0), P.j, [new THREE.Vector3(), new THREE.Vector3()]);
   const a = rig.pose;
   for (let b = 0; b < 15; b++) {
@@ -342,6 +343,7 @@ function rebuild() {
     viewInk.geometry = vg;
     viewGeometry.dispose();
     viewGeometry = vg;
+    applyPose();
     dirty = true;
   });
 }
@@ -400,7 +402,8 @@ const ARM_DIR = new THREE.Vector3(Math.sin(A), -Math.cos(A), 0); // his left arm
 const ARM_OUT = new THREE.Vector3(Math.cos(A), Math.sin(A), 0); // across it, outwards
 const armCentre = (i) => {
   const [d, , , ox, oz] = HERO_FRAME.arm[i];
-  const [sx, sy, sz] = HERO_FRAME.shoulder;
+  const [, sy, sz] = HERO_FRAME.shoulder;
+  const sx = body.armRoot ?? HERO_BODY.armRoot;
   return new THREE.Vector3(sx, sy, sz).addScaledVector(ARM_DIR, d).add(new THREE.Vector3(ox, 0, oz));
 };
 const legX = () => HERO_FRAME.hipX;
@@ -593,9 +596,10 @@ $('viewStage').addEventListener('pointermove', (ev) => {
 // Feet: three sliders on body.foot
 const FOOT = [['footL', 0], ['footW', 1], ['footH', 2]];
 function showFoot() {
-  if (body.shoulder === undefined) body.shoulder = HERO_BODY.shoulder;
-  $('ball').value = (body.shoulder * 1000).toFixed(1);
-  $('ballOut').textContent = `${Math.round(body.shoulder * 1000)} mm`;
+  if (body.armRoot === undefined) body.armRoot = HERO_BODY.armRoot;
+  delete body.shoulder; // (an older save's joint ball)
+  $('armRoot').value = (body.armRoot * 1000).toFixed(1);
+  $('armRootOut').textContent = `${Math.round(body.armRoot * 1000)} mm`;
   if (!body.foot) body.foot = clone(HERO_BODY.foot);
   FOOT.forEach(([id, k]) => { $(id).value = Math.round(body.foot[k] * 100); $(id + 'Out').textContent = `${Math.round(body.foot[k] * 100)}%`; });
 }
@@ -611,10 +615,10 @@ FOOT.forEach(([id, k]) => {
   });
 });
 
-$('ball').addEventListener('pointerdown', () => pushHistory());
-$('ball').addEventListener('input', () => {
-  body.shoulder = r4(+$('ball').value / 1000);
-  $('ballOut').textContent = `${Math.round(body.shoulder * 1000)} mm`;
+$('armRoot').addEventListener('pointerdown', () => pushHistory());
+$('armRoot').addEventListener('input', () => {
+  body.armRoot = r4(+$('armRoot').value / 1000);
+  $('armRootOut').textContent = `${Math.round(body.armRoot * 1000)} mm`;
   if (part !== 'arm') { part = 'arm'; setPressed('[data-part]', 'part', part); placeBoardCam(); placeView(); }
   drawOverlay(); rebuild(); saveDraft();
   $('code').value = codeFor(body);
@@ -626,7 +630,7 @@ $('undoBtn').addEventListener('click', () => {
   $('undoBtn').disabled = history.length === 0;
   showFoot(); drawOverlay(); rebuild(); saveDraft();
 });
-$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') body.shoulder = HERO_BODY.shoulder; showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
+$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') body.armRoot = HERO_BODY.armRoot; showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
 $('resetBtn').addEventListener('click', () => { pushHistory(); body = clone(HERO_BODY); showFoot(); drawOverlay(); rebuild(); saveDraft(); status('Everything is back to the game’s'); });
 
 // ---- Reference pictures (one per board) ----------------------------------------------------------------------------
@@ -677,8 +681,8 @@ function moveRefDrag(ev) {
 function codeFor(b) {
   const rows = (k) => b[k].map((r) => `    [${r.map(r4).join(', ')}]`).join(',\n');
   const foot = (b.foot || HERO_BODY.foot).map(r4).join(', ');
-  const shoulder = r4(b.shoulder ?? HERO_BODY.shoulder);
-  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  shoulder: ${shoulder},\n  foot: [${foot}]\n};\n`;
+  const armRoot = r4(b.armRoot ?? HERO_BODY.armRoot);
+  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  foot: [${foot}]\n};\n`;
 }
 $('copyBtn').addEventListener('click', () => {
   const text = codeFor(body); const area = $('code'); area.value = text;
