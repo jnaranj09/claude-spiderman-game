@@ -242,7 +242,7 @@ class BodyBuilder {
   // rows: { pts, ptsF (female), ptsH (more hair volume), ptsL (long hair), skin: [boneA, boneB, weightB], axis }
   // flattenBelow: normals of vertices lower than this face less downwards (the crotch of the trousers reads as cloth,
   // not as a dark gap between the legs)
-  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1 } = {}) {
+  loft(rows, part, { capStart = false, capEnd = false, flattenBelow = -1, skinAt = null } = {}) {
     const lo = loftRings(rows.map((r) => r.pts), capStart, capEnd);
     const variant = (key) => (rows.some((r) => r[key]) ? loftRings(rows.map((r) => r[key] || r.pts), capStart, capEnd).positions : null);
     const fem = variant('ptsF');
@@ -281,9 +281,11 @@ class BodyBuilder {
     const hair = vol || long;
     for (let v = 0; v < count; v++) {
       const row = rows[lo.rowOf[v]];
-      skin[v * 4] = row.skin[0];
-      skin[v * 4 + 1] = row.skin[1];
-      skin[v * 4 + 2] = row.skin[2];
+      // (a per-vertex weighting, when given, instead of the row's: e.g. the chest round the hero's shoulders)
+      const sk = skinAt ? skinAt(pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2], row.skin) : row.skin;
+      skin[v * 4] = sk[0];
+      skin[v * 4 + 1] = sk[1];
+      skin[v * 4 + 2] = sk[2];
       skin[v * 4 + 3] = part;
       if (row.axis) {
         extra[v * 3] = pos[v * 3] - row.axis.x;
@@ -657,6 +659,9 @@ const HERO_BODY = {
   // the shoulder joints the arms turn about: how far out from the middle (m). Inside the shoulder's surface, so a
   // raised arm's top end turns inside the body instead of pulling away from it
   armRoot: 0.155,
+  // how much of the arm's turn the chest round each armpit & shoulder follows (0 none .. 1 all), fading out from the
+  // joint
+  armpit: 0.5,
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -708,7 +713,24 @@ function buildPersonGeometry(detail = 1, hero = false, body = HERO_BODY) {
       axis: new THREE.Vector3(0, m[0], m[4])
     });
   });
-  B.loft(torsoRows, PART.BODY, { capEnd: true, flattenBelow: 0.95 });
+  // The hero's armpits & shoulders: the chest near each shoulder joint follows the arm part of the way (fading out over
+  // ~13 cm), as the arm's own root already follows the chest part of the way, so a raised arm bends smoothly out of
+  // the chest instead of the two surfaces pivoting past each other and opening a crease
+  let skinAt = null;
+  if (hero) {
+    const share = body.armpit ?? HERO_BODY.armpit;
+    const jx = body.armRoot ?? HERO_BODY.armRoot;
+    const [, jy, jz] = shoulderJoint(false);
+    skinAt = (x, y, z, sk) => {
+      if (sk[0] !== BONE.CHEST || sk[1] !== BONE.CHEST || share <= 0) return sk;
+      const k = x >= 0 ? 0 : 1;
+      const d = Math.hypot(Math.abs(x) - jx, y - jy, z - jz);
+      const t = Math.min(1, Math.max(0, (0.13 - d) / 0.1));
+      const w = share * t * t * (3 - 2 * t);
+      return w > 0.001 ? [BONE.CHEST, LIMB.upperArm[k], w] : sk;
+    };
+  }
+  B.loft(torsoRows, PART.BODY, { capEnd: true, flattenBelow: 0.95, skinAt });
 
   // Trouser legs
   SIDES.forEach((side, k) => {

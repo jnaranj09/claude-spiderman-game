@@ -174,7 +174,8 @@
       <fieldset>
         <legend>Shoulders</legend>
         <div class="row"><label for="armRoot">Arm joint</label><input type="range" id="armRoot" min="110" max="210" step="0.5" value="155"><output id="armRootOut" for="armRoot">155 mm</output></div>
-        <p class="note">How far out from his middle each arm turns. Keep it just inside the shoulder's edge: then a raised arm turns inside the body instead of pulling away from it. Check it with the poses in the 3D view.</p>
+        <div class="row"><label for="armpit">Armpit blend</label><input type="range" id="armpit" min="0" max="100" value="50"><output id="armpitOut" for="armpit">50%</output></div>
+        <p class="note">Armpit blend: how much the chest round each shoulder moves with the arm, so a raised arm bends smoothly out of the chest (0 hard crease, 100 the chest follows the arm fully). Arm joint: how far out from his middle each arm turns. Keep it just inside the shoulder's edge: then a raised arm turns inside the body instead of pulling away from it. Check it with the poses in the 3D view.</p>
       </fieldset>
 
       <fieldset>
@@ -600,6 +601,9 @@ function showFoot() {
   delete body.shoulder; // (an older save's joint ball)
   $('armRoot').value = (body.armRoot * 1000).toFixed(1);
   $('armRootOut').textContent = `${Math.round(body.armRoot * 1000)} mm`;
+  if (body.armpit === undefined) body.armpit = HERO_BODY.armpit;
+  $('armpit').value = Math.round(body.armpit * 100);
+  $('armpitOut').textContent = `${Math.round(body.armpit * 100)}%`;
   if (!body.foot) body.foot = clone(HERO_BODY.foot);
   FOOT.forEach(([id, k]) => { $(id).value = Math.round(body.foot[k] * 100); $(id + 'Out').textContent = `${Math.round(body.foot[k] * 100)}%`; });
 }
@@ -615,6 +619,14 @@ FOOT.forEach(([id, k]) => {
   });
 });
 
+$('armpit').addEventListener('pointerdown', () => pushHistory());
+$('armpit').addEventListener('input', () => {
+  body.armpit = +$('armpit').value / 100;
+  $('armpitOut').textContent = `${$('armpit').value}%`;
+  if (pose === 'stand') { pose = 'out'; setPressed('[data-pose]', 'pose', pose); }
+  rebuild(); saveDraft();
+  $('code').value = codeFor(body);
+});
 $('armRoot').addEventListener('pointerdown', () => pushHistory());
 $('armRoot').addEventListener('input', () => {
   body.armRoot = r4(+$('armRoot').value / 1000);
@@ -630,7 +642,7 @@ $('undoBtn').addEventListener('click', () => {
   $('undoBtn').disabled = history.length === 0;
   showFoot(); drawOverlay(); rebuild(); saveDraft();
 });
-$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') body.armRoot = HERO_BODY.armRoot; showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
+$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') { body.armRoot = HERO_BODY.armRoot; body.armpit = HERO_BODY.armpit; } showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
 $('resetBtn').addEventListener('click', () => { pushHistory(); body = clone(HERO_BODY); showFoot(); drawOverlay(); rebuild(); saveDraft(); status('Everything is back to the game’s'); });
 
 // ---- Reference pictures (one per board) ----------------------------------------------------------------------------
@@ -682,7 +694,8 @@ function codeFor(b) {
   const rows = (k) => b[k].map((r) => `    [${r.map(r4).join(', ')}]`).join(',\n');
   const foot = (b.foot || HERO_BODY.foot).map(r4).join(', ');
   const armRoot = r4(b.armRoot ?? HERO_BODY.armRoot);
-  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  foot: [${foot}]\n};\n`;
+  const armpit = r4(b.armpit ?? HERO_BODY.armpit);
+  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  armpit: ${armpit},\n  foot: [${foot}]\n};\n`;
 }
 $('copyBtn').addEventListener('click', () => {
   const text = codeFor(body); const area = $('code'); area.value = text;
