@@ -664,11 +664,14 @@ const HERO_BODY = {
   // how far round each shoulder joint the chest follows the arm (m)
   armpitReach: 0.15,
   // how much further down the flank than elsewhere the chest follows (the lat)
-  latReach: 1.5,
+  latReach: 1,
   // how much more of the arm's turn its root rings take (0 as the city's, 1 all of it)
-  armRootFollow: 0.6,
+  armRootFollow: 0,
   // how much deeper inside the shoulder than the arm's line the joint it turns about sits (m)
-  armDepth: 0.025,
+  armDepth: 0,
+  // corrective shapes per arm pose ('out': raised level, 'up': overhead): ring changes on top of the rest shape,
+  // { part: { ringIndex: [changes] } }, faded in for each arm as it reaches that pose (the body editor's Shape for)
+  poses: {},
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -2180,6 +2183,81 @@ function heroHelperPoses(rig, out) {
   return out;
 }
 
+// ---- Corrective shapes ----------------------------------------------------------------------------------------------
+// The body with a pose's ring changes on top
+function correctedBody(body, delta) {
+  if (!delta) return body;
+  const out = { ...body };
+  for (const key of ['head', 'torso', 'arm', 'leg']) {
+    if (!delta[key]) continue;
+    out[key] = body[key].map((r, i) => r.map((v, j) => v + (((delta[key][i] || [])[j]) || 0)));
+  }
+  return out;
+}
+const HERO_POSES = ['out', 'up'];
+// Morph targets on the hero geometry, one per pose and side (out L, out R, up L, up R): the pose's corrected body
+// minus the rest body, split down his middle so each arm drives its own side. None when no pose is corrected
+function addHeroMorphs(geometry, body = HERO_BODY) {
+  const poses = body.poses || {};
+  if (!HERO_POSES.some((n) => poses[n] && Object.keys(poses[n]).length)) {
+    delete geometry.morphAttributes.position;
+    delete geometry.morphAttributes.normal;
+    return geometry;
+  }
+  const base = geometry.getAttribute('position');
+  const baseN = geometry.getAttribute('normal');
+  const positions = [];
+  const normals = [];
+  for (const name of HERO_POSES) {
+    const g = poses[name] ? buildPersonGeometry(1, true, correctedBody(body, poses[name])) : null;
+    const P = g && g.getAttribute('position');
+    const N = g && g.getAttribute('normal');
+    for (const side of [1, -1]) {
+      const dp = new Float32Array(base.count * 3);
+      const dn = new Float32Array(base.count * 3);
+      if (P && P.count === base.count) {
+        for (let v = 0; v < base.count; v++) {
+          const x = base.getX(v) * side;
+          const w = x > 0.002 ? 1 : x < -0.002 ? 0 : 0.5;
+          if (!w) continue;
+          dp[v * 3] = (P.getX(v) - base.getX(v)) * w;
+          dp[v * 3 + 1] = (P.getY(v) - base.getY(v)) * w;
+          dp[v * 3 + 2] = (P.getZ(v) - base.getZ(v)) * w;
+          dn[v * 3] = (N.getX(v) - baseN.getX(v)) * w;
+          dn[v * 3 + 1] = (N.getY(v) - baseN.getY(v)) * w;
+          dn[v * 3 + 2] = (N.getZ(v) - baseN.getZ(v)) * w;
+        }
+      }
+      positions.push(new THREE.Float32BufferAttribute(dp, 3));
+      normals.push(new THREE.Float32BufferAttribute(dn, 3));
+    }
+    if (g) g.dispose();
+  }
+  geometry.morphAttributes.position = positions;
+  geometry.morphAttributes.normal = normals;
+  geometry.morphTargetsRelative = true;
+  return geometry;
+}
+// How much of each pose each arm is in (out[0..3]: out L, out R, up L, up R) from a posed rig: by how far the upper
+// arm is raised from hanging, in the chest's frame (out at 90 degrees, up at 160)
+const _pa = new THREE.Vector3();
+function heroPoseWeights(rig, out) {
+  const a = rig.pose;
+  const UP = 2.8;
+  const ease = (t) => { const c = Math.min(1, Math.max(0, t)); return c * c * (3 - 2 * c); };
+  _hqC.set(a[BONE.CHEST * 8], a[BONE.CHEST * 8 + 1], a[BONE.CHEST * 8 + 2], a[BONE.CHEST * 8 + 3]).invert();
+  for (let k = 0; k < 2; k++) {
+    const ua = LIMB.upperArm[k];
+    _hqA.set(a[ua * 8], a[ua * 8 + 1], a[ua * 8 + 2], a[ua * 8 + 3]);
+    _pa.copy(rig.bind[LIMB.forearm[k]]).sub(rig.bind[ua]).normalize().applyQuaternion(_hqA).applyQuaternion(_hqC);
+    const e = Math.acos(Math.max(-1, Math.min(1, -_pa.y)));
+    const half = Math.PI / 2;
+    out[k] = e <= half ? ease(e / half) : 1 - ease((e - half) / (UP - half));
+    out[2 + k] = e <= half ? 0 : ease((e - half) / (UP - half));
+  }
+  return out;
+}
+
 // The hero's skeleton in the bind pose: the city's, with the shoulder joints where his body puts them
 // (the shoulder joint armDepth deeper than where the arm hangs, as in a real shoulder: the arm's top end turns under
 // the deltoid instead of at the surface; the elbow stays on the arm's own line)
@@ -2193,4 +2271,4 @@ function heroBind(body = HERO_BODY) {
 const HERO_FRAME = { hipX: HIP_X, shoulder: shoulderJoint(false), // (x: the city's; the hero's is HERO_BODY.armRoot)
    armAbduction: ARM_BIND_ABDUCTION, arm: ARM.map((r) => r.slice(0, 5)) };
 
-export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, heroBind, heroHelperPoses, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };
+export { BONE as PERSON_BONES, HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, HERO_POSES, heroBind, heroHelperPoses, heroPoseWeights, correctedBody, addHeroMorphs, buildPersonGeometry, createInkOutlineMaterial, createPersonMaterial, createSpiderSuitMaterial, LENS_OUTLINE, sampleLensOutline, setLensOutline, PersonCrowd, PersonRig, PEDESTRIAN_DIVE_DURATION };

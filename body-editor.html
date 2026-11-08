@@ -40,7 +40,9 @@
   .status[data-state="warn"] { color: var(--suit-red-ink); border-color: color-mix(in srgb, var(--suit-red) 50%, var(--rule)); }
 
   .parts { max-width: 1180px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px; }
-  .parts .look { margin-left: auto; }
+  .parts .fix { margin-left: auto; }
+  .parts .fix button, .parts .look button { font: 500 13px/1 var(--body); text-transform: none; letter-spacing: 0; }
+  .fix-note { max-width: 1180px; margin: -4px auto 12px; color: var(--lens); font-size: 13px; }
   .parts .look button { font: 500 13px/1 var(--body); text-transform: none; letter-spacing: 0; }
   .parts button { font-family: var(--display); font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 14px; }
 
@@ -118,12 +120,18 @@
   <button data-part="torso" aria-pressed="false">Neck &amp; torso</button>
   <button data-part="arm" aria-pressed="false">Arms</button>
   <button data-part="leg" aria-pressed="false">Legs</button>
+  <div class="seg fix" role="group" aria-label="Shape for">
+    <button data-fix="rest" aria-pressed="true">Shape: rest</button>
+    <button data-fix="out" aria-pressed="false">Arms out</button>
+    <button data-fix="up" aria-pressed="false">Arms up</button>
+  </div>
   <div class="seg look" role="group" aria-label="What he wears">
     <button data-look="plain" aria-pressed="true">Plain cloth</button>
     <button data-look="suit" aria-pressed="false">Suit</button>
   </div>
 </nav>
 
+<p class="fix-note" id="fixNote" hidden></p>
 <main class="bench">
   <section class="pane" aria-labelledby="draw-title">
     <div class="pane-head">
@@ -218,7 +226,7 @@
 
 <script type="module">
 import * as THREE from 'three/webgpu';
-import { HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, PersonRig, heroBind, heroHelperPoses, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
+import { HERO_BODY, HERO_FRAME, HERO_BONE_COUNT, PersonRig, heroBind, heroHelperPoses, heroPoseWeights, correctedBody, addHeroMorphs, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial } from './js/pedestrians.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (text, state = '') => { $('status').textContent = text; $('status').dataset.state = state; };
@@ -231,14 +239,22 @@ let body = clone(HERO_BODY);
 let part = 'head';
 let board = 'front';
 let selected = null; // { kind, row }
+// Which shape the handles edit: the rest shape, or a pose's correction (ring changes faded in as each arm reaches it)
+let fix = 'rest';
+const FIX_POSE = { out: 'out', up: 'up' };
+// The rings as the board shows them: the rest shape, or with the current pose's correction on top
+function tableFor(k) { return fix === 'rest' ? body[k] : correctedBody(body, (body.poses || {})[fix])[k].map((r) => r.slice()); }
 const history = [];
 const DRAFT_KEY = 'spidey-body-draft';
 function pushHistory() { history.push(clone(body)); if (history.length > 80) history.shift(); $('undoBtn').disabled = false; }
-function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ body, at: Date.now() })); } catch (e) { /* storage off */ } }
+function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ body, at: Date.now(), rev: 2 })); } catch (e) { /* storage off */ } }
 function loadDraft() {
   try {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
-    return d && validBody(d.body) ? d : null;
+    if (!d || !validBody(d.body)) return null;
+    // (drafts from before the shoulder settings were put back: drop those three)
+    if (!d.rev) ['armDepth', 'armRootFollow', 'latReach'].forEach((k) => delete d.body[k]);
+    return d;
   } catch (e) { return null; }
 }
 function validBody(b) {
@@ -329,6 +345,10 @@ function applyPose() {
   }
   heroHelperPoses(rig, helpers);
   helpers.forEach((h, k) => bones[15 + k].matrixWorld.compose(h.t, h.q, _s.setScalar(h.s)));
+  if (viewBody.morphTargetInfluences) {
+    heroPoseWeights(rig, viewBody.morphTargetInfluences);
+    viewBody.morphTargetInfluences.forEach((v, i) => { viewInk.morphTargetInfluences[i] = v; });
+  }
   dirty = true;
 }
 
@@ -338,14 +358,16 @@ function rebuild() {
   rebuildQueued = true;
   requestAnimationFrame(() => {
     rebuildQueued = false;
-    const g = buildPersonGeometry(1, true, body);
+    const g = buildPersonGeometry(1, true, fix === 'rest' ? body : correctedBody(body, (body.poses || {})[fix]));
     suit.geometry = g;
     ink.geometry = g;
     if (geometry !== g) geometry.dispose();
     geometry = g;
-    const vg = skinnedGeometry(g);
+    const vg = addHeroMorphs(skinnedGeometry(fix === 'rest' ? g : buildPersonGeometry(1, true, body)), body);
     viewBody.geometry = vg;
     viewInk.geometry = vg;
+    viewBody.updateMorphTargets();
+    viewInk.updateMorphTargets();
     viewGeometry.dispose();
     viewGeometry = vg;
     applyPose();
@@ -375,7 +397,8 @@ const orbit = { yaw: 0.6, pitch: -0.1, whole: false };
 const VIEWS = { front: [0, -0.05], three: [0.6, -0.1], side: [1.57, -0.05], back: [3.14, -0.08] };
 function placeView() {
   const f = orbit.whole ? { view: [0, 0.95, 0], dist: 3.6 } : FRAMES[part];
-  const [cx, cy, cz] = f.view;
+  const [cx, cy0, cz] = f.view;
+  const cy = cy0 + (!orbit.whole && (pose === 'up' || pose === 'swing') ? 0.25 : 0); // (raised arms in frame)
   const d = f.dist;
   view.position.set(cx + Math.sin(orbit.yaw) * Math.cos(orbit.pitch) * d, cy - Math.sin(orbit.pitch) * d, cz + Math.cos(orbit.yaw) * Math.cos(orbit.pitch) * d);
   view.lookAt(cx, cy, cz);
@@ -416,7 +439,7 @@ const legX = () => HERO_FRAME.hipX;
 // The handles for the current part & board: { kind, row, s, y, cls }
 function handles() {
   const out = [];
-  const rows = body[part];
+  const rows = tableFor(part);
   rows.forEach((r, i) => {
     if (part === 'arm') {
       const c = armCentre(i);
@@ -438,7 +461,7 @@ function handles() {
 
 // Outline curves to draw: arrays of [s, y] with a style
 function curves() {
-  const rows = body[part];
+  const rows = tableFor(part);
   const solid = [], dashed = [];
   if (part === 'arm') {
     if (board === 'front') {
@@ -495,8 +518,8 @@ function drawOverlay() {
 
 function updateReadout() {
   if (!selected) { $('readout').textContent = 'tap or drag a handle'; return; }
-  const r = body[part][selected.row];
-  const n = body[part].length;
+  const r = tableFor(part)[selected.row];
+  const n = r ? tableFor(part).length : 0;
   if (part === 'arm') $('readout').textContent = `ring ${selected.row + 1}/${n} · ${mm(r[0])} mm down the arm · ${mm(r[1] * 2)} × ${mm(r[2] * 2)} mm`;
   else $('readout').textContent = `ring ${selected.row + 1}/${n} · height ${mm(r[0])} · width ${mm(r[1] * 2)} · depth ${mm(r[2] + r[3])} mm`;
 }
@@ -515,7 +538,7 @@ function setHeight(rows, i, y) {
 }
 
 function applyDrag(p) {
-  const rows = body[part];
+  const rows = tableFor(part);
   const r = rows[selected.row];
   const MIN = 0.004;
   switch (selected.kind) {
@@ -525,6 +548,17 @@ function applyDrag(p) {
     case 'c': r[4] = r4(-p.s); break;
     case 'armW': { const c = armCentre(selected.row); r[1] = r4(Math.max(MIN, (p.s - c.x) * ARM_OUT.x + (p.y - c.y) * ARM_OUT.y)); break; }
     case 'armD': { const c = armCentre(selected.row); r[2] = r4(Math.max(MIN, -p.s - c.z)); break; }
+  }
+  if (fix !== 'rest') {
+    // keep the pose's correction as changes from the rest shape (rest edits still carry through), only rings that differ
+    body.poses = body.poses || {};
+    const d = (body.poses[fix] = body.poses[fix] || {});
+    d[part] = d[part] || {};
+    rows.forEach((row, i) => {
+      const diff = row.map((v, j) => r4(v - body[part][i][j]));
+      if (diff.some((v) => Math.abs(v) > 0.00005)) d[part][i] = diff; else delete d[part][i];
+    });
+    if (!Object.keys(d[part]).length) delete d[part];
   }
 }
 
@@ -578,9 +612,20 @@ document.querySelectorAll('[data-look]').forEach((b) => b.addEventListener('clic
   setPressed('[data-look]', 'look', b.dataset.look);
   dirty = true;
 }));
+document.querySelectorAll('[data-fix]').forEach((b) => b.addEventListener('click', () => {
+  fix = b.dataset.fix;
+  setPressed('[data-fix]', 'fix', fix);
+  selected = null;
+  if (fix !== 'rest') { pose = FIX_POSE[fix]; setPressed('[data-pose]', 'pose', pose); placeView(); applyPose(); if (part === 'head' || part === 'leg') { part = 'arm'; setPressed('[data-part]', 'part', part); placeBoardCam(); placeView(); } }
+  const note = $('fixNote');
+  note.hidden = fix === 'rest';
+  note.textContent = fix === 'rest' ? '' : `Editing his shape with the arms ${fix === 'out' ? 'raised level' : 'overhead'}: the handles change only how he looks as each arm reaches that pose (it fades in on the way). The board shows the body before it's bent; check the result in the 3D view.`;
+  drawOverlay(); rebuild();
+}));
 document.querySelectorAll('[data-pose]').forEach((b) => b.addEventListener('click', () => {
   pose = b.dataset.pose;
   setPressed('[data-pose]', 'pose', pose);
+  placeView();
   applyPose();
 }));
 document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => {
@@ -657,7 +702,9 @@ $('undoBtn').addEventListener('click', () => {
   $('undoBtn').disabled = history.length === 0;
   showFoot(); drawOverlay(); rebuild(); saveDraft();
 });
-$('resetPartBtn').addEventListener('click', () => { pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') { body.armRoot = HERO_BODY.armRoot; body.armpit = HERO_BODY.armpit; body.armDepth = HERO_BODY.armDepth; } showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
+$('resetPartBtn').addEventListener('click', () => {
+  if (fix !== 'rest') { pushHistory(); if (body.poses && body.poses[fix]) delete body.poses[fix][part]; drawOverlay(); rebuild(); saveDraft(); status('This part’s correction for the pose is cleared'); return; }
+  pushHistory(); body[part] = clone(HERO_BODY[part]); if (part === 'leg') body.foot = clone(HERO_BODY.foot); if (part === 'arm') { body.armRoot = HERO_BODY.armRoot; body.armpit = HERO_BODY.armpit; body.armDepth = HERO_BODY.armDepth; } showFoot(); drawOverlay(); rebuild(); saveDraft(); status('This part is back to the game’s'); });
 $('resetBtn').addEventListener('click', () => { pushHistory(); body = clone(HERO_BODY); showFoot(); drawOverlay(); rebuild(); saveDraft(); status('Everything is back to the game’s'); });
 
 // ---- Reference pictures (one per board) ----------------------------------------------------------------------------
@@ -712,7 +759,8 @@ function codeFor(b) {
   const armpit = r4(b.armpit ?? HERO_BODY.armpit);
   const armpitReach = r4(b.armpitReach ?? HERO_BODY.armpitReach);
   const more = ['latReach', 'armRootFollow', 'armDepth'].map((k) => `  ${k}: ${r4(b[k] ?? HERO_BODY[k])},\n`).join('');
-  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  armpit: ${armpit},\n  armpitReach: ${armpitReach},\n${more}  foot: [${foot}]\n};\n`;
+  const poses = JSON.stringify(b.poses || {});
+  return `const HERO_BODY = {\n  head: [\n${rows('head')}\n  ],\n  torso: [\n${rows('torso')}\n  ],\n  arm: [\n${rows('arm')}\n  ],\n  leg: [\n${rows('leg')}\n  ],\n  armRoot: ${armRoot},\n  armpit: ${armpit},\n  armpitReach: ${armpitReach},\n${more}  poses: ${poses},\n  foot: [${foot}]\n};\n`;
 }
 $('copyBtn').addEventListener('click', () => {
   const text = codeFor(body); const area = $('code'); area.value = text;
@@ -772,6 +820,7 @@ async function start() {
   requestAnimationFrame(frame);
   status(draft ? 'Picked up your unsaved changes' : 'Ready · drag a handle');
   connectStore();
+  window.__bodyEditor = { viewBody, applyPose };
   window.__bodyEditorReady = true;
 }
 start();

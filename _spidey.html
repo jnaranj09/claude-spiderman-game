@@ -12,7 +12,7 @@ import { pass, vec4 } from 'three/tsl';
 import { LightingSystem } from './js/lighting.js';
 import { createPostProcessing } from './js/post-processing.js';
 import { createSpiderManEntity, updateSpiderManVisuals } from './js/spiderman.js';
-import { HERO_BODY, heroHelperPoses } from './js/pedestrians.js';
+import { HERO_BODY, heroHelperPoses, heroPoseWeights } from './js/pedestrians.js';
 // &body={"armpit":0.7,...}: try body settings without saving them
 if (q0().get('body')) Object.assign(HERO_BODY, JSON.parse(q0().get('body')));
 function q0() { return new URLSearchParams(location.search); }
@@ -98,6 +98,7 @@ if (S) {
   const onBody = ([bone, off]) => new THREE.Vector3(...CENTRES[bone]).applyMatrix4(m.bones[bone].matrixWorld).add(at(off));
   const hp = heroHelperPoses(m.rig, [0, 1].map(() => ({ q: new THREE.Quaternion(), t: new THREE.Vector3(), s: 1 })));
   hp.forEach((h, k) => m.bones[15 + k].matrixWorld.compose(h.t, h.q, new THREE.Vector3().setScalar(h.s)));
+  if (m.mesh.morphTargetInfluences) { heroPoseWeights(m.rig, m.mesh.morphTargetInfluences); m.mesh.morphTargetInfluences.forEach((v, i) => { m.outline.morphTargetInfluences[i] = v; }); }
   camera.position.copy(onBody(S.cam));
   camera.lookAt(onBody(S.look));
 } else {

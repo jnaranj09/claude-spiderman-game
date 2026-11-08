@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
-import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind, heroHelperPoses, HERO_BONE_COUNT } from './pedestrians.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind, heroHelperPoses, heroPoseWeights, addHeroMorphs, HERO_BONE_COUNT } from './pedestrians.js';
 
 // js/spiderman.js
 // Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
@@ -176,6 +176,7 @@ function buildSpiderManModel(scene) {
   }
   geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(indices, 4));
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(weights, 4));
+  addHeroMorphs(geometry); // his shoulders' corrective shapes, if the body has any
 
   const mesh = new THREE.SkinnedMesh(geometry, createSpiderSuitMaterial());
   mesh.name = 'SpiderMan';
@@ -203,7 +204,7 @@ function buildSpiderManModel(scene) {
   // The entity's mesh: an empty anchor the controller manager moves around (the body is skinned in world space)
   const root = new THREE.Group();
   root.name = 'PlayerSpiderMan';
-  return { root, mesh, bones, rig, hands: [new THREE.Vector3(), new THREE.Vector3()] };
+  return { root, mesh, outline, bones, rig, hands: [new THREE.Vector3(), new THREE.Vector3()] };
 }
 
 const _boneQ = new THREE.Quaternion();
@@ -224,6 +225,11 @@ function applyRigToBones(model) {
   heroHelperPoses(model.rig, _helpers);
   for (let k = 0; k < 2; k++) {
     model.bones[15 + k].matrixWorld.compose(_helpers[k].t, _helpers[k].q, _boneS.setScalar(_helpers[k].s));
+  }
+  // and the corrective shapes for how far each arm is raised
+  if (model.mesh.morphTargetInfluences) {
+    heroPoseWeights(model.rig, model.mesh.morphTargetInfluences);
+    if (model.outline) model.mesh.morphTargetInfluences.forEach((v, i) => { model.outline.morphTargetInfluences[i] = v; });
   }
 }
 const _helpers = [0, 1].map(() => ({ q: new THREE.Quaternion(), t: new THREE.Vector3(), s: 1 }));
