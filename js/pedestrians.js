@@ -1177,10 +1177,13 @@ const SUIT_STYLE = {
   // colours
   red: 0xb42412, blue: 0x164cc6, ink: 0x140d10, lens: 0x8fbdea,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
-  // flanks), where it narrows (waist height, chest height), everything above `yoke` red, the belt
-  chestWrap: 1.45, waistWrap: 1.0, waistY: 1.04, chestY: 1.3, yoke: 1.41, beltBottom: 0.975, beltTop: 1.035,
+  // flanks), where it narrows (waist height, chest height), the belt
+  chestWrap: 1.45, waistWrap: 1.0, waistY: 1.04, chestY: 1.3, beltBottom: 0.975, beltTop: 1.035,
   // ... and over the tops of the shoulders: how far round from the front, at what height
   shoulderWrap: 2.2, shoulderY: 1.43,
+  // the top of the blue back: its height in the middle of the back, and how much the edge drops (negative) or rises
+  // towards the shoulders (red above it)
+  yoke: 1.46, yokeCurve: -0.05,
   // red V below the belt at the front: how far down it reaches (m) and how wide it is at the belt (radians)
   trunksDepth: 0.03, trunksWidth: 0.3,
   // arms: the red shoulder cap down the outside of the arm (length from the shoulder, how far round), the red stripe
@@ -1233,7 +1236,10 @@ function suitPattern() {
   const chest = step(fromFront, frontWidth).mul(step(U.beltTop, q.y));
   const belt = step(U.beltBottom, q.y).mul(step(q.y, U.beltTop));
   const trunksV = step(fromFront, q.y.sub(U.beltBottom.sub(U.trunksDepth)).div(max(U.trunksDepth, 0.001)).mul(U.trunksWidth)).mul(step(q.y, U.beltBottom));
-  const torsoRed = max(max(chest, belt), max(trunksV, step(U.yoke, q.y)));
+  // the blue back's top edge: yoke in the middle of the back, curving by yokeCurve out to his sides
+  const fromBack = clamp(abs(torsoAngle.add(Math.PI / 2)).div(Math.PI / 2), 0.0, 1.0);
+  const backTop = U.yoke.add(U.yokeCurve.mul(fromBack.mul(fromBack)));
+  const torsoRed = max(max(chest, belt), max(trunksV, step(backTop, q.y)));
   // arms: a red cap over the outside of the shoulder (measured along the arm and round its outside, so it stays on
   // the shoulder whatever the arm does), a red stripe down the outside, the red glove & forearm; blue between
   const toOutside = abs(limbAngle);
