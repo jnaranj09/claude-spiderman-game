@@ -1070,16 +1070,16 @@ const AMBIENT_SHARE = 2.0;
 // face, y up), mirrored for the other eye. A smooth closed curve through the points, sharp at those marked `corner`;
 // `rim` is the black rim's width. Drawn in the lens editor (tools/lens-editor.html), whose "Copy code" writes this.
 const LENS_OUTLINE = {
-  rim: 0.005,
+  rim: 0.0075,
   points: [
     { x: 0.0129, y: 1.6244, corner: true },
-    { x: 0.0323, y: 1.6506, corner: false },
-    { x: 0.0581, y: 1.6647, corner: false },
+    { x: 0.0317, y: 1.6517, corner: false },
+    { x: 0.0501, y: 1.6634, corner: false },
     { x: 0.069, y: 1.6719, corner: true },
     { x: 0.0717, y: 1.6482, corner: false },
-    { x: 0.0655, y: 1.6232, corner: false },
-    { x: 0.0541, y: 1.6088, corner: false },
-    { x: 0.0304, y: 1.6086, corner: false }
+    { x: 0.0656, y: 1.621, corner: false },
+    { x: 0.0518, y: 1.6069, corner: false },
+    { x: 0.031, y: 1.6103, corner: false }
   ]
 };
 // The outline as the shader gets it: the curve sampled into a closed polygon (uniforms, so the editor can reshape it
@@ -1190,7 +1190,7 @@ const SUIT_STYLE = {
   // down the arm (how wide, and where round it: 0 the outside, towards the front positive), where the red glove & forearm start (share of the arm's length)
   capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.65,
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
-  bootTop: 0.45, bootPoint: 0, innerStripe: 0,
+  bootTop: 0.335, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; chest: spokes & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
   line: 0.0014, chestSpokes: 12, chestRings: 0.058, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
