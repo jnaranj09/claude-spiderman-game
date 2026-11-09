@@ -380,6 +380,10 @@ function rebuild() {
     viewInk.geometry = vg;
     viewBody.updateMorphTargets();
     viewInk.updateMorphTargets();
+    // (the renderer bakes a geometry's pose corrections (morph targets) into the shader when it builds it and only
+    // looks again when the material changes: mark them changed, or the 3D view keeps showing the corrections it
+    // first loaded with)
+    [viewMaterials.suit, viewMaterials.plain, viewInk.material].forEach((m) => { m.needsUpdate = true; });
     viewGeometry.dispose();
     viewGeometry = vg;
     applyPose();
