@@ -1190,7 +1190,7 @@ const SUIT_STYLE = {
   trunksDepth: 0.03, trunksWidth: 0.9425,
   // arms: the red shoulder cap down the outside of the arm (length from the shoulder, how far round), the red stripe
   // down the arm (how wide, and where round it: 0 the outside, towards the front positive), where the red glove & forearm start (share of the arm's length)
-  capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.65,
+  capLength: 0.03, capWrap: 0.8727, stripeWrap: 1.3963, stripeCenter: 0.6, gloveStart: 0.65,
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; torso: strands (counted all the way round the neck) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
