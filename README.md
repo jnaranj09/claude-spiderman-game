@@ -170,10 +170,18 @@ placed on the floor (or the wall) by moving the whole posed body. On foot he set
 **Landing fast** (over 18 m/s across the ground), he sticks a web from each hand to the floor behind him and they stop
 him within a few metres (with the stick held, down to a pace he runs on from). Each swing is ridden one of four ways,
 picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
-His crouch (the editors' 'Crouch' pose) is how he draws the slingshot, both arms held out ahead along the webs (forward
-and down for webs stuck to the floor ahead, up for ones high on a building), and how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
+His crouch (the editors' 'Crouch' pose) is how he starts drawing the slingshot, both arms held out ahead along the webs
+(forward and down for webs stuck to the floor ahead, up for ones high on a building); as he draws them back he leans
+back against them, sat low on his heels with his feet braced out ahead. It is also how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
 it, facing out, both hands down on the roof between his knees, looking down, the camera looking down over it with him. The stick, a jump or another double click
 stands him up.
+
+The rest of how he moves: each joint follows its pose like a damped spring (quick, with a little overshoot and
+settle); between webs he carries himself one of three ways, picked at each take-off (reaching for the next web, a
+tucked float over the top of the arc, or swept back like an arrow), opening into a spread as he falls; a dive starts
+as a swan dive and draws in to a dart at speed; hanging from one hand hitches that shoulder up; he leans into turns
+and his head turns first towards where the stick points; a drop of 5 m or more with little pace lands on a knee and a
+fist; and standing, he's at ease rather than to attention.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.

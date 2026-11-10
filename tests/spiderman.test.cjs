@@ -1372,3 +1372,27 @@ test('a double click of the stick near a roof\'s edge perches him on it, looking
   assert.equal(walker.perch.on || walker.perch.going, false);
   assert.equal(walker.position.length(), 0);
 });
+
+test('a long drop with little pace lands on a knee and a fist, held a moment; a short hop or a running landing does not', () => {
+  const controllers = world([]);
+  controllers.cameraYaw = 0;
+  const drop = (height, forward) => {
+    const ent = spiderEntity(0, height, 0, 0);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, forward);
+    let i = 0;
+    while (ent.state !== 'ground' && i++ < 600) spider.updateSpiderMan(controllers, ent, 1 / 60);
+    return ent;
+  };
+  const hard = drop(12, 2);
+  assert.ok(hard.landing >= 0, 'down on a knee');
+  assert.equal(hard.brake.time, -1);
+  step(controllers, hard, 0.6);
+  assert.equal(hard.landing, -1, 'and up again');
+  assert.equal(drop(2, 2).landing, -1);
+  // (with pace he runs on; with a lot of it, his webs stop him)
+  assert.equal(drop(12, 10).landing, -1);
+  const fast = drop(12, 30);
+  assert.equal(fast.landing, -1);
+  assert.ok(fast.brake.time >= 0);
+});

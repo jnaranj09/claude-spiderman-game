@@ -124,6 +124,11 @@ const PERCH_DOUBLE = 0.4;         // s: two clicks within this are a double clic
 const PERCH_SPEED = 9;            // m/s over to the edge
 const PERCH_INSET = 0.35;         // m: how far in from the edge his feet are (his knees and head hang out over it)
 const CROUCH_PITCH = 0.75;        // rad: how far forward the whole figure tips in his crouch (the editors' 'Crouch' pose)
+const SLING_LEAN_BACK = 0.5;       // rad: how far back he leans against a drawn slingshot's webs...
+const SLING_LEAN_DRAW = 2.5;      // ...by the time he has drawn them back this far (m); undrawn, he's tipped forward in his crouch
+const HERO_LANDING_FALL = 15;     // m/s: landing from a fall faster than this (a drop of 5 m or so), he lands on a knee and a fist
+const HERO_LANDING_HOLD = 0.5;    // s: and holds it this long (or until he's moving off)
+const AIR_STYLES = ['reach', 'float', 'arrow']; // how he carries himself between webs (see airPose)
 const CROUCH_PELVIS = 0.5;        // m: the pelvis above the floor in it
 const SWING_STYLES = ['tuck', 'stride', 'layout']; // the other ways he rides a web (see nextSwingStyle)
 const SWING_PUMP_SHARE = 0.5;    // the share of swings ridden the usual way: legs trailing down the arc, kicked forward up it
@@ -720,6 +725,15 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     brake: { time: -1, anchors: [new THREE.Vector3(), new THREE.Vector3()], tips: [new THREE.Vector3(), new THREE.Vector3()],
       splats: [null, null], from: 0 },
     lastSwingStyle: 'pump',
+    // A hard landing on a knee and a fist: seconds since it (-1: none)
+    landing: -1,
+    // (for the look: how his joints are moving, for their springiness; how he carries himself through this flight;
+    // how far he's banked into a turn; and what he was doing a frame ago)
+    poseSpeed: null,
+    airStyle: 'reach',
+    bank: 0,
+    animState: 'ground',
+    animHeading: heading,
     // Perched on a roof's edge (a double click of the stick near one): on his way over to it (going), crouched there
     // looking down (on), where, and the time left for a second click to make a double
     perch: { going: false, on: false, x: 0, z: 0, heading: 0, click: 0, time: 0 },
@@ -803,6 +817,7 @@ function resetSpiderMan(ent) {
   releaseSplat(ent);
   dropSling(ent);
   dropBrake(ent);
+  ent.landing = -1;
   ent.gliding = ent.diving = false;
   ent.webCooldown = 0;
   ent.crouch = 0;
@@ -2034,6 +2049,8 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.flip = ent.roll = 1;
         const landed = Math.hypot(v.x, v.z);
         if (landed > BRAKE_MIN_SPEED) startBrake(ent, landed);
+        // (a long drop without that much pace: down on a knee and a fist)
+        else if (fallBefore < -HERO_LANDING_FALL) ent.landing = 0;
       }
     }
   } else if (ent.state === 'whip') {
@@ -2353,6 +2370,10 @@ function updateSpiderMan(controllers, ent, dt) {
   // (and the webs that held him back as he landed only hold on the ground)
   if (ent.state !== 'ground' && ent.brake.time >= 0) dropBrake(ent);
   if (ent.state !== 'ground') perch.going = perch.on = false;
+  if (ent.landing >= 0) {
+    ent.landing += dt;
+    if (ent.state !== 'ground' || ent.landing > HERO_LANDING_HOLD || Math.hypot(v.x, v.z) > JOG_SPEED) ent.landing = -1;
+  }
 
   // The follow camera stays locked on close behind him (see cameras.js) except while he swings and flies between
   // swings, when it lags like a hand-held one: on foot, drawing a slingshot, whipping round a corner, on a wall, and
@@ -2502,7 +2523,97 @@ function gaitPose(t, ent, speed, lean) {
   const twist = (0.06 * walk + 0.16 * run) * s;
   setPose(t, 'spine', lean + 0.04 * walk + 0.3 * stride * run + c * 0.5, twist, 0);
   setPose(t, 'neck', -0.22 * run - c * 0.3, -twist * 0.8, 0);
+  // Standing: not to attention but ready, feet apart with his weight a little more on one, knees soft, arms hanging
+  // clear of his sides with the elbows bent, breathing
+  const idle = (1 - move) * (1 - c);
+  if (idle > 0) {
+    const breath = Math.sin(performance.now() * 0.0022);
+    t.hipL.z += 0.13 * idle; t.hipR.z -= 0.1 * idle;
+    t.hipL.x -= 0.1 * idle; t.knL.x += 0.2 * idle; t.ftL.x -= 0.1 * idle;
+    t.hipR.x -= 0.02 * idle; t.knR.x += 0.06 * idle;
+    t.shL.z += 0.14 * idle; t.shR.z -= 0.17 * idle;
+    t.shL.x -= 0.05 * idle; t.shR.x += 0.05 * idle;
+    t.elL.x -= (0.28 + 0.03 * breath) * idle; t.elR.x -= (0.22 + 0.03 * breath) * idle;
+    t.spine.x -= (0.05 + 0.015 * breath) * idle; t.spine.z += 0.03 * idle;
+    t.neck.x += 0.04 * idle;
+  }
   ent.footLift = 0.07 * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
+}
+
+// Whole poses as { joint: [x, y, z] }, for the ones that are blended by weight (addPose). They're written for his
+// left as the leading side; `mirror` -1 swaps the sides
+const AIR_POSES = {
+  // reaching forward & up for the next web, a knee driven up
+  reach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
+    hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
+  // the float at the top of an arc: chest open, arms wide and a little back, one knee high and the other leg folded under
+  float: { spine: [-0.15, 0.12, 0], neck: [0.1, 0, 0], shL: [0.25, 0, 1.25], elL: [-0.5, 0, 0], shR: [0.35, 0, -1.05], elR: [-0.75, 0, 0],
+    hipL: [-1.5, 0, 0.25], knL: [2.0, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.45, 0, -0.2], knR: [1.6, 0, 0], ftR: [0.6, 0, 0] },
+  // an arrow: arched, both arms swept back in a V, legs trailing together, one knee a little bent
+  arrow: { spine: [-0.3, 0, 0], neck: [-0.3, 0, 0], shL: [0.9, 0, 0.45], elL: [-0.1, 0, 0], shR: [0.9, 0, -0.45], elR: [-0.1, 0, 0],
+    hipL: [0.25, 0, 0.05], knL: [0.5, 0, 0], ftL: [0.7, 0, 0], hipR: [0.1, 0, -0.05], knR: [0.95, 0, 0], ftR: [0.7, 0, 0] },
+  // falling: the classic spread
+  spread: { spine: [-0.1, 0, 0], neck: [0.35, 0, 0], shL: [-0.35, 0, 1.35], elL: [-0.5, 0, 0], shR: [-0.35, 0, -1.35], elR: [-0.5, 0, 0],
+    hipL: [-0.45, 0, 0.3], knL: [0.9, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2, 0, -0.3], knR: [1.2, 0, 0], ftR: [0.4, 0, 0] },
+  // a dive as it begins: a swan dive, arms out wide, back arched, legs together
+  swan: { spine: [-0.2, 0, 0], neck: [-0.5, 0, 0], shL: [0.15, 0, 1.4], elL: [-0.1, 0, 0], shR: [0.15, 0, -1.4], elR: [-0.1, 0, 0],
+    hipL: [0.15, 0, 0.04], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.2, 0, -0.04], knR: [0.3, 0, 0], ftR: [0.7, 0, 0] },
+  // ...and at speed: arms swept back along his sides, legs together and straight, toes pointed
+  dart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
+    hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] }
+};
+// A hard landing: down on his right knee and right fist, the left foot planted with its knee up, the left arm thrown
+// back and up, head lifting to look ahead
+const HERO_LANDING_POSE = { spine: [0.65, 0, 0], neck: [-0.95, 0, 0], shR: [-1.2, 0, 0.1], elR: [-0.05, 0, 0], shL: [1.1, 0, 0.6], elL: [-0.25, 0, 0],
+  hipL: [-2.0, 0, 0.4], knL: [2.05, 0, 0], ftL: [-0.15, 0, 0], hipR: [-0.55, 0, -0.15], knR: [1.75, 0, 0], ftR: [0.9, 0, 0] };
+const HERO_LANDING_PITCH = 0.45; // rad the whole figure tips forward in it
+// Leaning back against a drawn slingshot: sat back on his heels with his feet braced out ahead, back a little rounded
+const SLING_BRACE_POSE = { spine: [0.3, 0, 0], neck: [-0.15, 0, 0], hipL: [-1.05, 0, 0.32], knL: [1.45, 0, 0], ftL: [-0.3, 0, 0],
+  hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [-0.3, 0, 0] };
+
+function addPose(t, pose, w, mirror = 1) {
+  for (const name in pose) {
+    const a = pose[name];
+    const side = name.slice(-1);
+    const to = mirror < 0 && (side === 'L' || side === 'R') ? name.slice(0, -1) + (side === 'L' ? 'R' : 'L') : name;
+    const j = t[to];
+    j.x += a[0] * w; j.y += a[1] * w * mirror; j.z += a[2] * w * mirror;
+  }
+}
+// (moves the joints `pose` names from where they are towards it, leaving the rest)
+function leanPose(t, pose, w) {
+  for (const name in pose) {
+    const a = pose[name], j = t[name];
+    j.x = mix(j.x, a[0], w); j.y = mix(j.y, a[1], w); j.z = mix(j.z, a[2], w);
+  }
+}
+
+// Between webs: how he carries himself through this flight (ent.airStyle, picked as he takes off), by whether he's
+// on his way up, floating over the top, or falling: up, he reaches for the next web (or, an arrow, is already swept
+// back); over the top he holds the style's pose; falling, he opens out into the spread. The side that reaches is the
+// hand the next web will come from
+function airPose(t, ent) {
+  const up = Math.max(-1, Math.min(1, ent.velocity.y / 9));
+  const rise = Math.max(0, up), fall = smoothstep01(-up), top = 1 - rise - fall;
+  const side = ent.nextSide > 0 ? 1 : -1;
+  const style = ent.airStyle;
+  addPose(t, style === 'arrow' ? AIR_POSES.arrow : AIR_POSES.reach, rise, side);
+  addPose(t, AIR_POSES.spread, fall, side);
+  if (style === 'reach') {
+    addPose(t, AIR_POSES.reach, top * 0.5, side);
+    addPose(t, AIR_POSES.spread, top * 0.5, side);
+  } else {
+    addPose(t, AIR_POSES[style], top, side);
+  }
+}
+
+// The whole figure's forward tip in a crouch: his usual one, except drawing a slingshot, where he starts tipped
+// forward like that and leans further and further back against the webs as he draws them
+function slingLean(ent) {
+  return smoothstep01(ent.sling.draw / SLING_LEAN_DRAW);
+}
+function crouchPitch(ent) {
+  return ent.state === 'sling' ? mix(CROUCH_PITCH, -SLING_LEAN_BACK, slingLean(ent)) : CROUCH_PITCH;
 }
 
 // His crouch: the editors' 'Crouch' pose (js/hero-preview.js), down on the balls of his feet with his knees wide, one
@@ -2594,6 +2705,8 @@ function targetPose(ent, t) {
     brakePose(t);
   } else if (ent.state === 'ground' && ent.perch.on) {
     crouchPose(t, true);
+  } else if (ent.state === 'ground' && ent.landing >= 0) {
+    addPose(t, HERO_LANDING_POSE, 1);
   } else if (ent.state === 'ground') {
     gaitPose(t, ent, Math.hypot(v.x, v.z), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
   } else if (ent.state === 'wallrun' && wallSliding(ent)) {
@@ -2603,15 +2716,20 @@ function targetPose(ent, t) {
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
   } else if (ent.state === 'sling') {
-    // Drawing the slingshot: his crouch, looking up along the webs, both arms held out ahead towards where they
-    // stick (higher for webs high on a building, level for ones on the floor ahead); short shuffling steps backing off
+    // Drawing the slingshot. He starts in his crouch, tipped forward; as he draws the webs back he leans back against
+    // them, sat back on his heels with his feet braced out ahead. Both arms are held out towards where the webs stick
+    // all along (higher for webs high on a building, level for ones on the floor ahead); short shuffling steps
     crouchPose(t, false);
+    const lean = slingLean(ent);
+    leanPose(t, SLING_BRACE_POSE, lean);
     const s = Math.sin(ent.runPhase);
     const [a0, a1] = ent.sling.anchors;
     const ahead = Math.hypot((a0.x + a1.x) * 0.5 - ent.position.x, (a0.z + a1.z) * 0.5 - ent.position.z);
     const rise = Math.atan2((a0.y + a1.y) * 0.5 - ent.position.y - 0.85, Math.max(ahead, 0.5));
-    // (the chest is tipped CROUCH_PITCH + the spine's 0.2 forward: from there, a quarter turn more is level)
-    const reach = -Math.max(1.8, Math.min(3.1, CROUCH_PITCH + 0.2 + Math.PI / 2 + rise));
+    // (from however far forward his chest is tipped, a quarter turn more is level)
+    const reach = -Math.max(0.9, Math.min(3.1, crouchPitch(ent) + t.spine.x + Math.PI / 2 + rise));
+    // (and his head follows them)
+    t.neck.x = Math.max(-1.3, Math.min(0.3, -(crouchPitch(ent) + t.spine.x) - rise * 0.8));
     setPose(t, 'shL', reach, 0, 0.25);
     setPose(t, 'shR', reach, 0, -0.25);
     setPose(t, 'elL', -0.1, 0, 0);
@@ -2633,19 +2751,10 @@ function targetPose(ent, t) {
     setPose(t, 'ftL', 0.7, 0, 0);
     setPose(t, 'ftR', 0.7, 0, 0);
   } else if (ent.diving) {
-    // Diving head first: arms swept back along the sides, legs together and straight, toes pointed
-    setPose(t, 'spine', 0.05, 0, 0);
-    setPose(t, 'neck', -0.6, 0, 0);
-    setPose(t, 'shL', 0.35, 0, 0.3);
-    setPose(t, 'shR', 0.35, 0, -0.3);
-    setPose(t, 'elL', -0.15, 0, 0);
-    setPose(t, 'elR', -0.15, 0, 0);
-    setPose(t, 'hipL', 0.08, 0, 0.03);
-    setPose(t, 'hipR', 0.12, 0, -0.03);
-    setPose(t, 'knL', 0.1, 0, 0);
-    setPose(t, 'knR', 0.25, 0, 0);
-    setPose(t, 'ftL', 0.7, 0, 0);
-    setPose(t, 'ftR', 0.7, 0, 0);
+    // Diving head first: a swan dive as it begins, arms out wide, drawn back along his sides as he picks up speed
+    const fast = smoothstep01((-v.y - 14) / 16);
+    addPose(t, AIR_POSES.swan, 1 - fast);
+    addPose(t, AIR_POSES.dart, fast);
   } else if (ent.zip.time >= 0) {
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
     const s = ent.zip.side;
@@ -2703,8 +2812,10 @@ function targetPose(ent, t) {
       setPose(t, 'knL', 1.25, 0, 0);
       setPose(t, 'knR', 0.55 - swingLift * 0.2, 0, 0);
     }
-    setPose(t, 'spine', spine, 0, 0);
-    setPose(t, 'neck', 0.15, 0, 0);
+    // (hanging from one hand, that shoulder is hitched up and his chest turned a little towards it)
+    const hang = web.double ? 0 : s;
+    setPose(t, 'spine', spine, hang * 0.2, hang * 0.16);
+    setPose(t, 'neck', 0.15, -hang * 0.15, -hang * 0.1);
     setPose(t, `sh${up}`, -0.05, 0, s * 2.95);
     setPose(t, `el${up}`, -0.06, 0, 0);
     if (web.double) {
@@ -2731,33 +2842,12 @@ function targetPose(ent, t) {
     setPose(t, 'elR', -1.4, 0, 0);
     setPose(t, 'ftL', 0.5, 0, 0);
     setPose(t, 'ftR', 0.5, 0, 0);
-  } else if (v.y > 0) {
-    // Rising: reaching forward & up for the next web
-    setPose(t, 'spine', 0.1, 0, 0);
-    setPose(t, 'shL', -2.2, 0, 0.35);
-    setPose(t, 'shR', -0.4, 0, -0.9);
-    setPose(t, 'elL', -0.2, 0, 0);
-    setPose(t, 'elR', -0.8, 0, 0);
-    setPose(t, 'hipL', -0.9, 0, 0.1);
-    setPose(t, 'hipR', -0.15, 0, -0.1);
-    setPose(t, 'knL', 1.4, 0, 0);
-    setPose(t, 'knR', 0.6, 0, 0);
-    setPose(t, 'ftL', 0.4, 0, 0);
-    setPose(t, 'ftR', 0.5, 0, 0);
   } else {
-    // Falling: the classic spread
-    setPose(t, 'spine', -0.1, 0, 0);
-    setPose(t, 'neck', 0.35, 0, 0);
-    setPose(t, 'shL', -0.35, 0, 1.35);
-    setPose(t, 'shR', -0.35, 0, -1.35);
-    setPose(t, 'elL', -0.5, 0, 0);
-    setPose(t, 'elR', -0.5, 0, 0);
-    setPose(t, 'hipL', -0.45, 0, 0.3);
-    setPose(t, 'hipR', 0.2, 0, -0.3);
-    setPose(t, 'knL', 0.9, 0, 0);
-    setPose(t, 'knR', 1.2, 0, 0);
-    setPose(t, 'ftL', 0.4, 0, 0);
-    setPose(t, 'ftR', 0.4, 0, 0);
+    airPose(t, ent);
+  }
+  // His head leads a turn: towards where the stick points, on foot and in the air
+  if (ent.stickYaw !== null && (ent.state === 'air' || ent.state === 'swing' || (ent.state === 'ground' && ent.brake.time < 0 && !ent.perch.on))) {
+    t.neck.y += Math.max(-0.7, Math.min(0.7, angleDiff(ent.stickYaw, ent.heading) * 0.6));
   }
 }
 
@@ -2827,8 +2917,9 @@ function bodyOrientation(ent, out) {
       _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
     }
     _by.normalize();
-  } else if (crouched(ent)) {
-    _by.set(0, Math.cos(CROUCH_PITCH), 0).addScaledVector(_bz, Math.sin(CROUCH_PITCH));
+  } else if (crouched(ent) || (ent.state === 'ground' && ent.landing >= 0)) {
+    const pitch = crouched(ent) ? crouchPitch(ent) : HERO_LANDING_PITCH;
+    _by.set(0, Math.cos(pitch), 0).addScaledVector(_bz, Math.sin(pitch));
   } else {
     _by.set(0, 1, 0);
   }
@@ -2849,6 +2940,9 @@ function bodyOrientation(ent, out) {
   } else if (ent.gliding) {
     // banked into a turn, the inside wing down
     out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 1, 0), -ent.glideBank * 0.5));
+  } else if (Math.abs(ent.bank) > 1e-3 && !ent.diving) {
+    // leaning into a turn (in the air and on a web; a little, running)
+    out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 0, 1), -ent.bank));
   }
   return out;
 }
@@ -2907,13 +3001,37 @@ function plantFeet(ent, model, amount) {
 
 function updateSpiderManVisuals(ent, dt, active) {
   const { model, webs, web, zip } = ent;
+  // Taking off, he picks how he'll carry himself through this flight (not the same way twice running)
+  if (ent.state === 'air' && ent.animState !== 'air') {
+    const others = AIR_STYLES.filter((style) => style !== ent.airStyle);
+    ent.airStyle = others[Math.floor(Math.random() * others.length)];
+  }
+  ent.animState = ent.state;
+  // How hard he's turning, for the lean into it
+  const turning = dt > 0 ? angleDiff(ent.heading, ent.animHeading) / dt : 0;
+  ent.animHeading = ent.heading;
+  const flying = ent.state === 'air' || ent.state === 'swing';
+  const bankWant = flying ? Math.max(-0.45, Math.min(0.45, turning * 0.3))
+    : ent.state === 'ground' && !ent.perch.on && ent.brake.time < 0 ? Math.max(-0.2, Math.min(0.2, turning * 0.03 * Math.min(1, ent.speed / RUN_SPEED))) : 0;
+  ent.bank += (bankWant - ent.bank) * (1 - Math.exp(-dt * 5));
+
   targetPose(ent, _target);
-  const k = 1 - Math.exp(-dt * (ent.state === 'swing' ? 10 : 14));
-  for (const name of JOINTS) {
-    const cur = ent.pose[name], want = _target[name];
-    cur.x += (want.x - cur.x) * k;
-    cur.y += (want.y - cur.y) * k;
-    cur.z += (want.z - cur.z) * k;
+  // Each joint follows its target like a damped spring: quick, with a little overshoot and settle (follow-through),
+  // rather than easing in ever more slowly. Gentler on a web, where he flows from one attitude to the next
+  if (!ent.poseSpeed) {
+    ent.poseSpeed = {};
+    for (const name of JOINTS) ent.poseSpeed[name] = { x: 0, y: 0, z: 0 };
+  }
+  const stiff = ent.state === 'swing' ? 13 : 19, damp = 2 * 0.72 * stiff;
+  for (let left = Math.min(dt, 0.1); left > 1e-6; left -= 1 / 60) {
+    const h = Math.min(left, 1 / 60);
+    for (const name of JOINTS) {
+      const cur = ent.pose[name], want = _target[name], speed = ent.poseSpeed[name];
+      speed.x += ((want.x - cur.x) * stiff * stiff - speed.x * damp) * h;
+      speed.y += ((want.y - cur.y) * stiff * stiff - speed.y * damp) * h;
+      speed.z += ((want.z - cur.z) * stiff * stiff - speed.z * damp) * h;
+      cur.x += speed.x * h; cur.y += speed.y * h; cur.z += speed.z * h;
+    }
   }
 
   bodyOrientation(ent, _qWant);
