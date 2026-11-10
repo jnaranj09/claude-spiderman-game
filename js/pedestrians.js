@@ -1200,6 +1200,9 @@ const SUIT_STYLE = {
   // ... and the height below which the torso's strands stop fanning out and run straight down, following the body
   // (they bend over the 12 cm above it)
   fanEnd: 1.28,
+  // ... and how close together they are at the waist, as a share of their spacing at the fanEnd height (they close
+  // in between the two, like the red panel, for a V-shaped torso; 1 = straight down)
+  waistPinch: 0.7,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1296,11 +1299,13 @@ function suitPattern() {
   const tDrop = max(tTop.sub(q.y), 0.0);
   const tSide = clamp(tZ.div(0.06), -1.0, 1.0);
   // (for the strands the drop stops counting below the fanEnd height, easing in over the 12 cm above it: from there
-  // down they stop spreading and run straight down, only following the body's depth; the rings keep the full drop)
+  // down they stop spreading and run down following the body's depth, closing in towards the waist by waistPinch;
+  // the rings keep the full drop)
   const tBend = U.fanEnd.add(0.12);
   const tEase = clamp(min(tBend, tTop).sub(q.y), 0.0, 0.12);
   const tDropFan = max(tTop.sub(max(q.y, tBend)), 0.0).add(tEase).sub(tEase.mul(tEase).div(0.24));
-  const tAway = tZ.add(tSide.mul(tDropFan));
+  const tPinch = mix(U.waistPinch, 1.0, smoothstep(U.waistY, max(U.fanEnd, U.waistY.add(0.01)), q.y));
+  const tAway = tZ.add(tSide.mul(tDropFan)).mul(tPinch);
   const tr = length(vec2(q.x, tAway));
   const tPhi = atan(q.x, tAway);
   const tAlong0 = length(vec2(q.x, tZ.add(tSide.mul(tDrop)))).sub(max(q.y.sub(1.5), 0.0));
