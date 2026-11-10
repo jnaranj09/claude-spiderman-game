@@ -1272,11 +1272,7 @@ function suitPattern() {
   const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(length(vec2(hx, hy)));
   const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.04).mul(smoothstep(0.35, 0.9, hTheta));
   const hRings = toGrid(hTheta.sub(hSag).sub(0.44), U.headRings).mul(hr).add(step(hTheta, 0.24));
-  // (round the back the strands spread apart, so from the third ring on a new strand starts halfway between each
-  // pair, as on a real web)
-  const hSplit = toGrid(hPhi.add(float(Math.PI).div(U.headSpokes)), float(TAU).div(U.headSpokes)).mul(length(vec2(hx, hy)))
-    .add(step(hTheta.sub(hSag), U.headRings.mul(2.0).add(0.44)));
-  const headWeb = max(max(inkLine(hSpokes, line).mul(step(0.0015, length(vec2(hx, hy)))), inkLine(hSplit, line)), inkLine(hRings, line));
+  const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, length(vec2(hx, hy)))), inkLine(hRings, line));
   // torso: strands fanning out from the same centre between the eyes (seen from the front, and from behind on the
   // back), rings round it; the chest spider sits on top
   const tv = vec2(q.x, q.y.sub(1.626));
