@@ -172,7 +172,7 @@ him within a few metres (with the stick held, down to a pace he runs on from). E
 picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
 His crouch (the editors' 'Crouch' pose) is how he draws the slingshot, his arms pulled out along the webs as they
 stretch, and how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
-it, facing out and looking down, the camera looking down over it with him. The stick, a jump or another double click
+it, facing out, both hands down on the roof between his knees, looking down, the camera looking down over it with him. The stick, a jump or another double click
 stands him up.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass

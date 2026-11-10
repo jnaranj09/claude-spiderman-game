@@ -2507,10 +2507,10 @@ function gaitPose(t, ent, speed, lean) {
 
 // His crouch: the editors' 'Crouch' pose (js/hero-preview.js), down on the balls of his feet with his knees wide, one
 // hand down in front and the other arm out to his side, the whole figure tipped forward (see bodyOrientation) and
-// low (pelvisOffset). His head is back, looking up and ahead; or, with `down`, hung to look down past his knees
+// low (pelvisOffset), his head back, looking up and ahead. With `down`, perched on a roof's edge instead (below)
 function crouchPose(t, down) {
   setPose(t, 'spine', 0.2, 0, 0);
-  setPose(t, 'neck', down ? 0.15 : -1.25, 0, 0);
+  setPose(t, 'neck', -1.25, 0, 0);
   setPose(t, 'shL', -0.7, 0, 0.75);
   setPose(t, 'elL', -0.9, 0, 0);
   setPose(t, 'shR', -0.35, 0, -1.25);
@@ -2521,6 +2521,16 @@ function crouchPose(t, down) {
   setPose(t, 'hipR', -2.1, 0, -0.45);
   setPose(t, 'knR', 2.3, 0, 0);
   setPose(t, 'ftR', 0.2, 0, 0);
+  if (down) {
+    // Perched: hunched right over, both arms straight down between his knees, fingertips on the roof just ahead of
+    // his feet, head hung to look down over the edge
+    setPose(t, 'spine', 0.8, 0, 0);
+    setPose(t, 'neck', -0.45, 0, 0);
+    setPose(t, 'shL', -1.35, 0, -0.15);
+    setPose(t, 'shR', -1.35, 0, 0.15);
+    setPose(t, 'elL', -0.05, 0, 0);
+    setPose(t, 'elR', -0.05, 0, 0);
+  }
 }
 
 function crouched(ent) {
