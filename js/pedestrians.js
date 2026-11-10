@@ -1197,6 +1197,9 @@ const SUIT_STYLE = {
   line: 0.0011, chestStrands: 40, chestRings: 0.034, limbSpokes: 7, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
   // ... and how much each cross line (ring) sags between two strands (1 = the original scallops, 0 = straight)
   ringSag: 0.5,
+  // ... and the height below which the torso's strands stop fanning out and run straight down, following the body
+  // (they bend over the 12 cm above it)
+  fanEnd: 1.28,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1291,10 +1294,16 @@ function suitPattern() {
   const tZ = q.z.add(0.008);
   const tTop = float(1.5).sub(clamp(abs(q.x).sub(0.05), 0.0, 0.11).mul(0.55));
   const tDrop = max(tTop.sub(q.y), 0.0);
-  const tAway = tZ.add(clamp(tZ.div(0.06), -1.0, 1.0).mul(tDrop));
+  const tSide = clamp(tZ.div(0.06), -1.0, 1.0);
+  // (for the strands the drop stops counting below the fanEnd height, easing in over the 12 cm above it: from there
+  // down they stop spreading and run straight down, only following the body's depth; the rings keep the full drop)
+  const tBend = U.fanEnd.add(0.12);
+  const tEase = clamp(min(tBend, tTop).sub(q.y), 0.0, 0.12);
+  const tDropFan = max(tTop.sub(max(q.y, tBend)), 0.0).add(tEase).sub(tEase.mul(tEase).div(0.24));
+  const tAway = tZ.add(tSide.mul(tDropFan));
   const tr = length(vec2(q.x, tAway));
   const tPhi = atan(q.x, tAway);
-  const tAlong0 = tr.sub(max(q.y.sub(1.5), 0.0));
+  const tAlong0 = length(vec2(q.x, tZ.add(tSide.mul(tDrop)))).sub(max(q.y.sub(1.5), 0.0));
   // (the neck carries only the head's strands, so every line runs on from the mask; the rest start at the ring
   // round the base of the neck, where the web spreads out. They line up when the torso's count is a multiple of the
   // head's. Each ring sags between the strands that cross it.)
