@@ -1337,3 +1337,38 @@ test('each web is ridden its own way: the usual way about half the time, and no 
     if (styles[k] !== 'pump') assert.notEqual(styles[k], styles[k - 1]);
   }
 });
+
+test('a double click of the stick near a roof\'s edge perches him on it, looking down; the stick stands him up', () => {
+  const roof = [{ minX: -20, maxX: 20, minZ: -20, maxZ: 2, minY: 0, maxY: 30 }];
+  const controllers = world(roof);
+  controllers.cameraYaw = 0;
+  const click = () => { controllers.diveRequests = (controllers.diveRequests || 0) + 1; };
+  const ent = spiderEntity(0, 30, -3, Math.PI); // 5 m from the edge, his back to it
+  // (one click does nothing on his feet)
+  click();
+  step(controllers, ent, 1);
+  assert.equal(ent.perch.on, false);
+  assert.ok(Math.abs(ent.position.z + 3) < 1e-6);
+  click();
+  step(controllers, ent, 0.2);
+  click();
+  step(controllers, ent, 1.2);
+  assert.equal(ent.state, 'ground');
+  assert.equal(ent.perch.on, true);
+  assert.ok(Math.abs(ent.position.z - 1.65) < 0.1 && ent.position.y === 30, `on the edge (z=${ent.position.z.toFixed(2)})`);
+  assert.ok(Math.abs(angleDelta(ent.heading, 0)) < 0.05, 'facing out over it');
+  assert.ok(ent.cameraPitch < -0.3, 'the camera looks down over it with him');
+  assert.equal(ent.velocity.length(), 0);
+  step(controllers, ent, 0.3, { backward: 1 });
+  assert.equal(ent.perch.on, false);
+  assert.ok(ent.position.z < 1.6, 'and walks off');
+  controllers.keys.backward = 0;
+
+  // Nowhere near an edge, nothing happens
+  const street = world([]);
+  const walker = spiderEntity(0, 0, 0, 0);
+  street.diveRequests = 2;
+  step(street, walker, 0.5);
+  assert.equal(walker.perch.on || walker.perch.going, false);
+  assert.equal(walker.position.length(), 0);
+});

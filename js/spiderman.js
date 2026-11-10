@@ -118,6 +118,13 @@ const BRAKE_RATE = 9;            // 1/s: the share of his speed those webs take 
 const BRAKE_DECEL = 25;          // ...plus this much (m/s²): from 48 m/s he has stopped in a third of a second, within 5 m
 const BRAKE_HOLD = 0.4;          // s: the least he holds the webs (and the pose) before letting go
 const BRAKE_KEEP = 0.5;          // the share of the pace the stick asks for that the webs leave him (he runs on from there)
+const PERCH_RANGE = 6;            // m: a double click of the stick this near a roof's edge perches him on it
+const PERCH_DROP = 2;             // m: the least drop that counts as an edge
+const PERCH_DOUBLE = 0.4;         // s: two clicks within this are a double click
+const PERCH_SPEED = 9;            // m/s over to the edge
+const PERCH_INSET = 0.35;         // m: how far in from the edge his feet are (his knees and head hang out over it)
+const CROUCH_PITCH = 0.75;        // rad: how far forward the whole figure tips in his crouch (the editors' 'Crouch' pose)
+const CROUCH_PELVIS = 0.5;        // m: the pelvis above the floor in it
 const SWING_STYLES = ['tuck', 'stride', 'layout']; // the other ways he rides a web (see nextSwingStyle)
 const SWING_PUMP_SHARE = 0.5;    // the share of swings ridden the usual way: legs trailing down the arc, kicked forward up it
 const SPLATS = 8;
@@ -713,6 +720,9 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     brake: { time: -1, anchors: [new THREE.Vector3(), new THREE.Vector3()], tips: [new THREE.Vector3(), new THREE.Vector3()],
       splats: [null, null], from: 0 },
     lastSwingStyle: 'pump',
+    // Perched on a roof's edge (a double click of the stick near one): on his way over to it (going), crouched there
+    // looking down (on), where, and the time left for a second click to make a double
+    perch: { going: false, on: false, x: 0, z: 0, heading: 0, click: 0, time: 0 },
     flip: 1,
     roll: 1,
     crouch: 0,
@@ -865,6 +875,42 @@ function dropBrake(ent) {
     b.splats[i] = null;
   }
   b.time = -1;
+}
+
+// A double click of the stick near a roof's edge: looks all round him for the nearest place the floor drops away
+// (favouring the way he faces a little) and sends him over to crouch on it, facing out. False with no edge in reach
+function startPerch(controllers, ent) {
+  const p = ent.position;
+  const drops = (x, z) => groundAt(controllers, x, z, p.y) < p.y - PERCH_DROP;
+  let best = null, bestScore = Infinity;
+  for (let i = 0; i < 24; i++) {
+    const a = ent.heading + (i / 24) * Math.PI * 2;
+    const dx = Math.sin(a), dz = Math.cos(a);
+    for (let r = 0.3; r <= PERCH_RANGE + 1e-6; r += 0.3) {
+      const ground = groundAt(controllers, p.x + dx * r, p.z + dz * r, p.y);
+      if (ground > p.y + 0.4) break; // (a step up or a wall in the way)
+      if (ground >= p.y - PERCH_DROP) continue;
+      // (the edge itself, to a couple of centimetres)
+      let inside = r - 0.3, outside = r;
+      for (let k = 0; k < 4; k++) {
+        const mid = (inside + outside) * 0.5;
+        if (drops(p.x + dx * mid, p.z + dz * mid)) outside = mid; else inside = mid;
+      }
+      const score = inside * (1.25 - 0.25 * Math.cos(a - ent.heading));
+      if (score < bestScore) { bestScore = score; best = { r: inside, dx, dz, a }; }
+      break;
+    }
+  }
+  if (!best) return false;
+  const perch = ent.perch;
+  const r = Math.max(0, best.r - PERCH_INSET);
+  perch.x = p.x + best.dx * r;
+  perch.z = p.z + best.dz * r;
+  perch.heading = best.a;
+  perch.going = true;
+  perch.on = false;
+  perch.time = 0;
+  return true;
 }
 
 // How he rides the next web: the usual way half the time, otherwise one of the others (never the same twice running)
@@ -1578,12 +1624,25 @@ function updateSpiderMan(controllers, ent, dt) {
 
   // Clicking the stick (L3, a tap on the touch stick, X) starts or ends a dive in the air
   const diveClicks = controllers.diveRequests || 0;
+  const perch = ent.perch;
+  perch.click = Math.max(0, perch.click - dt);
   if (diveClicks !== ent.diveClicks) {
+    const clicks = diveClicks - ent.diveClicks;
     ent.diveClicks = diveClicks;
     // (not on the wings: a tap on the stick to steer the glide shouldn't fold them into a dive)
     if (ent.state === 'air' && zip.pull <= 0 && !ent.gliding) ent.diving = !ent.diving;
     // (a dive folds the wings)
     if (ent.diving) ent.gliding = false;
+    // On his feet, a double click near a roof's edge perches him on it (and another stands him up again)
+    if (ent.state === 'ground' && ent.brake.time < 0) {
+      if (perch.click > 0 || clicks > 1) {
+        perch.click = 0;
+        if (perch.on || perch.going) perch.on = perch.going = false;
+        else startPerch(controllers, ent);
+      } else {
+        perch.click = PERCH_DOUBLE;
+      }
+    }
   }
   // A web (or a zip) ends a dive
   if (held || tap) ent.diving = false;
@@ -1654,7 +1713,26 @@ function updateSpiderMan(controllers, ent, dt) {
     const brake = ent.brake;
     const braking = brake.time >= 0;
     let target = 0;
-    if (wantYaw !== null) {
+    if (perch.going) {
+      // Over to the roof's edge he's about to perch on (the stick waits), then round to face out from it
+      const tx = perch.x - p.x, tz = perch.z - p.z;
+      const left = Math.hypot(tx, tz);
+      if (left > 0.05) ent.heading = Math.atan2(tx, tz);
+      const pace = Math.min(PERCH_SPEED, left / dt);
+      v.set(Math.sin(ent.heading) * pace, 0, Math.cos(ent.heading) * pace);
+      if (left <= PERCH_SPEED * dt) { perch.going = false; perch.on = true; }
+      // (something in the way: he gives up on it)
+      else if ((perch.time += dt) > 1.5) perch.going = false;
+    } else if (perch.on) {
+      // Crouched on the edge, until the stick is pushed (or he jumps, or throws his webs)
+      v.set(0, 0, 0);
+      const diff = angleDiff(perch.heading, ent.heading);
+      ent.heading += Math.sign(diff) * Math.min(Math.abs(diff), GROUND_TURN_RATE * dt);
+      if (stickMag > 0.5) perch.on = false;
+    }
+    if (perch.going || perch.on) {
+      // (he moves only as set above)
+    } else if (wantYaw !== null) {
       const diff = angleDiff(wantYaw, ent.heading);
       // (held by his webs he slides on the way he landed; the stick only says how much pace to keep)
       if (!braking) ent.heading += Math.sign(diff) * Math.min(Math.abs(diff), GROUND_TURN_RATE * dt);
@@ -1662,7 +1740,9 @@ function updateSpiderMan(controllers, ent, dt) {
     }
     const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
     let along = v.x * fx + v.z * fz;
-    if (braking) {
+    if (perch.going || perch.on) {
+      // (as set above)
+    } else if (braking) {
       // The webs to the floor behind him take his speed off in a fraction of a second, down to half the pace the
       // stick asks for (a standstill, with it centred); he holds them a moment, lets go and runs on
       brake.time += dt;
@@ -2272,6 +2352,7 @@ function updateSpiderMan(controllers, ent, dt) {
   }
   // (and the webs that held him back as he landed only hold on the ground)
   if (ent.state !== 'ground' && ent.brake.time >= 0) dropBrake(ent);
+  if (ent.state !== 'ground') perch.going = perch.on = false;
 
   // The follow camera stays locked on close behind him (see cameras.js) except while he swings and flies between
   // swings, when it lags like a hand-held one: on foot, drawing a slingshot, whipping round a corner, on a wall, and
@@ -2287,6 +2368,8 @@ function updateSpiderMan(controllers, ent, dt) {
     side = Math.sin(ent.wall.angle) * 0.8;
   } else if (ent.state === 'wallrun' && Math.abs(ent.wallRun.dy) > 0.7) {
     pitch = 0.8 * Math.sign(ent.wallRun.dy);
+  } else if (perch.on) {
+    pitch = -0.45; // (perched on a roof's edge: down over it at the street, as he's looking)
   }
   const ease = 1 - Math.exp(-dt * (ent.cameraLock > 0 ? 10 : 3));
   ent.cameraPitch += (pitch - ent.cameraPitch) * ease;
@@ -2422,6 +2505,28 @@ function gaitPose(t, ent, speed, lean) {
   ent.footLift = 0.07 * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
 }
 
+// His crouch: the editors' 'Crouch' pose (js/hero-preview.js), down on the balls of his feet with his knees wide, one
+// hand down in front and the other arm out to his side, the whole figure tipped forward (see bodyOrientation) and
+// low (pelvisOffset). His head is back, looking up and ahead; or, with `down`, hung to look down past his knees
+function crouchPose(t, down) {
+  setPose(t, 'spine', 0.2, 0, 0);
+  setPose(t, 'neck', down ? 0.15 : -1.25, 0, 0);
+  setPose(t, 'shL', -0.7, 0, 0.75);
+  setPose(t, 'elL', -0.9, 0, 0);
+  setPose(t, 'shR', -0.35, 0, -1.25);
+  setPose(t, 'elR', -0.25, 0, 0);
+  setPose(t, 'hipL', -2.1, 0, 0.45);
+  setPose(t, 'knL', 2.3, 0, 0);
+  setPose(t, 'ftL', 0.2, 0, 0);
+  setPose(t, 'hipR', -2.1, 0, -0.45);
+  setPose(t, 'knR', 2.3, 0, 0);
+  setPose(t, 'ftR', 0.2, 0, 0);
+}
+
+function crouched(ent) {
+  return ent.state === 'sling' || (ent.state === 'ground' && ent.perch.on);
+}
+
 // Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front knee,
 // both arms thrown straight back to the webs, head up
 function brakePose(t) {
@@ -2477,6 +2582,8 @@ function targetPose(ent, t) {
   ent.footLift = 0;
   if (ent.state === 'ground' && ent.brake.time >= 0) {
     brakePose(t);
+  } else if (ent.state === 'ground' && ent.perch.on) {
+    crouchPose(t, true);
   } else if (ent.state === 'ground') {
     gaitPose(t, ent, Math.hypot(v.x, v.z), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
   } else if (ent.state === 'wallrun' && wallSliding(ent)) {
@@ -2486,22 +2593,17 @@ function targetPose(ent, t) {
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
   } else if (ent.state === 'sling') {
-    // Drawing the slingshot: a deep squat, both fists out in front holding the webs, leaning back against them more
-    // the further they stretch; short shuffling steps backing off
-    const pull = Math.min(1, ent.sling.draw / SLING_DRAW);
+    // Drawing the slingshot: his crouch, looking up along the webs; as he draws them back his arms are pulled out
+    // ahead along them (until then they're as the crouch has them); short shuffling steps backing off
+    crouchPose(t, false);
+    const taut = smoothstep01(ent.sling.draw / 1.5);
     const s = Math.sin(ent.runPhase);
-    setPose(t, 'spine', 0.3 - pull * 0.4, 0, 0);
-    setPose(t, 'neck', -0.2 + pull * 0.3, 0, 0);
-    setPose(t, 'shL', -1.35 - pull * 0.15, 0, 0.22);
-    setPose(t, 'shR', -1.35 - pull * 0.15, 0, -0.22);
-    setPose(t, 'elL', -0.45 + pull * 0.3, 0, 0);
-    setPose(t, 'elR', -0.45 + pull * 0.3, 0, 0);
-    setPose(t, 'hipL', -1.3 - s * 0.18, 0, 0.2);
-    setPose(t, 'hipR', -1.3 + s * 0.18, 0, -0.2);
-    setPose(t, 'knL', 1.95 + Math.max(0, s) * 0.3, 0, 0);
-    setPose(t, 'knR', 1.95 + Math.max(0, -s) * 0.3, 0, 0);
-    setPose(t, 'ftL', -0.5, 0, 0);
-    setPose(t, 'ftR', -0.5, 0, 0);
+    setPose(t, 'shL', mix(t.shL.x, -3.0, taut), 0, mix(t.shL.z, 0.25, taut));
+    setPose(t, 'shR', mix(t.shR.x, -3.0, taut), 0, mix(t.shR.z, -0.25, taut));
+    setPose(t, 'elL', mix(t.elL.x, -0.1, taut), 0, 0);
+    setPose(t, 'elR', mix(t.elR.x, -0.1, taut), 0, 0);
+    t.hipL.x -= s * 0.12;
+    t.hipR.x += s * 0.12;
   } else if (ent.gliding) {
     // Gliding: arms spread wide and a little forward, stretching the wings to his sides, legs apart and straight
     setPose(t, 'spine', -0.05, 0, 0);
@@ -2711,6 +2813,8 @@ function bodyOrientation(ent, out) {
       _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
     }
     _by.normalize();
+  } else if (crouched(ent)) {
+    _by.set(0, Math.cos(CROUCH_PITCH), 0).addScaledVector(_bz, Math.sin(CROUCH_PITCH));
   } else {
     _by.set(0, 1, 0);
   }
@@ -2742,7 +2846,7 @@ function pelvisOffset(ent, out) {
   if (ent.state === 'wall') return out.set(-w.nx * 0.12, 1.0, -w.nz * 0.12);
   // (the feet's placing moves him in or out to the wall's face from here: see plantFeet)
   if (ent.state === 'wallrun') return out.set(w.nx * 0.1, 1.0, w.nz * 0.1);
-  if (ent.state === 'sling') return out.set(0, PELVIS_HEIGHT - 0.38, 0);
+  if (crouched(ent)) return out.set(0, CROUCH_PELVIS, 0);
   return out.set(0, PELVIS_HEIGHT - ent.crouch * 0.3, 0);
 }
 
@@ -2815,7 +2919,7 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   // The skinned body, posed in world space; the hands come back for the webs
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
-  const planted = ent.state === 'ground' || ent.state === 'wallrun';
+  const planted = ent.state === 'ground' || ent.state === 'wallrun' || ent.state === 'sling';
   ent.footing = planted ? ent.footing + (1 - ent.footing) * (1 - Math.exp(-dt * 14)) : 0;
   if (planted) plantFeet(ent, model, ent.footing);
   applyRigToBones(model);

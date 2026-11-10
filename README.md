@@ -17,6 +17,7 @@ It's a static site with no build step: serve the folder over HTTP (for example `
 | Zip forward (quick tap) | tap **L** or **R** | tap Q, E or Space | tap a trigger or A |
 | Run / steer (relative to the camera: up is away from it) | left stick | W A S D / arrows | left stick |
 | Dive (in the air) | tap the stick | X | click the left stick |
+| Perch on a roof's edge (on a roof, within 6 m of it) | double tap the stick | X twice | double click the left stick |
 | Slingshot (on the ground or a roof) | **L** + **R**, pull the stick down, let go | Q + E, S, let go | LT + RT, stick down, let go |
 | Glide on / off (in the air) | **Glide** | G | B |
 | Whip round a corner / turning zip | stick hard to the side + hold / tap **L** or **R** | A/D + hold / tap Q or E | stick to the side + hold / tap a trigger |
@@ -169,6 +170,10 @@ placed on the floor (or the wall) by moving the whole posed body. On foot he set
 **Landing fast** (over 18 m/s across the ground), he sticks a web from each hand to the floor behind him and they stop
 him within a few metres (with the stick held, down to a pace he runs on from). Each swing is ridden one of four ways,
 picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
+His crouch (the editors' 'Crouch' pose) is how he draws the slingshot, his arms pulled out along the webs as they
+stretch, and how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
+it, facing out and looking down, the camera looking down over it with him. The stick, a jump or another double click
+stands him up.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.
