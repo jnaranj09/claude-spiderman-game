@@ -1177,7 +1177,7 @@ const polyline = (p, pts) => {
 // own axis (0 the front of the torso / the outside of a limb); heights & lengths in metres of the standing body.
 const SUIT_STYLE = {
   // colours
-  red: 0x8f0032, blue: 0x00236e, ink: 0x2e2e2e, lens: 0x858585,
+  red: 0x8f0032, blue: 0x00236e, ink: 0x303030, lens: 0x858585,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
   // flanks), where it narrows (waist height, chest height), the belt
   chestWrap: 0.6283, waistWrap: 0.5236, waistY: 1.04, chestY: 1.235, beltBottom: 0.98, beltTop: 1.035,
@@ -1194,12 +1194,12 @@ const SUIT_STYLE = {
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; torso: strands (counted all the way round the neck) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0011, chestStrands: 40, chestRings: 0.034, limbSpokes: 7, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
+  line: 0.001, chestStrands: 24, chestRings: 0.034, limbSpokes: 10, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
   // ... and how much each cross line (ring) sags between two strands (1 = the original scallops, 0 = straight)
   ringSag: 0.5,
   // ... and the height below which the torso's strands stop fanning out and run straight down, following the body
   // (they bend over the 12 cm above it)
-  fanEnd: 1.28,
+  fanEnd: 1.345,
   // ... and how close together they are at the waist, as a share of their spacing at the fanEnd height (they close
   // in between the two, like the red panel, for a V-shaped torso; 1 = straight down)
   waistPinch: 0.7,
