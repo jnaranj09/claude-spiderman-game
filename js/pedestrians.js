@@ -1072,14 +1072,14 @@ const AMBIENT_SHARE = 2.0;
 const LENS_OUTLINE = {
   rim: 0.007,
   points: [
-    { x: 0.0162, y: 1.6253, corner: true },
-    { x: 0.0356, y: 1.6501, corner: false },
-    { x: 0.0529, y: 1.6633, corner: false },
-    { x: 0.069, y: 1.6719, corner: true },
+    { x: 0.0147, y: 1.6289, corner: true },
+    { x: 0.0319, y: 1.6518, corner: false },
+    { x: 0.0515, y: 1.665, corner: false },
+    { x: 0.0683, y: 1.6715, corner: true },
     { x: 0.0717, y: 1.6482, corner: false },
-    { x: 0.0656, y: 1.621, corner: false },
-    { x: 0.0518, y: 1.6069, corner: false },
-    { x: 0.031, y: 1.6103, corner: false }
+    { x: 0.0679, y: 1.6256, corner: false },
+    { x: 0.0587, y: 1.6103, corner: false },
+    { x: 0.0393, y: 1.6069, corner: false }
   ]
 };
 // The outline as the shader gets it: the curve sampled into a closed polygon (uniforms, so the editor can reshape it
@@ -1175,7 +1175,7 @@ const polyline = (p, pts) => {
 // own axis (0 the front of the torso / the outside of a limb); heights & lengths in metres of the standing body.
 const SUIT_STYLE = {
   // colours
-  red: 0x8f0032, blue: 0x001ea6, ink: 0x140d10, lens: 0x949494,
+  red: 0x8f0032, blue: 0x001ea6, ink: 0x2e2e2e, lens: 0x858585,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
   // flanks), where it narrows (waist height, chest height), the belt
   chestWrap: 0.6283, waistWrap: 0.5236, waistY: 1.04, chestY: 1.235, beltBottom: 0.98, beltTop: 1.035,
