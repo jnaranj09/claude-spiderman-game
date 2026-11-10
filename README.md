@@ -38,7 +38,8 @@ From the ground a press always jumps first (a tap there is just a jump). **Tap**
 building ahead (preferring walls and rooftops; a roof only a few metres below is fine, and a street light is the fallback) (aimed well up when he's low, to help him climb; level higher up) for a smooth push forward and a hop up that keeps your direction (three in a row, then you need to land, swing or touch a wall). Webs only ever leave his wrist when they will hit something: with
 nothing in reach (over a park or a river) no web is thrown.
 
-Hitting a wall fast makes him **run along it** (or straight up it, head-on), keeping his speed. The stick steers the
+Hitting a wall fast makes him **slide along it** feet first, on his feet and one hand (or run straight up it,
+head-on), keeping his speed. The stick steers the
 run across the wall's face and keeps it going (relative to the camera, as everywhere: along the wall runs that way,
 into it runs up it, away from it runs down it, and back against the run brakes); let go of it and he slows to a
 stop and clings on. Holding a web button kicks off and swings on; running up to the top launches him over the
@@ -163,7 +164,11 @@ reference picture traced underneath), see it in 3D, then Copy code or Save for C
 arms and legs, in metres), shaped the same way in `body-editor.html`: a handle on every ring, head-on for width and
 height, from the side for front, back and forward/back placement. The suit's every setting (colours, where red meets blue, webbing, spiders) is `SUIT_STYLE`, shaped live in
 `suit-editor.html` on his posed body under the game's own lighting and grade. His 15 bones are posed by forward kinematics from joint
-angles that each move (swing, run, crawl up, crawl down, zip, flip) eases between.
+angles that each move (swing, walk, run, wall slide, crawl up, crawl down, zip, flip) eases between; his feet are then
+placed on the floor (or the wall) by moving the whole posed body. On foot he sets off at a walk and breaks into a run.
+**Landing fast** (over 18 m/s across the ground), he sticks a web from each hand to the floor behind him and they stop
+him within a few metres (with the stick held, down to a pace he runs on from). Each swing is ridden one of four ways,
+picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.

@@ -1232,3 +1232,108 @@ test('the speed he falls at (or dives at) goes on into the next swing, with no d
     assert.ok(worst < 0.8, `${dive ? 'diving' : 'falling'}: lost ${worst.toFixed(1)} m/s in a frame`);
   }
 });
+
+test('landing at speed, webs to the floor behind him stop him within a few metres; a slower landing runs on', () => {
+  const controllers = world([]);
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 1.5, 0, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, -6, 40);
+  let i = 0;
+  while (ent.state !== 'ground' && i++ < 120) spider.updateSpiderMan(controllers, ent, 1 / 60);
+  assert.equal(ent.state, 'ground');
+  assert.ok(ent.brake.time >= 0, 'the webs are out');
+  const landedAt = ent.position.z;
+  // (both stuck to the floor behind where he touched down, one each side of his line of travel)
+  for (const anchor of ent.brake.anchors) assert.ok(anchor.z < landedAt && anchor.y < 0.1);
+  assert.ok(ent.brake.anchors[0].x > 0 && ent.brake.anchors[1].x < 0);
+  step(controllers, ent, 0.35);
+  assert.ok(ent.velocity.length() < 0.5, `stopped (${ent.velocity.length().toFixed(1)} m/s)`);
+  assert.ok(ent.position.z - landedAt < 5, `within ${(ent.position.z - landedAt).toFixed(1)} m`);
+  step(controllers, ent, 0.2);
+  assert.equal(ent.brake.time, -1, 'and he lets go of them');
+
+  // With the stick held on, they take him down to a pace he can run at, and he runs on from there
+  const running = spiderEntity(0, 1.5, 0, 0);
+  running.state = 'air';
+  running.velocity.set(0, -6, 40);
+  step(controllers, running, 1, { forward: 1 });
+  assert.equal(running.brake.time, -1);
+  assert.ok(Math.abs(running.velocity.length() - 13) < 0.5, `running on at ${running.velocity.length().toFixed(1)} m/s`);
+  controllers.keys.forward = 0;
+
+  // A jump's landing needs none
+  const slow = spiderEntity(0, 1.5, 0, 0);
+  slow.state = 'air';
+  slow.velocity.set(0, -6, 13);
+  step(controllers, slow, 0.5);
+  assert.equal(slow.state, 'ground');
+  assert.equal(slow.brake.time, -1);
+});
+
+test('the webs that brake a landing hold him at the edge of a roof, and jumping lets go of them', () => {
+  const roof = [{ minX: -20, maxX: 20, minZ: -20, maxZ: 2, minY: 0, maxY: 30 }];
+  const controllers = world(roof);
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 30.5, -4, 0);
+  ent.state = 'air';
+  ent.velocity.set(0, -6, 40);
+  step(controllers, ent, 1);
+  assert.equal(ent.state, 'ground');
+  assert.ok(ent.position.y > 29.9 && ent.position.z < 2.5, `still on the roof (z=${ent.position.z.toFixed(1)}, y=${ent.position.y.toFixed(1)})`);
+
+  const jumper = spiderEntity(0, 1.5, 0, 0);
+  const street = world([]);
+  jumper.state = 'air';
+  jumper.velocity.set(0, -6, 40);
+  let i = 0;
+  while (jumper.state !== 'ground' && i++ < 120) spider.updateSpiderMan(street, jumper, 1 / 60);
+  assert.ok(jumper.brake.time >= 0);
+  street.keys.up = true;
+  spider.updateSpiderMan(street, jumper, 1 / 60);
+  assert.equal(jumper.state, 'air');
+  assert.equal(jumper.brake.time, -1);
+});
+
+test('on foot he sets off at a walk, then breaks into a run', () => {
+  const controllers = world([]);
+  controllers.cameraYaw = 0;
+  const ent = spiderEntity(0, 0, 0, 0);
+  step(controllers, ent, 0.3, { forward: 1 });
+  const early = ent.velocity.length();
+  assert.ok(early > 2.5 && early < 5, `walking pace a third of a second in (${early.toFixed(1)} m/s)`);
+  step(controllers, ent, 0.7, { forward: 1 });
+  assert.ok(Math.abs(ent.velocity.length() - 13) < 0.1, `running after a second (${ent.velocity.length().toFixed(1)} m/s)`);
+  // (and stops as fast as ever)
+  step(controllers, ent, 0.5, { forward: 0 });
+  assert.ok(ent.velocity.length() < 0.01);
+});
+
+test('each web is ridden its own way: the usual way about half the time, and no other way twice running', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(-6, 40, 0, 0);
+  const styles = [];
+  for (let n = 0; n < 60; n++) {
+    ent.position.set(-6, 40, 100);
+    ent.state = 'air';
+    ent.velocity.set(0, 0, 15);
+    ent.web.phase = 'none';
+    ent.webCooldown = ent.webRetry = 0;
+    ent.webHeld = false;
+    controllers.keys.up = true;
+    let i = 0;
+    while (ent.web.phase !== 'attached' && i++ < 120) spider.updateSpiderMan(controllers, ent, 1 / 60);
+    assert.equal(ent.web.phase, 'attached');
+    styles.push(ent.web.style);
+    // (where on the arc he is, for the pose: before the bottom as it catches)
+    assert.ok(ent.web.arc >= -1 && ent.web.arc < 0, `arc ${ent.web.arc}`);
+    controllers.keys.up = false;
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+  }
+  const usual = styles.filter((style) => style === 'pump').length;
+  assert.ok(usual > 12 && usual < 48, `${usual} of 60 the usual way`);
+  assert.ok(new Set(styles).size >= 3, `several ways (${[...new Set(styles)].join(', ')})`);
+  for (let k = 1; k < styles.length; k++) {
+    if (styles[k] !== 'pump') assert.notEqual(styles[k], styles[k - 1]);
+  }
+});

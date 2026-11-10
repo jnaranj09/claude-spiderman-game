@@ -1,6 +1,6 @@
 import * as THREE from 'three/webgpu';
 import { ISLAND_BOUNDS, streetZ } from './city-config.js';
-import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind, heroHelperPoses, heroPoseWeights, addHeroMorphs, HERO_BONE_COUNT } from './pedestrians.js';
+import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutlineMaterial, heroBind, heroHelperPoses, heroPoseWeights, addHeroMorphs, HERO_BONE_COUNT, PERSON_BONES } from './pedestrians.js';
 
 // js/spiderman.js
 // Spider-Man: the city's skinned pedestrian body in a procedurally painted suit, posed by forward kinematics, and an
@@ -16,7 +16,7 @@ import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutl
 //     pendulum, and lets go when it is released (best on the way up the far side). The next swing takes a new
 //     press. The stick (or W/A/S/D) only steers and pumps.
 // A quick tap of the button zips a web straight ahead and yanks him forward (it works over open ground too); flying
-// into a wall at speed runs along it (or up it) instead of stopping dead, and a slow touch sticks to it to crawl.
+// into a wall at speed slides along it (or runs up it) instead of stopping dead, and a slow touch sticks to it to crawl.
 
 const GRAVITY = 22;              // m/s². Stronger than real gravity: a 40 m swing takes ~3 s instead of ~6 s
 const MAX_SPEED = 48;            // m/s
@@ -110,6 +110,16 @@ const ZIP_TURN_MIN = 0.35;       // rad: a tap with the stick this far off his l
 const ZIP_TURN = 0.8;            // ...turning his flight by up to this much
 const ZIP_TURN_COST = 0.92;      // the share of his speed the turn keeps
 const PELVIS_HEIGHT = 0.96;      // the body's pelvis above the feet, standing
+const WALK_SPEED = 2.8;          // m/s: he sets off at a walk...
+const WALK_ACCEL = 5;            // m/s²: ...picking up only this fast at first...
+const JOG_SPEED = 5;             // ...until he's past this pace, and breaks into a run
+const BRAKE_MIN_SPEED = 18;      // m/s over the ground: landing faster than this, he webs the floor behind him to stop
+const BRAKE_RATE = 9;            // 1/s: the share of his speed those webs take off every second...
+const BRAKE_DECEL = 25;          // ...plus this much (m/s²): from 48 m/s he has stopped in a third of a second, within 5 m
+const BRAKE_HOLD = 0.4;          // s: the least he holds the webs (and the pose) before letting go
+const BRAKE_KEEP = 0.5;          // the share of the pace the stick asks for that the webs leave him (he runs on from there)
+const SWING_STYLES = ['tuck', 'stride', 'layout']; // the other ways he rides a web (see nextSwingStyle)
+const SWING_PUMP_SHARE = 0.5;    // the share of swings ridden the usual way: legs trailing down the arc, kicked forward up it
 const SPLATS = 8;
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -655,6 +665,10 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       side: 1,
       splat: null,
       swingTime: 0,
+      // How he rides this web ('pump': legs trailing on the way down, kicked forward from the bottom on; or one of
+      // SWING_STYLES), and where on the arc he is (-1 well before the bottom .. 0 the bottom .. 1 well up the far side)
+      style: 'pump',
+      arc: -1,
       passedBottom: false,
       caught: false,
       turned: false, // has swung back (hanging on past the top of the arc)
@@ -692,10 +706,19 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     wall: { nx: 0, nz: 0, faceX: 0, faceZ: 0, top: 0, time: 0, tx: 0, tz: 0, ux: 0, uy: 1, uz: 0, move: 0, dash: 0, dashS: 0, dashV: 1,
       used: false },
     // Running along / up a wall: direction (in the wall's plane) and speed
-    wallRun: { dx: 0, dy: 1, dz: 0, speed: 0 },
+    // (side: which way his chest turns sliding along it, +1 or -1 round the wall's normal from the way he's going)
+    wallRun: { dx: 0, dy: 1, dz: 0, speed: 0, side: 1 },
+    // Landing at speed: a web from each hand to the floor behind him holds him back (time: seconds since they stuck,
+    // -1 without them)
+    brake: { time: -1, anchors: [new THREE.Vector3(), new THREE.Vector3()], tips: [new THREE.Vector3(), new THREE.Vector3()],
+      splats: [null, null], from: 0 },
+    lastSwingStyle: 'pump',
     flip: 1,
     roll: 1,
     crouch: 0,
+    // (for the look: how far off the floor a running stride's flight has him, and how firmly his feet are placed)
+    footLift: 0,
+    footing: 0,
     runPhase: 0,
     climbPhase: 0,
     bodyQuat: new THREE.Quaternion(),
@@ -769,6 +792,7 @@ function resetSpiderMan(ent) {
   ent.zip.pull = 0;
   releaseSplat(ent);
   dropSling(ent);
+  dropBrake(ent);
   ent.gliding = ent.diving = false;
   ent.webCooldown = 0;
   ent.crouch = 0;
@@ -815,6 +839,39 @@ function dropSling(ent) {
   sling.phase = 'none';
   sling.draw = 0;
   sling.wait = 0;
+}
+
+// Landing at speed: a web from each hand sticks to the floor just behind where he touched down (either side of his
+// line of travel), and holds him back as he slides on
+function startBrake(ent, speed) {
+  const b = ent.brake;
+  const p = ent.position;
+  const v = ent.velocity;
+  const dx = v.x / speed, dz = v.z / speed;
+  b.time = 0;
+  b.from = speed;
+  ent.heading = Math.atan2(dx, dz);
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? 1 : -1; // his left, his right
+    b.anchors[i].set(p.x - dx * 0.9 + dz * side * 0.4, p.y + 0.02, p.z - dz * 0.9 - dx * side * 0.4);
+    if (ent.webs) b.splats[i] = stickSplat(ent, b.anchors[i], UP, true);
+  }
+}
+
+function dropBrake(ent) {
+  const b = ent.brake;
+  for (let i = 0; i < 2; i++) {
+    if (b.splats[i]) b.splats[i].held = false;
+    b.splats[i] = null;
+  }
+  b.time = -1;
+}
+
+// How he rides the next web: the usual way half the time, otherwise one of the others (never the same twice running)
+function nextSwingStyle(ent) {
+  if (Math.random() < SWING_PUMP_SHARE) return (ent.lastSwingStyle = 'pump');
+  const others = SWING_STYLES.filter((style) => style !== ent.lastSwingStyle);
+  return (ent.lastSwingStyle = others[Math.floor(Math.random() * others.length)]);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -876,6 +933,8 @@ function shootWeb(controllers, ent, request = 0) {
   ent.gliding = false;
   web.travelled = 0;
   web.swingTime = 0;
+  web.style = nextSwingStyle(ent);
+  web.arc = -1;
   web.passedBottom = web.rising = web.caught = web.turned = false;
   web.dirX = dir.x;
   web.dirZ = dir.z;
@@ -1017,6 +1076,8 @@ function shootWhip(controllers, ent, side, yaw) {
   ent.gliding = false;
   web.travelled = 0;
   web.swingTime = 0;
+  web.style = nextSwingStyle(ent);
+  web.arc = -1;
   web.passedBottom = web.rising = web.caught = web.turned = false;
   web.dirX = dir.x;
   web.dirZ = dir.z;
@@ -1274,6 +1335,10 @@ function startWallRun(ent, dx, dy, dz, speed) {
   const len = Math.hypot(dx, dy, dz) || 1;
   r.dx = dx / len; r.dy = dy / len; r.dz = dz / len;
   r.speed = speed;
+  // (his chest turns down the building; straight up or down it, to the side he came in from)
+  const w = ent.wall;
+  const cy = w.nz * r.dx - w.nx * r.dz; // the height of (normal x direction)
+  if (Math.abs(cy) > 0.25) r.side = cy > 0 ? -1 : 1;
   ent.state = 'wallrun';
   ent.velocity.set(r.dx * speed, r.dy * speed, r.dz * speed);
 }
@@ -1586,23 +1651,42 @@ function updateSpiderMan(controllers, ent, dt) {
   if (ent.state === 'ground') {
     // Turn to face where the stick points (quickly: a full about-face takes a third of a second), easing off the
     // pace while turning round
+    const brake = ent.brake;
+    const braking = brake.time >= 0;
     let target = 0;
     if (wantYaw !== null) {
       const diff = angleDiff(wantYaw, ent.heading);
-      ent.heading += Math.sign(diff) * Math.min(Math.abs(diff), GROUND_TURN_RATE * dt);
+      // (held by his webs he slides on the way he landed; the stick only says how much pace to keep)
+      if (!braking) ent.heading += Math.sign(diff) * Math.min(Math.abs(diff), GROUND_TURN_RATE * dt);
       target = RUN_SPEED * stickMag * (Math.abs(diff) < 1.2 ? 1 : 0.3);
     }
     const fx = Math.sin(ent.heading), fz = Math.cos(ent.heading);
     let along = v.x * fx + v.z * fz;
-    // Landing from a swing keeps its momentum for a moment, then settles into a run
-    const rate = Math.abs(along) > RUN_SPEED ? 16 : 30;
-    along += Math.max(-rate * dt, Math.min(rate * dt, target - along));
+    if (braking) {
+      // The webs to the floor behind him take his speed off in a fraction of a second, down to half the pace the
+      // stick asks for (a standstill, with it centred); he holds them a moment, lets go and runs on
+      brake.time += dt;
+      const keep = target * BRAKE_KEEP;
+      along = Math.max(keep, along - (BRAKE_RATE * along + BRAKE_DECEL) * dt);
+      if (along <= keep + 0.01 && brake.time >= BRAKE_HOLD) dropBrake(ent);
+    } else {
+      // He sets off at a walk and breaks into a run: quickly up to walking pace, gently on from there to a jog, then
+      // quickly again. A landing that needs no webs keeps its momentum for a moment, then settles into a run
+      const gentle = target > along && along >= WALK_SPEED && along < JOG_SPEED;
+      const rate = gentle ? WALK_ACCEL : Math.abs(along) > RUN_SPEED ? 16 : 30;
+      along += Math.max(-rate * dt, Math.min(rate * dt, target - along));
+    }
     v.set(fx * along, 0, fz * along);
     if (target > 0.1 || Math.abs(along) > 0.5) ent.runPhase += dt * (4 + Math.abs(along) * 0.75);
     p.x += v.x * dt;
     p.z += v.z * dt;
     const ground = groundAt(controllers, p.x, p.z, p.y);
-    if (ground < p.y - 0.4) {
+    if (ground < p.y - 0.4 && braking) {
+      // (the webs hold him at the edge of a roof, rather than letting him slide off it)
+      p.x -= v.x * dt;
+      p.z -= v.z * dt;
+      v.set(0, 0, 0);
+    } else if (ground < p.y - 0.4) {
       ent.state = 'air'; // ran off a roof or a ledge
     } else {
       p.y = ground;
@@ -1832,6 +1916,7 @@ function updateSpiderMan(controllers, ent, dt) {
       // He hangs on for as long as the button is held (it's the release that flings him on); passing the bottom
       // is still noted for the swing pose
       const aheadOfPivot = (p.x - web.pivot.x) * dir.x + (p.z - web.pivot.z) * dir.z;
+      web.arc = Math.max(-1, Math.min(1, aheadOfPivot / Math.max(4, web.length * 0.5)));
       if (aheadOfPivot > 0) web.passedBottom = true;
       if (web.passedBottom && v.y > 3) web.rising = true;
       // Hanging on past the top of the arc: once he's really moving back, that's his new way forward, and he
@@ -1867,6 +1952,8 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.state = 'ground';
         v.y = 0;
         ent.flip = ent.roll = 1;
+        const landed = Math.hypot(v.x, v.z);
+        if (landed > BRAKE_MIN_SPEED) startBrake(ent, landed);
       }
     }
   } else if (ent.state === 'whip') {
@@ -2042,6 +2129,7 @@ function updateSpiderMan(controllers, ent, dt) {
       p.y = ground;
       v.set(r.dx * r.speed, 0, r.dz * r.speed);
       ent.state = 'ground';
+      if (Math.hypot(v.x, v.z) > BRAKE_MIN_SPEED) startBrake(ent, Math.hypot(v.x, v.z));
     }
     if (ent.state === 'wallrun' || ent.state === 'wall') {
       // (out of steam too: he clings on, rather than coming away from the wall)
@@ -2182,6 +2270,8 @@ function updateSpiderMan(controllers, ent, dt) {
     zip.pull = 0;
     zip.chain = 0;
   }
+  // (and the webs that held him back as he landed only hold on the ground)
+  if (ent.state !== 'ground' && ent.brake.time >= 0) dropBrake(ent);
 
   // The follow camera stays locked on close behind him (see cameras.js) except while he swings and flies between
   // swings, when it lags like a hand-held one: on foot, drawing a slingshot, whipping round a corner, on a wall, and
@@ -2283,32 +2373,116 @@ function crawlPose(t, ent, down) {
   }
 }
 
-// Running: `amt` 0 (standing) .. 1 (sprinting), leaning into it
-function runPose(t, ent, amt, lean) {
+const TAU = Math.PI * 2;
+function wrapAngle(a) {
+  return a - Math.round(a / TAU) * TAU;
+}
+// A smooth bump: 1 at `x` = 0, falling to 0 at `half` either side
+function bump(x, half) {
+  return Math.abs(x) < half ? 0.5 + 0.5 * Math.cos(x * Math.PI / half) : 0;
+}
+
+// On foot: standing, walking (his first steps, or the stick barely pushed) and running, by his pace, `lean`ing into it.
+// The two gaits are different cycles, blended over the paces between a walk and a jog:
+// - walking, the legs swing like pendulums, a knee bending only to clear the ground, the arms swinging loosely;
+// - running, each leg in turn drives back under him (the knee giving a little as it takes his weight), the heel
+//   kicks up behind as it leaves the ground, the knee comes through high, and the shin reaches out for the next
+//   step; elbows bent square and pumping, the chest turning against the hips, and both feet off the ground between
+//   steps (ent.footLift, for the feet's placing: see plantFeet)
+function gaitPose(t, ent, speed, lean) {
+  const move = Math.min(1, speed / 1.2);
+  const run = smoothstep01((speed - WALK_SPEED - 0.4) / (JOG_SPEED + 2 - WALK_SPEED - 0.4));
+  const walk = move * (1 - run);
+  const stride = 0.8 + 0.2 * Math.min(1, speed / RUN_SPEED);
+  const c = ent.crouch;
   const s = Math.sin(ent.runPhase);
-  setPose(t, 'spine', lean + 0.32 * amt + ent.crouch * 0.5, 0, 0);
-  setPose(t, 'neck', -0.2 * amt - ent.crouch * 0.3, 0, 0);
-  setPose(t, 'hipL', -s * 1.0 * amt - ent.crouch * 1.1, 0, 0.04);
-  setPose(t, 'hipR', s * 1.0 * amt - ent.crouch * 1.1, 0, -0.04);
-  setPose(t, 'knL', (0.12 + Math.max(0, s) * 1.6) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
-  setPose(t, 'knR', (0.12 + Math.max(0, -s) * 1.6) * amt + ent.crouch * 1.9 + 0.05, 0, 0);
-  setPose(t, 'ftL', Math.max(0, s) * 0.5 * amt, 0, 0);
-  setPose(t, 'ftR', Math.max(0, -s) * 0.5 * amt, 0, 0);
-  setPose(t, 'shL', s * 0.9 * amt - ent.crouch * 0.6, 0, 0.12 + ent.crouch * 0.5);
-  setPose(t, 'shR', -s * 0.9 * amt - ent.crouch * 0.6, 0, -0.12 - ent.crouch * 0.5);
-  setPose(t, 'elL', -0.2 - 1.1 * amt, 0, 0);
-  setPose(t, 'elR', -0.2 - 1.1 * amt, 0, 0);
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? 'L' : 'R';
+    const sign = i === 0 ? 1 : -1;
+    const a = ent.runPhase + i * Math.PI;
+    const sa = Math.sin(a);
+    // (the leg is off the ground from a little before its thigh passes under him, coming forward, to a little after
+    // it's as far forward as it goes; and on it, taking his weight, over the opposite part of the cycle)
+    const lift = Math.pow(bump(wrapAngle(a - 0.45), 1.85), 0.75);
+    const load = bump(wrapAngle(a - 0.55 - Math.PI), 1.39);
+    const hip = -0.42 * sa * walk - (0.25 + 0.8 * sa) * stride * run;
+    const knee = (0.08 + 0.85 * Math.pow(Math.max(0, Math.cos(a + 0.5)), 1.5)) * walk + (0.3 + 1.75 * lift + 0.3 * load) * run;
+    const foot = 0.25 * Math.max(0, Math.cos(a + 0.9)) * walk + (0.55 * lift - 0.15 * load) * run;
+    setPose(t, `hip${side}`, hip - c * 1.1, 0, sign * 0.04);
+    setPose(t, `kn${side}`, knee + c * 1.9 + 0.05, 0, 0);
+    setPose(t, `ft${side}`, foot, 0, 0);
+    // (each arm swings against its own leg)
+    const arm = 0.4 * sa * walk + (0.75 * sa - 0.15) * run;
+    setPose(t, `sh${side}`, arm - c * 0.6, 0, sign * (0.12 + 0.08 * run + c * 0.5));
+    setPose(t, `el${side}`, -0.2 - (0.1 + 0.12 * Math.max(0, -sa)) * walk - (1.3 - 0.35 * sa) * run, 0, 0);
+  }
+  const twist = (0.06 * walk + 0.16 * run) * s;
+  setPose(t, 'spine', lean + 0.04 * walk + 0.3 * stride * run + c * 0.5, twist, 0);
+  setPose(t, 'neck', -0.22 * run - c * 0.3, -twist * 0.8, 0);
+  ent.footLift = 0.07 * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
+}
+
+// Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front knee,
+// both arms thrown straight back to the webs, head up
+function brakePose(t) {
+  setPose(t, 'spine', 0.6, 0, 0);
+  setPose(t, 'neck', -0.7, 0, 0);
+  setPose(t, 'shL', 1.05, 0, 0.3);
+  setPose(t, 'shR', 1.05, 0, -0.3);
+  setPose(t, 'elL', -0.08, 0, 0);
+  setPose(t, 'elR', -0.08, 0, 0);
+  setPose(t, 'hipL', -1.55, 0, 0.18);
+  setPose(t, 'knL', 1.75, 0, 0);
+  setPose(t, 'ftL', -0.2, 0, 0);
+  setPose(t, 'hipR', 0.35, 0, -0.12);
+  setPose(t, 'knR', 0.95, 0, 0);
+  setPose(t, 'ftR', 0.75, 0, 0);
+}
+
+// Sliding along a wall (or down it) feet first, on his feet and one hand: leaning well back from the way he's going,
+// the leading leg stretched out ahead along the wall, the other folded under him with its knee out, the trailing hand
+// on the wall behind him, the other arm out ahead for balance, looking where he's headed (see bodyOrientation for
+// the lean and the turn). `lead`: 1 his left side leads, -1 his right
+const SLIDE_LEAN = 0.95; // rad back from square to the wall (far enough for that hand to reach it)
+const SLIDE_TURN = 0.45; // rad his chest turns away from the way he's going, opening towards the hand on the wall
+function slidePose(t, lead) {
+  const a = lead > 0 ? 'L' : 'R', b = lead > 0 ? 'R' : 'L';
+  setPose(t, 'spine', 0.1, lead * 0.15, 0);
+  setPose(t, 'neck', 0.5, lead * (SLIDE_TURN + 0.1), 0);
+  setPose(t, `hip${a}`, -0.5, 0, lead * 0.25);
+  setPose(t, `kn${a}`, 0.15, 0, 0);
+  setPose(t, `ft${a}`, 0.8, 0, 0);
+  setPose(t, `hip${b}`, -1.3, 0, -lead * 0.55);
+  setPose(t, `kn${b}`, 2.2, 0, 0);
+  setPose(t, `ft${b}`, 0.1, 0, 0);
+  setPose(t, `sh${b}`, 0.6, 0, -lead * 0.35);
+  setPose(t, `el${b}`, -0.05, 0, 0);
+  setPose(t, `sh${a}`, -0.9, 0, lead * 0.9);
+  setPose(t, `el${a}`, -0.6, 0, 0);
+}
+
+// (a run straight up a wall stays a run, a sprint on all but his hands; along it or down it he slides)
+function wallSliding(ent) {
+  return ent.wallRun.dy < 0.6;
+}
+
+function mix(a, b, t) {
+  return a + (b - a) * t;
 }
 
 function targetPose(ent, t) {
   for (const name of JOINTS) setPose(t, name, 0, 0, 0);
   const v = ent.velocity;
   const web = ent.web;
-  if (ent.state === 'ground') {
-    const along = Math.hypot(v.x, v.z);
-    runPose(t, ent, Math.min(1, along / RUN_SPEED), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
+  ent.footLift = 0;
+  if (ent.state === 'ground' && ent.brake.time >= 0) {
+    brakePose(t);
+  } else if (ent.state === 'ground') {
+    gaitPose(t, ent, Math.hypot(v.x, v.z), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
+  } else if (ent.state === 'wallrun' && wallSliding(ent)) {
+    slidePose(t, -ent.wallRun.side);
   } else if (ent.state === 'wallrun') {
-    runPose(t, ent, 1, 0.15);
+    gaitPose(t, ent, RUN_SPEED, 0.5);
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
   } else if (ent.state === 'sling') {
@@ -2372,12 +2546,48 @@ function targetPose(ent, t) {
     setPose(t, 'ftL', 0.6, 0, 0);
     setPose(t, 'ftR', 0.6, 0, 0);
   } else if (web.phase !== 'none' || ent.state === 'swing') {
-    // One arm up the web, the other out for balance, legs tucked and trailing
+    // One arm up the web (both, on a double web); the rest by how he rides this one (web.style), and by where on the
+    // arc he is: `far` goes from 0 on the way down to 1 from the bottom on
     const up = web.side > 0 ? 'L' : 'R';
     const free = web.side > 0 ? 'R' : 'L';
     const s = web.side > 0 ? 1 : -1;
     const swingLift = Math.max(-1, Math.min(1, v.y / 15));
-    setPose(t, 'spine', 0.12, 0, 0);
+    const far = web.phase === 'attached' ? smoothstep01((web.arc + 0.3) / 0.6) : 0;
+    const style = web.style;
+    let freeX = -0.6, freeZ = 1.0, freeEl = -0.9, spine = 0.12;
+    if (style === 'pump') {
+      // The usual way: legs together, trailing a little behind him down the arc, then kicked forward from the bottom
+      // and held out ahead up the far side (the push that carries a swing); the free arm back, then reaching on
+      spine = mix(-0.1, 0.3, far);
+      freeX = mix(0.5, -0.9, far); freeZ = mix(0.7, 0.5, far); freeEl = mix(-0.3, -0.6, far);
+      setPose(t, 'hipL', mix(0.34, -1.05, far), 0, 0.06);
+      setPose(t, 'hipR', mix(0.22, -0.92, far), 0, -0.06);
+      setPose(t, 'knL', mix(0.65, 0.12, far), 0, 0);
+      setPose(t, 'knR', mix(0.5, 0.18, far), 0, 0);
+    } else if (style === 'stride') {
+      // A stride through the air: one knee driven up ahead, the other leg stretched out behind, the free arm out wide
+      freeX = -0.2; freeZ = 1.5; freeEl = -0.3;
+      setPose(t, `hip${free}`, -1.25 - swingLift * 0.15, 0, -s * 0.08);
+      setPose(t, `kn${free}`, 1.7, 0, 0);
+      setPose(t, `hip${up}`, 0.4 + swingLift * 0.15, 0, s * 0.08);
+      setPose(t, `kn${up}`, 0.3, 0, 0);
+    } else if (style === 'layout') {
+      // Laid out straight as a board down the arc, the free arm swept back along his side; then knees snatched up to
+      // his chest over the far side
+      spine = mix(0.0, 0.45, far);
+      freeX = mix(0.45, -1.1, far); freeZ = mix(0.25, 0.4, far); freeEl = mix(-0.1, -1.3, far);
+      setPose(t, 'hipL', mix(0.1, -1.75, far), 0, 0.05);
+      setPose(t, 'hipR', mix(0.14, -1.6, far), 0, -0.05);
+      setPose(t, 'knL', mix(0.05, 2.1, far), 0, 0);
+      setPose(t, 'knR', mix(0.12, 2.0, far), 0, 0);
+    } else {
+      // Tucked: one knee up, the other leg trailing
+      setPose(t, 'hipL', -0.75 - swingLift * 0.25, 0, 0.12);
+      setPose(t, 'hipR', -0.25 + swingLift * 0.35, 0, -0.12);
+      setPose(t, 'knL', 1.25, 0, 0);
+      setPose(t, 'knR', 0.55 - swingLift * 0.2, 0, 0);
+    }
+    setPose(t, 'spine', spine, 0, 0);
     setPose(t, 'neck', 0.15, 0, 0);
     setPose(t, `sh${up}`, -0.05, 0, s * 2.95);
     setPose(t, `el${up}`, -0.06, 0, 0);
@@ -2386,15 +2596,11 @@ function targetPose(ent, t) {
       setPose(t, `sh${free}`, -0.05, 0, -s * 2.95);
       setPose(t, `el${free}`, -0.06, 0, 0);
     } else {
-      setPose(t, `sh${free}`, -0.6, 0, -s * 1.0);
-      setPose(t, `el${free}`, -0.9, 0, 0);
+      setPose(t, `sh${free}`, freeX, 0, -s * freeZ);
+      setPose(t, `el${free}`, freeEl, 0, 0);
     }
-    setPose(t, 'hipL', -0.75 - swingLift * 0.25, 0, 0.12);
-    setPose(t, 'hipR', -0.25 + swingLift * 0.35, 0, -0.12);
-    setPose(t, 'knL', 1.25, 0, 0);
-    setPose(t, 'knR', 0.55 - swingLift * 0.2, 0, 0);
-    setPose(t, 'ftL', 0.5, 0, 0);
-    setPose(t, 'ftR', 0.5, 0, 0);
+    setPose(t, 'ftL', 0.55, 0, 0);
+    setPose(t, 'ftR', 0.55, 0, 0);
   } else if (ent.flip < 1) {
     // Tucked flip after a fast release
     setPose(t, 'spine', 0.5, 0, 0);
@@ -2464,6 +2670,14 @@ function bodyOrientation(ent, out) {
     const c = Math.cos(w.angle), s = Math.sin(w.angle);
     _bz.set(-w.nx, 0, -w.nz);
     _by.set(-w.nz * s, c, w.nx * s);
+  } else if (ent.state === 'wallrun' && wallSliding(ent)) {
+    // Sliding along the wall, feet first: leaning well back from the way he's going, his chest turned a little away
+    // from it (down the building, on a slide along it)
+    const r = ent.wallRun;
+    _axis.set(r.dx, r.dy, r.dz);
+    _by.set(w.nx, 0, w.nz).multiplyScalar(Math.cos(SLIDE_LEAN)).addScaledVector(_axis, -Math.sin(SLIDE_LEAN));
+    _bx.set(w.nx, 0, w.nz);
+    _bz.crossVectors(_bx, _axis).multiplyScalar(r.side * Math.sin(SLIDE_TURN)).addScaledVector(_axis, Math.cos(SLIDE_TURN));
   } else if (ent.state === 'wallrun') {
     const r = ent.wallRun;
     _by.set(w.nx, 0, w.nz);
@@ -2526,9 +2740,51 @@ function bodyOrientation(ent, out) {
 function pelvisOffset(ent, out) {
   const w = ent.wall;
   if (ent.state === 'wall') return out.set(-w.nx * 0.12, 1.0, -w.nz * 0.12);
-  if (ent.state === 'wallrun') return out.set(w.nx * 0.55, 1.0, w.nz * 0.55);
+  // (the feet's placing moves him in or out to the wall's face from here: see plantFeet)
+  if (ent.state === 'wallrun') return out.set(w.nx * 0.1, 1.0, w.nz * 0.1);
   if (ent.state === 'sling') return out.set(0, PELVIS_HEIGHT - 0.38, 0);
   return out.set(0, PELVIS_HEIGHT - ent.crouch * 0.3, 0);
+}
+
+// The lowest point of his feet (heels and toes) along the direction (nx, ny, nz), as the rig is posed
+const _sole = new THREE.Vector3();
+const _soleQ = new THREE.Quaternion();
+function lowestSole(rig, nx, ny, nz) {
+  const a = rig.pose;
+  let low = Infinity;
+  for (let i = 0; i < 2; i++) {
+    const bone = i === 0 ? PERSON_BONES.FOOT_L : PERSON_BONES.FOOT_R;
+    const o = bone * 8;
+    const ankle = rig.bind[bone];
+    _soleQ.set(a[o], a[o + 1], a[o + 2], a[o + 3]);
+    for (let k = 0; k < 2; k++) {
+      _sole.set(ankle.x, 0, ankle.z + (k === 0 ? -0.07 : 0.2)).multiplyScalar(a[o + 7]).applyQuaternion(_soleQ);
+      low = Math.min(low, (_sole.x + a[o + 4]) * nx + (_sole.y + a[o + 5]) * ny + (_sole.z + a[o + 6]) * nz);
+    }
+  }
+  return low;
+}
+
+// Puts his feet on what he stands on: the posed body is moved along the surface's normal until its lowest foot is on
+// the surface (the floor at his feet, plus the height of a running stride's flight; on a wall, its face). Angles alone
+// can't do it: how far the pelvis is from the floor depends on how the legs are bent at that moment. `amount` eases it
+// in after a landing
+const WALL_GAP = 0.42; // how far out from a wall's face his simulated position is held (the collision radius)
+function plantFeet(ent, model, amount) {
+  const p = ent.position;
+  let nx = 0, ny = 1, nz = 0, surface = p.y + ent.footLift;
+  if (ent.state === 'wallrun') {
+    nx = ent.wall.nx; ny = 0; nz = ent.wall.nz;
+    surface = p.x * nx + p.z * nz - WALL_GAP;
+  }
+  const shift = (surface - lowestSole(model.rig, nx, ny, nz)) * amount;
+  const a = model.rig.pose;
+  for (let b = 0; b < 15; b++) {
+    a[b * 8 + 4] += nx * shift;
+    a[b * 8 + 5] += ny * shift;
+    a[b * 8 + 6] += nz * shift;
+  }
+  for (const hand of model.hands) hand.set(hand.x + nx * shift, hand.y + ny * shift, hand.z + nz * shift);
 }
 
 function updateSpiderManVisuals(ent, dt, active) {
@@ -2559,6 +2815,9 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   // The skinned body, posed in world space; the hands come back for the webs
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
+  const planted = ent.state === 'ground' || ent.state === 'wallrun';
+  ent.footing = planted ? ent.footing + (1 - ent.footing) * (1 - Math.exp(-dt * 14)) : 0;
+  if (planted) plantFeet(ent, model, ent.footing);
   applyRigToBones(model);
 
   // The web wings open (and fold) over a quarter second
@@ -2573,8 +2832,18 @@ function updateSpiderManVisuals(ent, dt, active) {
 
   const strand = webs.strand;
   const sling = ent.sling;
+  const brake = ent.brake;
+  const twin = active && (sling.phase !== 'none' || brake.time >= 0); // a web from each hand, laid here
   let from = null, to = null, fray = 0, normal = web.normal;
-  if (active && sling.phase !== 'none') {
+  if (active && brake.time >= 0 && sling.phase === 'none') {
+    // Braking a landing: a web from each hand to the floor behind him, out in a blink, then stuck
+    const out = Math.min(1, brake.time / 0.05);
+    for (let i = 0; i < 2; i++) {
+      const hand = model.hands[i];
+      brake.tips[i].lerpVectors(hand, brake.anchors[i], out);
+      layStrand(i === 0 ? strand : webs.strand2, hand, brake.tips[i], out >= 1 ? 1 : 0, UP);
+    }
+  } else if (active && sling.phase !== 'none') {
     // The slingshot: a web from each hand to its anchor, flying out, then stuck
     const set = sling.phase === 'set';
     for (let i = 0; i < 2; i++) {
@@ -2604,12 +2873,12 @@ function updateSpiderManVisuals(ent, dt, active) {
   }
   if (to) {
     layStrand(strand, from, to, fray, normal);
-  } else if (!(active && sling.phase !== 'none')) {
+  } else if (!twin) {
     strand.position.set(0, -500, 0);
   }
   // A double web's second strand, from the other hand
-  if (active && sling.phase !== 'none') {
-    // (the slingshot's, laid above)
+  if (twin) {
+    // (the slingshot's or the brake's, laid above)
   } else if (active && web.double && web.phase !== 'none') {
     const from2 = model.hands[web.side > 0 ? 1 : 0];
     if (web.phase === 'attached') {
