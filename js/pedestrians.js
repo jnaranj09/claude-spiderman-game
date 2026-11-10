@@ -18,6 +18,7 @@ import {
   cos,
   abs,
   fract,
+  floor,
   max,
   min,
   atan,
@@ -1192,8 +1193,10 @@ const SUIT_STYLE = {
   capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.65,
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
-  // webbing: line half-width; torso: strands (as if they went all the way round the face) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0011, chestStrands: 64, chestRings: 0.047, limbSpokes: 7, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
+  // webbing: line half-width; torso: strands (counted all the way round the neck) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
+  line: 0.0011, chestStrands: 40, chestRings: 0.034, limbSpokes: 7, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
+  // ... and how much each cross line (ring) sags between two strands (1 = the original scallops, 0 = straight)
+  ringSag: 0.5,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1274,21 +1277,39 @@ function suitPattern() {
   // round F on the face, and further out lean back: over the top of the head and under the chin, then across the
   // back of the head and round the neck, never closing into a circle on the back of the head)
   const hU = length(q.sub(vec3(0.0, 1.626, 0.092))).div(length(q.sub(vec3(0.0, 1.4, -0.01)))).mul(0.248);
-  const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.004).mul(smoothstep(0.035, 0.09, hU));
+  const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(U.ringSag.mul(0.004)).mul(smoothstep(0.035, 0.09, hU));
   const hRings = toGrid(hU.sub(hSag).sub(0.044), U.headRings.mul(0.1)).add(step(hU, 0.024));
   const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, hAcross)), projectedLine(hRings, line, q));
-  // torso: strands fanning out from the same centre between the eyes (seen from the front, and from behind on the
-  // back), rings round it; the chest spider sits on top
-  const tv = vec2(q.x, q.y.sub(1.626));
-  const tr = length(tv);
-  const tPhi = atan(tv.y, tv.x);
-  const tSpokes = toGrid(tPhi, float(TAU).div(U.chestStrands)).mul(tr);
-  const tRings = toGrid(tr.add(abs(sin(tPhi.mul(U.chestStrands).mul(0.5))).mul(0.008)), U.chestRings);
+  // torso: the head's strands carried on, as on a cape laid over him with its hole at the neck. Strands: straight
+  // down the neck (angles round the neck's axis, as the head's end there), out over the trapezius & shoulders (still
+  // straight out from the neck seen from above), then down the chest and the back, fanning out. Rings: round the
+  // neck, then at equal distances along that cape (level round the neck, loops round its base on the shoulders,
+  // arcs across the chest and back).
+  // tAway: how far along the cape the point is from the neck's axis towards the front (+) or the back (-): the
+  // level distance, plus the drop below the line of the trapezius & shoulder tops (blended in from the sides, where
+  // it would otherwise jump from front to back)
+  const tZ = q.z.add(0.008);
+  const tTop = float(1.5).sub(clamp(abs(q.x).sub(0.05), 0.0, 0.11).mul(0.55));
+  const tDrop = max(tTop.sub(q.y), 0.0);
+  const tAway = tZ.add(clamp(tZ.div(0.06), -1.0, 1.0).mul(tDrop));
+  const tr = length(vec2(q.x, tAway));
+  const tPhi = atan(q.x, tAway);
+  const tAlong0 = tr.sub(max(q.y.sub(1.5), 0.0));
+  // (the neck carries only the head's strands, so every line runs on from the mask; the rest start at the ring
+  // round the base of the neck, where the web spreads out. They line up when the torso's count is a multiple of the
+  // head's. Each ring sags between the strands that cross it.)
+  const tBase = max(floor(float(0.055).div(U.chestRings).add(0.5)), 1.0).mul(U.chestRings);
+  const tSagNeck = abs(sin(tPhi.mul(U.headSpokes).mul(0.5))).mul(U.ringSag.mul(0.008));
+  const tSagBody = abs(sin(tPhi.mul(U.chestStrands).mul(0.5))).mul(U.ringSag.mul(0.008));
+  const tAlong = tAlong0.add(mix(tSagNeck, tSagBody, step(tBase.add(U.chestRings.mul(0.5)), tAlong0)));
+  const tRings = toGrid(tAlong, U.chestRings);
+  const tOnBody = step(tBase, tAlong0.add(tSagNeck));
+  const tSpokes = toGrid(tPhi, float(TAU).div(mix(U.headSpokes, U.chestStrands, tOnBody))).mul(tr);
   const torsoWeb = max(projectedLine(tSpokes, line, q), projectedLine(tRings, line, q));
   // limbs: strands along them, rings round them
   const lR = length(extra.xy);
   const lSpokes = toGrid(limbAngle, float(TAU).div(U.limbSpokes)).mul(lR);
-  const lSag = abs(sin(limbAngle.mul(U.limbSpokes).mul(0.5))).mul(0.008);
+  const lSag = abs(sin(limbAngle.mul(U.limbSpokes).mul(0.5))).mul(U.ringSag.mul(0.008));
   const armRings = toGrid(along.mul(0.6).add(lSag), U.limbRings);
   const legRings = toGrid(q.y.add(lSag), U.limbRings.mul(1.09));
   // (none on the arm's rounded top end: it sits inside the shoulder, and the first ring would paint it solid black
