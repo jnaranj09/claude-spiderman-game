@@ -2603,15 +2603,19 @@ function targetPose(ent, t) {
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
   } else if (ent.state === 'sling') {
-    // Drawing the slingshot: his crouch, looking up along the webs; as he draws them back his arms are pulled out
-    // ahead along them (until then they're as the crouch has them); short shuffling steps backing off
+    // Drawing the slingshot: his crouch, looking up along the webs, both arms held out ahead towards where they
+    // stick (higher for webs high on a building, level for ones on the floor ahead); short shuffling steps backing off
     crouchPose(t, false);
-    const taut = smoothstep01(ent.sling.draw / 1.5);
     const s = Math.sin(ent.runPhase);
-    setPose(t, 'shL', mix(t.shL.x, -3.0, taut), 0, mix(t.shL.z, 0.25, taut));
-    setPose(t, 'shR', mix(t.shR.x, -3.0, taut), 0, mix(t.shR.z, -0.25, taut));
-    setPose(t, 'elL', mix(t.elL.x, -0.1, taut), 0, 0);
-    setPose(t, 'elR', mix(t.elR.x, -0.1, taut), 0, 0);
+    const [a0, a1] = ent.sling.anchors;
+    const ahead = Math.hypot((a0.x + a1.x) * 0.5 - ent.position.x, (a0.z + a1.z) * 0.5 - ent.position.z);
+    const rise = Math.atan2((a0.y + a1.y) * 0.5 - ent.position.y - 0.85, Math.max(ahead, 0.5));
+    // (the chest is tipped CROUCH_PITCH + the spine's 0.2 forward: from there, a quarter turn more is level)
+    const reach = -Math.max(1.8, Math.min(3.1, CROUCH_PITCH + 0.2 + Math.PI / 2 + rise));
+    setPose(t, 'shL', reach, 0, 0.25);
+    setPose(t, 'shR', reach, 0, -0.25);
+    setPose(t, 'elL', -0.1, 0, 0);
+    setPose(t, 'elR', -0.1, 0, 0);
     t.hipL.x -= s * 0.12;
     t.hipR.x += s * 0.12;
   } else if (ent.gliding) {

@@ -170,8 +170,8 @@ placed on the floor (or the wall) by moving the whole posed body. On foot he set
 **Landing fast** (over 18 m/s across the ground), he sticks a web from each hand to the floor behind him and they stop
 him within a few metres (with the stick held, down to a pace he runs on from). Each swing is ridden one of four ways,
 picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
-His crouch (the editors' 'Crouch' pose) is how he draws the slingshot, his arms pulled out along the webs as they
-stretch, and how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
+His crouch (the editors' 'Crouch' pose) is how he draws the slingshot, both arms held out ahead along the webs (forward
+and down for webs stuck to the floor ahead, up for ones high on a building), and how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
 it, facing out, both hands down on the roof between his knees, looking down, the camera looking down over it with him. The stick, a jump or another double click
 stands him up.
 
