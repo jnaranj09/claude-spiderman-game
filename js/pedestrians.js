@@ -15,6 +15,7 @@ import {
   cross,
   normalize,
   sin,
+  cos,
   abs,
   fract,
   max,
@@ -1192,7 +1193,7 @@ const SUIT_STYLE = {
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; torso: strands (as if they went all the way round the face) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0011, chestStrands: 64, chestRings: 0.047, limbSpokes: 7, limbRings: 0.055, headSpokes: 16, headRings: 0.4,
+  line: 0.0011, chestStrands: 64, chestRings: 0.047, limbSpokes: 7, limbRings: 0.055, headSpokes: 20, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1257,22 +1258,25 @@ function suitPattern() {
   // real suits, the whole web has one centre, between the eyes: the strands leave it, run over the head, down the
   // back of the head & neck and fan out over the shoulders, chest and back, crossed by rings round it. No other
   // strands meet at a point.
-  // head: strands radiating from between the eyes, round an axis that leaves the head again under the back of it,
-  // in the neck (tilted 41 degrees down from front-to-back), so at the back they run down the neck instead of meeting;
-  // rings round the same axis
-  const hTilt = 0.71;
-  const hAxis = vec3(0.0, Math.sin(hTilt), Math.cos(hTilt));
-  const hUp = vec3(0.0, Math.cos(hTilt), -Math.sin(hTilt));
-  const hv = q.sub(vec3(0.0, 1.626 - 0.1 * Math.sin(hTilt), 0.087 - 0.1 * Math.cos(hTilt)));
-  const hx = hv.x;
-  const hy = dot(hv, hUp);
-  const hr = length(hv);
-  const hPhi = atan(hy, hx);
-  const hTheta = acos(clamp(dot(hv, hAxis).div(hr), -1.0, 1.0));
-  const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(length(vec2(hx, hy)));
-  const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.04).mul(smoothstep(0.35, 0.9, hTheta));
-  const hRings = toGrid(hTheta.sub(hSag).sub(0.44), U.headRings).mul(hr).add(step(hTheta, 0.24));
-  const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, length(vec2(hx, hy)))), inkLine(hRings, line));
+  // head: strands radiating evenly from between the eyes (F), crossed by rings round it.
+  // Strands: angles round a line that starts at F, runs back into the head and bends down (a quarter circle, radius
+  // 10 cm) into the neck, then straight down it. Seen from the front they are straight lines out from F, evenly
+  // spaced; round the sides and back they follow the bend down to the neck, where they end evenly spaced round it.
+  // The line never comes out through the head, so the strands meet nowhere but between the eyes.
+  const hBend = 0.1;
+  const hUp = max(q.y.sub(1.626 - hBend), 0.0);
+  const hIn = max(float(0.092).sub(q.z), 0.0);
+  const hOut = length(vec2(hUp, hIn)).sub(hBend);
+  const hAcross = length(vec2(q.x, hOut));
+  const hPhi = atan(hOut, q.x);
+  const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(hAcross);
+  // Rings: the distance from F, divided by the distance from a point at the base of the neck (so they are circles
+  // round F on the face, and further out lean back: over the top of the head and under the chin, then across the
+  // back of the head and round the neck, never closing into a circle on the back of the head)
+  const hU = length(q.sub(vec3(0.0, 1.626, 0.092))).div(length(q.sub(vec3(0.0, 1.4, -0.01)))).mul(0.248);
+  const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.004).mul(smoothstep(0.035, 0.09, hU));
+  const hRings = toGrid(hU.sub(hSag).sub(0.044), U.headRings.mul(0.1)).add(step(hU, 0.024));
+  const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, hAcross)), projectedLine(hRings, line, q));
   // torso: strands fanning out from the same centre between the eyes (seen from the front, and from behind on the
   // back), rings round it; the chest spider sits on top
   const tv = vec2(q.x, q.y.sub(1.626));
