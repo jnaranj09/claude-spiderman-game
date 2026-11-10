@@ -181,13 +181,13 @@ const GROUPS = [
   ] },
   { id: 'web', title: 'Webbing', rows: [
     ['line', 'Line width', 0.5, 4, 0.1, 'mm'],
-    ['chestSpokes', 'Chest spokes', 6, 32, 1, 'n'],
+    ['chestStrands', 'Chest & back strands', 24, 128, 4, 'n'],
     ['chestRings', 'Chest ring gap', 2, 10, 0.1, 'cm'],
     ['limbSpokes', 'Arm & leg spokes', 3, 16, 1, 'n'],
     ['limbRings', 'Arm & leg ring gap', 2, 10, 0.1, 'cm'],
     ['headSpokes', 'Head spokes', 6, 28, 1, 'n'],
     ['headRings', 'Head ring gap', 10, 45, 1, 'deg']
-  ] },
+  ], note: 'All the strands start between the eyes. Chest & back strands: how many there would be if they went all the way round the face (64: about 3 cm apart across the chest); a multiple of the head spokes keeps them lined up with the head’s.' },
   { id: 'spiders', title: 'Spiders', rows: [
     ['chestSpider', 'Chest spider size', 30, 250, 1, '%'],
     ['chestSpiderY', 'Chest spider height', 115, 148, 0.5, 'cm'],

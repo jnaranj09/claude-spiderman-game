@@ -1191,8 +1191,8 @@ const SUIT_STYLE = {
   capLength: 0.07, capWrap: 0.9599, stripeWrap: 1.1, stripeCenter: 0.6, gloveStart: 0.65,
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
-  // webbing: line half-width; chest: spokes & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0011, chestSpokes: 16, chestRings: 0.045, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
+  // webbing: line half-width; torso: strands (as if they went all the way round the face) & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
+  line: 0.0011, chestStrands: 64, chestRings: 0.047, limbSpokes: 7, limbRings: 0.055, headSpokes: 16, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1253,25 +1253,38 @@ function suitPattern() {
   const legRed = max(step(q.y, bootTop), innerStripe);
   const red0 = max(max(max(head, hand), max(foot, arm.mul(armRed))), max(leg.mul(legRed), torso.mul(torsoRed)));
 
-  // Webbing over the red: straight strands with only a slight sag between them, as drawn in the cartoon
-  // head: strands radiating from between the eyes round to the back of the head, crossed by rings; at the back they
-  // run on to meet at a point (no small ring round the back of the head: rings stop about 4 cm short of it)
-  const hv = q.sub(vec3(0.0, 1.626, -0.022));
+  // Webbing over the red: straight strands with only a slight sag between them, as drawn in the cartoon. Like the
+  // real suits, the whole web has one centre, between the eyes: the strands leave it, run over the head, down the
+  // back of the head & neck and fan out over the shoulders, chest and back, crossed by rings round it. No other
+  // strands meet at a point.
+  // head: strands radiating from between the eyes, round an axis that leaves the head again under the back of it,
+  // in the neck (tilted 41 degrees down from front-to-back), so at the back they run down the neck instead of meeting;
+  // rings round the same axis
+  const hTilt = 0.71;
+  const hAxis = vec3(0.0, Math.sin(hTilt), Math.cos(hTilt));
+  const hUp = vec3(0.0, Math.cos(hTilt), -Math.sin(hTilt));
+  const hv = q.sub(vec3(0.0, 1.626 - 0.1 * Math.sin(hTilt), 0.087 - 0.1 * Math.cos(hTilt)));
+  const hx = hv.x;
+  const hy = dot(hv, hUp);
   const hr = length(hv);
-  const hPhi = atan(hv.y, hv.x);
-  const hTheta = acos(clamp(hv.z.div(hr), -1.0, 1.0));
-  const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(length(hv.xy));
+  const hPhi = atan(hy, hx);
+  const hTheta = acos(clamp(dot(hv, hAxis).div(hr), -1.0, 1.0));
+  const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(length(vec2(hx, hy)));
   const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.04).mul(smoothstep(0.35, 0.9, hTheta));
   const hRings = toGrid(hTheta.sub(hSag).sub(0.44), U.headRings).mul(hr).add(step(hTheta, 0.24));
-  const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, length(hv.xy))), inkLine(hRings, line).mul(step(hTheta, 2.7)));
-  // torso: strands radiating from the chest spider (centred on it, so its empty middle sits under the spider) and
-  // round it on the back, rings
-  const tv = vec2(q.x, q.y.sub(U.chestSpiderY));
+  // (round the back the strands spread apart, so from the third ring on a new strand starts halfway between each
+  // pair, as on a real web)
+  const hSplit = toGrid(hPhi.add(float(Math.PI).div(U.headSpokes)), float(TAU).div(U.headSpokes)).mul(length(vec2(hx, hy)))
+    .add(step(hTheta.sub(hSag), U.headRings.mul(2.0).add(0.44)));
+  const headWeb = max(max(inkLine(hSpokes, line).mul(step(0.0015, length(vec2(hx, hy)))), inkLine(hSplit, line)), inkLine(hRings, line));
+  // torso: strands fanning out from the same centre between the eyes (seen from the front, and from behind on the
+  // back), rings round it; the chest spider sits on top
+  const tv = vec2(q.x, q.y.sub(1.626));
   const tr = length(tv);
   const tPhi = atan(tv.y, tv.x);
-  const tSpokes = toGrid(tPhi, float(TAU).div(U.chestSpokes)).mul(tr);
-  const tRings = toGrid(tr.add(abs(sin(tPhi.mul(U.chestSpokes).mul(0.5))).mul(0.008)), U.chestRings);
-  const torsoWeb = max(projectedLine(tSpokes, line, q), projectedLine(tRings, line, q)).mul(step(0.03, tr));
+  const tSpokes = toGrid(tPhi, float(TAU).div(U.chestStrands)).mul(tr);
+  const tRings = toGrid(tr.add(abs(sin(tPhi.mul(U.chestStrands).mul(0.5))).mul(0.008)), U.chestRings);
+  const torsoWeb = max(projectedLine(tSpokes, line, q), projectedLine(tRings, line, q));
   // limbs: strands along them, rings round them
   const lR = length(extra.xy);
   const lSpokes = toGrid(limbAngle, float(TAU).div(U.limbSpokes)).mul(lR);
