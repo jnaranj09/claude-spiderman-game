@@ -606,17 +606,17 @@ const HERO_BODY = {
   ],
   torso: [
     [1.579, 0.0605, 0.0484, 0.0456, -0.004],
-    [1.4922, 0.0482, 0.0539, 0.0466, -0.008],
-    [1.4616, 0.1129, 0.0633, 0.0468, -0.013],
-    [1.443, 0.1674, 0.0912, 0.0585, -0.018],
+    [1.4976, 0.0499, 0.0539, 0.0466, -0.008],
+    [1.4745, 0.1103, 0.0633, 0.0468, -0.013],
+    [1.4432, 0.1612, 0.0912, 0.0585, -0.018],
     [1.3723, 0.1835, 0.133, 0.0903, -0.02],
-    [1.3115, 0.1738, 0.1376, 0.0959, -0.018],
+    [1.3301, 0.1811, 0.1409, 0.0959, -0.018],
     [1.2852, 0.1744, 0.1404, 0.0993, -0.014],
     [1.2504, 0.1696, 0.1317, 0.1028, -0.01],
     [1.2161, 0.1569, 0.124, 0.0911, -0.006],
     [1.1835, 0.1454, 0.1168, 0.0872, -0.002],
-    [1.1323, 0.1322, 0.0998, 0.0817, 0.0],
-    [1.0659, 0.1284, 0.097, 0.0845, 0.0],
+    [1.1025, 0.1407, 0.0998, 0.0817, 0.0],
+    [1.0587, 0.1435, 0.097, 0.0845, 0.0],
     [0.9663, 0.1463, 0.097, 0.1221, 0.0],
     [0.8926, 0.1549, 0.095, 0.1342, 0.0],
     [0.8359, 0.1609, 0.078, 0.1105, 0.0],
@@ -624,14 +624,14 @@ const HERO_BODY = {
   ],
   arm: [
     [-0.022, 0.004, 0.004],
-    [-0.008, 0.0376, 0.0411],
-    [0.012, 0.0463, 0.0621],
-    [0.05, 0.0597, 0.0703],
-    [0.1, 0.0578, 0.055],
-    [0.16, 0.0511, 0.0576],
-    [0.23, 0.0441, 0.0503],
-    [0.272, 0.0412, 0.0473],
-    [0.3, 0.0371, 0.0462],
+    [-0.008, 0.0404, 0.0411],
+    [0.012, 0.0587, 0.0621],
+    [0.05, 0.0666, 0.0703],
+    [0.1, 0.0693, 0.055],
+    [0.16, 0.0655, 0.0576],
+    [0.23, 0.0511, 0.0503],
+    [0.272, 0.0459, 0.0473],
+    [0.3, 0.0427, 0.0462],
     [0.328, 0.0404, 0.0473],
     [0.39, 0.0452, 0.0521],
     [0.465, 0.0371, 0.0392],
@@ -641,10 +641,10 @@ const HERO_BODY = {
   ],
   leg: [
     [0.9235, 0.063, 0.0594, 0.0594, 0.0],
-    [0.8734, 0.0773, 0.0792, 0.0825, 0.0],
-    [0.7886, 0.0834, 0.0968, 0.1001, 0.003],
-    [0.7202, 0.0811, 0.0954, 0.0954, 0.006],
-    [0.657, 0.0767, 0.0825, 0.0803, 0.008],
+    [0.8641, 0.0724, 0.0792, 0.0825, 0.0],
+    [0.7893, 0.0763, 0.0968, 0.1001, 0.003],
+    [0.7207, 0.0762, 0.0954, 0.0954, 0.006],
+    [0.6613, 0.0744, 0.0825, 0.0803, 0.008],
     [0.5822, 0.065, 0.0697, 0.0666, 0.008],
     [0.5348, 0.0546, 0.0608, 0.0568, 0.008],
     [0.4841, 0.0519, 0.0598, 0.0549, 0.008],
@@ -671,7 +671,7 @@ const HERO_BODY = {
   armDepth: 0.0,
   // corrective shapes per arm pose ('out': raised level, 'up': overhead): ring changes on top of the rest shape,
   // { part: { ringIndex: [changes] } }, faded in for each arm as it reaches that pose (the body editor's Shape for)
-  poses: {},
+  poses: {"out": {"torso": {"2": [0.017, 0.0029, 0, 0, 0], "3": [0.0146, 0.0222, 0, 0, 0]}}, "up": {"torso": {"2": [0.0102, -0.0072, 0, 0, 0], "3": [0.0084, 0.0228, 0, 0, 0]}}},
   // feet: [length, width, height] as shares of the city's shoe
   foot: [0.7, 0.76, 0.98]
 };
@@ -1175,7 +1175,7 @@ const polyline = (p, pts) => {
 // own axis (0 the front of the torso / the outside of a limb); heights & lengths in metres of the standing body.
 const SUIT_STYLE = {
   // colours
-  red: 0x8f0032, blue: 0x001ea6, ink: 0x2e2e2e, lens: 0x858585,
+  red: 0x8f0032, blue: 0x00236e, ink: 0x2e2e2e, lens: 0x858585,
   // torso: the red front panel, how far round from the front it reaches at the chest and at the waist (then blue
   // flanks), where it narrows (waist height, chest height), the belt
   chestWrap: 0.6283, waistWrap: 0.5236, waistY: 1.04, chestY: 1.235, beltBottom: 0.98, beltTop: 1.035,
@@ -1192,7 +1192,7 @@ const SUIT_STYLE = {
   // legs: the boots' top (and how far it dips to a point at the shin), the red stripe down the inside of each leg
   bootTop: 0.335, bootPoint: 0, innerStripe: 0,
   // webbing: line half-width; chest: spokes & ring spacing; limbs: spokes, ring spacing; head: spokes, ring spacing
-  line: 0.0014, chestSpokes: 12, chestRings: 0.058, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
+  line: 0.0011, chestSpokes: 16, chestRings: 0.045, limbSpokes: 7, limbRings: 0.055, headSpokes: 14, headRings: 0.4,
   // spiders: chest (black) size & height, back (red) size & height
   chestSpider: 0.75, chestSpiderY: 1.345, backSpider: 1.05, backSpiderY: 1.31,
   // the black ink line round his silhouette: its thickness (1 = the original, about two pixels on screen)
@@ -1254,7 +1254,8 @@ function suitPattern() {
   const red0 = max(max(max(head, hand), max(foot, arm.mul(armRed))), max(leg.mul(legRed), torso.mul(torsoRed)));
 
   // Webbing over the red: straight strands with only a slight sag between them, as drawn in the cartoon
-  // head: strands radiating from between the eyes round to the back of the head, crossed by rings
+  // head: strands radiating from between the eyes round to the back of the head, crossed by rings; at the back they
+  // run on to meet at a point (no small ring round the back of the head: rings stop about 4 cm short of it)
   const hv = q.sub(vec3(0.0, 1.626, -0.022));
   const hr = length(hv);
   const hPhi = atan(hv.y, hv.x);
@@ -1262,9 +1263,10 @@ function suitPattern() {
   const hSpokes = toGrid(hPhi, float(TAU).div(U.headSpokes)).mul(length(hv.xy));
   const hSag = abs(sin(hPhi.mul(U.headSpokes).mul(0.5))).mul(0.04).mul(smoothstep(0.35, 0.9, hTheta));
   const hRings = toGrid(hTheta.sub(hSag).sub(0.44), U.headRings).mul(hr).add(step(hTheta, 0.24));
-  const headWeb = max(inkLine(hSpokes, line).mul(step(mix(0.0015, 0.03, step(hv.z, 0.0)), length(hv.xy))), inkLine(hRings, line));
-  // torso: strands radiating from the chest spider (front) and round it on the back, rings
-  const tv = vec2(q.x, q.y.sub(U.chestSpiderY.sub(0.03)));
+  const headWeb = max(inkLine(hSpokes, line).mul(step(0.0015, length(hv.xy))), inkLine(hRings, line).mul(step(hTheta, 2.7)));
+  // torso: strands radiating from the chest spider (centred on it, so its empty middle sits under the spider) and
+  // round it on the back, rings
+  const tv = vec2(q.x, q.y.sub(U.chestSpiderY));
   const tr = length(tv);
   const tPhi = atan(tv.y, tv.x);
   const tSpokes = toGrid(tPhi, float(TAU).div(U.chestSpokes)).mul(tr);
