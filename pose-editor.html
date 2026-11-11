@@ -278,10 +278,16 @@ const TILT_ROWS = {
   slideLean: ['slideLean', 'Slide lean back', 20, 75, 1, 'deg'], slideTurn: ['slideTurn', 'Chest turned away', 0, 70, 1, 'deg']
 };
 const FEEL_ROWS = [
-  ['stiffness', 'Snap', 6, 40, 0.5, 'x'], ['swingStiffness', 'Snap on a web', 4, 30, 0.5, 'x'], ['damping', 'Settle (low: bouncy)', 0.3, 1, 0.01, 'x2'],
+  ['stiffness', 'Snap', 6, 40, 0.5, 'x'], ['swingStiffness', 'Snap on a web: arms, chest, head', 3, 30, 0.5, 'x'], ['swingLegStiffness', 'Snap on a web: legs', 3, 40, 0.5, 'x'], ['damping', 'Settle (low: bouncy)', 0.3, 1, 0.01, 'x2'],
   ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2']
 ];
+// When along the arc a two-pose swing changes from one pose to the other (arc: -1 .. 1; shown as shares of it)
+const SWING_ROWS = [
+  ['kickSpan', 'Legs: the kick takes', 2, 100, 1, 'arc'], ['kickAt', 'Legs: kick before (−) / after the bottom', -50, 50, 1, 'arc'],
+  ['flowSpan', 'Arms, chest, head: change over', 2, 100, 1, 'arc'], ['flowAt', 'Arms, chest, head: centred before (−) / after the bottom', -50, 50, 1, 'arc']
+];
 const UNIT = {
+  arc: { to: (v) => v * 50, from: (v) => v / 50, fmt: (v) => `${Math.round(v)}% of arc` },
   deg: { to: (v) => v * DEG, from: (v) => v / DEG, fmt: (v) => `${Math.round(v)}°` },
   '%': { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${Math.round(v)}%` },
   x: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(1) },
@@ -336,6 +342,8 @@ function buildControls() {
     });
   }
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));
+  if (move.id === 'pump' || move.id === 'layout') box.append(section('Timing along the arc', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, r)), true,
+    'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it; both of the two-pose swings share these.'));
   if (move.tilt) box.append(section('Whole figure', move.tilt.map((k) => tableRow(HERO_MOVES.tilt, TILT_ROWS[k]))));
   box.append(section('Feel of the motion', FEEL_ROWS.map((r) => tableRow(HERO_MOVES.feel, r)), false,
     'Applies to every move. Snap: how fast his joints get to a pose. Settle: below 1 they overshoot a little and settle, lower is bouncier. Both only show when the pose changes suddenly: on a swing or between webs press Play a whole swing; on a held pose, Replay into pose. Lean into turns and Head leads turns show with Turning on.'));
@@ -528,7 +536,7 @@ const r4 = (v) => Math.round(v * 10000) / 10000;
 function rounded(moves) {
   const out = clone(moves);
   for (const name in out.poses) for (const joint in out.poses[name]) out.poses[name][joint] = out.poses[name][joint].map(r4);
-  for (const g of ['gait', 'tilt', 'feel']) for (const k in out[g]) out[g][k] = r4(out[g][k]);
+  for (const g of ['gait', 'tilt', 'swing', 'feel']) for (const k in out[g]) out[g][k] = r4(out[g][k]);
   return out;
 }
 let db = null;
@@ -569,6 +577,7 @@ function wireKeep() {
     if (poseName) HERO_MOVES.poses[poseName] = clone(HERO_MOVES_DEFAULT.poses[poseName]);
     if (move.group === 'gait') Object.assign(HERO_MOVES.gait, HERO_MOVES_DEFAULT.gait);
     for (const k of move.tilt || []) HERO_MOVES.tilt[k] = HERO_MOVES_DEFAULT.tilt[k];
+    if (move.id === 'pump' || move.id === 'layout') Object.assign(HERO_MOVES.swing, HERO_MOVES_DEFAULT.swing);
     buildControls(); changed();
   });
   $('resetAllBtn').addEventListener('click', () => { setHeroMoves(clone(HERO_MOVES_DEFAULT)); buildControls(); changed(); });

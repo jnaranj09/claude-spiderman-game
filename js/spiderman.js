@@ -2650,9 +2650,15 @@ const HERO_MOVES = {
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
   // far his chest turns away from the way he slides
   tilt: { crouch: 0.1396, perch: 0.7156, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
-  // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler) and how much they overshoot and
-  // settle (damping 1: none), how hard he leans into turns in the air, and how far his head leads a turn
-  feel: { stiffness: 10, swingStiffness: 5.5, damping: 0.72, bank: 0.3, headLook: 0.6 }
+  // When, along a swing's arc (-1 well before the bottom, 0 the bottom, 1 well up the far side), he goes from the
+  // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
+  // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
+  // his arms, chest and head change gradually over most of it (flowAt, flowSpan)
+  swing: { kickAt: 0, kickSpan: 0.35, flowAt: 0, flowSpan: 1.8 },
+  // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
+  // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
+  // hard he leans into turns in the air, and how far his head leads a turn
+  feel: { stiffness: 10, swingStiffness: 5.5, swingLegStiffness: 14, damping: 0.72, bank: 0.3, headLook: 0.6 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
@@ -2667,7 +2673,7 @@ function setHeroMoves(saved) {
       if (JOINTS.includes(joint) && Array.isArray(a) && a.length === 3 && a.every(Number.isFinite)) pose[joint] = [a[0], a[1], a[2]];
     }
   }
-  for (const group of ['gait', 'tilt', 'feel']) {
+  for (const group of ['gait', 'tilt', 'swing', 'feel']) {
     for (const key in saved[group] || {}) {
       if (key in HERO_MOVES[group] && Number.isFinite(saved[group][key])) HERO_MOVES[group][key] = saved[group][key];
     }
@@ -2684,6 +2690,20 @@ function addPose(t, pose, w, mirror = 1) {
     const j = t[to];
     j.x += a[0] * w; j.y += a[1] * w * mirror; j.z += a[2] * w * mirror;
   }
+}
+// (the same, with one weight for his legs and another for the rest of him)
+function addPoseParts(t, pose, legs, rest, mirror = 1) {
+  for (const name in pose) {
+    const a = pose[name];
+    const w = isLegJoint(name) ? legs : rest;
+    const side = name.slice(-1);
+    const to = mirror < 0 && (side === 'L' || side === 'R') ? name.slice(0, -1) + (side === 'L' ? 'R' : 'L') : name;
+    const j = t[to];
+    j.x += a[0] * w; j.y += a[1] * w * mirror; j.z += a[2] * w * mirror;
+  }
+}
+function isLegJoint(name) {
+  return name.startsWith('hip') || name.startsWith('kn') || name.startsWith('ft');
 }
 // (moves the joints `pose` names from where they are towards it, leaving the rest)
 function leanPose(t, pose, w) {
@@ -2785,20 +2805,24 @@ function targetPose(ent, t) {
   } else if (ent.zip.time >= 0) {
     addPose(t, P.zip, 1, ent.zip.side > 0 ? 1 : -1);
   } else if (web.phase !== 'none' || ent.state === 'swing') {
-    // One arm up the web; the rest by how he rides this one (web.style), and by where on the arc he is: `far` goes
-    // from 0 on the way down to 1 from the bottom on. The poses are mirrored for the hand the web is in
+    // One arm up the web; the rest by how he rides this one (web.style), and by where on the arc he is. The poses
+    // are mirrored for the hand the web is in
     const up = web.side > 0 ? 'L' : 'R';
     const free = web.side > 0 ? 'R' : 'L';
     const s = web.side > 0 ? 1 : -1;
     const swingLift = Math.max(-1, Math.min(1, v.y / 15));
-    const far = web.phase === 'attached' ? smoothstep01((web.arc + 0.3) / 0.6) : 0;
+    // (how far from the going-down pose to the going-up one: his legs kick through near the bottom, the rest of him
+    // changes gradually along the arc)
+    const W = HERO_MOVES.swing;
+    const along = (at, span) => (web.phase === 'attached' ? smoothstep01((web.arc - at) / Math.max(span, 0.02) + 0.5) : 0);
+    const kick = along(W.kickAt, W.kickSpan), flow = along(W.flowAt, W.flowSpan);
     const style = web.style;
     if (style === 'pump') {
-      addPose(t, P.swingPumpDown, 1 - far, s);
-      addPose(t, P.swingPumpUp, far, s);
+      addPoseParts(t, P.swingPumpDown, 1 - kick, 1 - flow, s);
+      addPoseParts(t, P.swingPumpUp, kick, flow, s);
     } else if (style === 'layout') {
-      addPose(t, P.swingLayoutDown, 1 - far, s);
-      addPose(t, P.swingLayoutUp, far, s);
+      addPoseParts(t, P.swingLayoutDown, 1 - kick, 1 - flow, s);
+      addPoseParts(t, P.swingLayoutUp, kick, flow, s);
     } else if (style === 'stride') {
       addPose(t, P.swingStride, 1, s);
       // (the stride opens a little as he rises)
@@ -3006,11 +3030,13 @@ function updateSpiderManVisuals(ent, dt, active) {
     for (const name of JOINTS) ent.poseSpeed[name] = { x: 0, y: 0, z: 0 };
   }
   const F = HERO_MOVES.feel;
-  const stiff = ent.state === 'swing' ? F.swingStiffness : F.stiffness, damp = 2 * F.damping * stiff;
+  const swinging = ent.state === 'swing';
   for (let left = Math.min(dt, 0.1); left > 1e-6; left -= 1 / 60) {
     const h = Math.min(left, 1 / 60);
     for (const name of JOINTS) {
       const cur = ent.pose[name], want = _target[name], speed = ent.poseSpeed[name];
+      const stiff = !swinging ? F.stiffness : isLegJoint(name) ? F.swingLegStiffness : F.swingStiffness;
+      const damp = 2 * F.damping * stiff;
       speed.x += ((want.x - cur.x) * stiff * stiff - speed.x * damp) * h;
       speed.y += ((want.y - cur.y) * stiff * stiff - speed.y * damp) * h;
       speed.z += ((want.z - cur.z) * stiff * stiff - speed.z * damp) * h;
