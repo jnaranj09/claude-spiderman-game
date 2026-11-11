@@ -2525,7 +2525,7 @@ function gaitPose(t, ent, speed, lean) {
     setPose(t, `ft${side}`, foot, 0, 0);
     // (each arm swings against its own leg)
     const arm = G.walkArms * sa * walk + (G.runArms * sa - 0.15) * run;
-    setPose(t, `sh${side}`, arm - c * 0.6, 0, sign * (0.12 + 0.08 * run + c * 0.5));
+    setPose(t, `sh${side}`, arm - c * 0.6, 0, sign * (0.12 + G.runArmsOut * run + c * 0.5));
     setPose(t, `el${side}`, -0.2 - (0.1 + 0.12 * Math.max(0, -sa)) * walk - (G.runElbow - 0.35 * sa) * run, 0, 0);
   }
   const twist = (0.06 * walk + G.runTwist * run) * s;
@@ -2545,9 +2545,9 @@ function gaitPose(t, ent, speed, lean) {
     t.spine.x -= (0.05 + 0.015 * breath) * idle; t.spine.z += 0.03 * idle;
     t.neck.x += 0.04 * idle;
   }
-  // How much he bobs up and down running (see plantFeet): none of it glides him level, all of it follows his feet
+  // How much he bobs up and down walking and running (see plantFeet): none of it glides him level, all of it follows his feet
   // exactly, with a little flight between steps on top
-  ent.footBob = mix(1, G.runBounce, run);
+  ent.footBob = 1 - move + G.walkBounce * walk + G.runBounce * run;
   ent.footLift = 0.08 * G.runBounce * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
 }
 
@@ -2632,11 +2632,11 @@ const HERO_MOVES = {
       hipL: [0.05, 0, 0.3], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.05, 0, -0.3], knR: [0.1, 0, 0], ftR: [0.7, 0, 0] }
   },
   // His walk and run (see gaitPose): how far the legs swing, how high the knee bends coming through, how far the arms
-  // swing and how bent they are, the lean, the chest's twist against the hips, and how much he bobs up and down
-  // running (a share: 0 glides level, 1 follows his feet's every rise and fall)
+  // swing, how far out from his sides he carries them running and how bent they are, the lean, the chest's twist
+  // against the hips, and how much he bobs up and down walking and running (a share: 0 glides level, 1 follows his feet's every rise and fall)
   gait: {
-    walkStride: 0.42, walkKnee: 0.85, walkArms: 0.4,
-    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.35
+    walkStride: 0.42, walkKnee: 0.85, walkArms: 0.4, walkBounce: 0.5,
+    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runArmsOut: 0.16, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.35
   },
   // How far the whole figure tips (rad): forward in his crouch and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
