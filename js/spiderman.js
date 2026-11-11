@@ -2620,32 +2620,31 @@ const HERO_MOVES = {
     // ...then kicked forward from the bottom and held out ahead up the far side, the free arm reaching on
     swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.4712, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.4363, -0.2793, -0.4189], elR: [-2.1642, 0, 0],
       hipL: [-1.6057, 0, 0.192], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.6232, 0, 0.1047], knR: [0.6283, 0, 0], ftR: [0.55, 0, 0] },
-    // The other ways he rides a web are pairs too, each in the spirit of the usual one: going down, his chest open
-    // and his head up to watch the street come at him, the free arm back; going up, curled in to the web side with
-    // his chin down, the legs having snapped through at the bottom.
-    // Tucked: a cannonball down the arc, both knees drawn up to his chest, the free arm hugged in...
-    swingTuckDown: { spine: [0.3, -0.3, 0.1], neck: [-0.62, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.45, 0, -0.35], elR: [-1.9, 0, 0],
-      hipL: [-1.8, 0, 0.14], knL: [2.25, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.55, 0, -0.14], knR: [2.3, 0, 0], ftR: [0.55, 0, 0] },
-    // ...opening up the far side into the spider's own crouch in mid-air: knees wide apart, feet under him, the
-    // free hand out low with the fingers spread
-    swingTuckUp: { spine: [0.38, 0.4538, 0.16], neck: [0.42, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.15, 0, -1.05], elR: [-0.55, 0, 0],
-      hipL: [-1.85, 0.45, 0.85], knL: [2.4, 0, 0], ftL: [-0.1, 0, 0], hipR: [-1.65, -0.45, -0.9], knR: [2.45, 0, 0], ftR: [-0.1, 0, 0] },
-    // A stride through the air, the poster pose: going down, the far knee driven up to his chest and the web-side
-    // leg one long line with the web arm, the free arm cocked back...
-    swingStrideDown: { spine: [0.05, -0.38, 0.0698], neck: [-0.5585, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.6, 0, -0.6], elR: [-1.5, 0, 0],
-      hipL: [0.5, 0.2, 0.06], knL: [0.3, 0, 0], ftL: [0.75, 0, 0], hipR: [-1.7, 0, -0.1], knR: [2.0, 0, 0], ftR: [0.55, 0, 0] },
-    // ...and the legs scissor at the bottom: the web-side knee comes through and up, the other leg stretches out
-    // behind, and the free arm punches forward to where the next web will go
-    swingStrideUp: { spine: [0.3, 0.4538, 0.16], neck: [0.4, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [-1.9, 0, -0.3], elR: [-0.5, 0, 0],
-      hipL: [-1.65, 0, 0.14], knL: [1.9, 0, 0], ftL: [0.55, 0, 0], hipR: [0.55, 0, -0.08], knR: [0.45, 0, 0], ftR: [0.75, 0, 0] },
-    // Laid out: down the arc a long bow, back arched, legs together and straight out behind him, toes pointed, the
-    // free arm swept back along his side...
-    swingLayoutDown: { spine: [-0.3, -0.3, 0.0698], neck: [-0.62, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.95, 0, -0.35], elR: [-0.12, 0, 0],
-      hipL: [0.55, 0, 0.05], knL: [0.1, 0, 0], ftL: [0.8, 0, 0], hipR: [0.42, 0, -0.05], knR: [0.28, 0, 0], ftR: [0.8, 0, 0] },
-    // ...then the bow bends the other way: legs still together and straight, swung through ahead of him, his back
-    // rounded, the free arm reaching up and ahead for the next web
-    swingLayoutUp: { spine: [0.32, 0.4538, 0.16], neck: [0.45, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [-2.2, 0, -0.35], elR: [-0.25, 0, 0],
-      hipL: [-1.1, 0, 0.05], knL: [0.08, 0, 0], ftL: [0.8, 0, 0], hipR: [-0.92, 0, -0.05], knR: [0.22, 0, 0], ftR: [0.8, 0, 0] },
+    // The other ways he rides a web are pairs too, each posed from pictures of him swinging. In all of them the web
+    // arm starts on the stick point (see aimWebArms) and only then goes where the pose has it.
+    // Crouched on the web: down the arc his knees come up and apart under him, the web arm still up the web (its
+    // angles written as raised through the front, so that it comes down in front of him, not out through his side)...
+    swingTuckDown: { spine: [0.15, -0.3, 0.07], neck: [-0.5, 0.3316, -0.0873], shL: [-2.95, 0, 0.2], elL: [-0.06, 0, 0], shR: [0.35, -0.3, -0.9], elR: [-0.4, 0, 0],
+      hipL: [-1.2, 0.2, 0.4], knL: [1.8, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.0, -0.2, -0.4], knR: [1.5, 0, 0], ftR: [0.6, 0, 0] },
+    // ...then he draws the web down in front of him, his fist at his hips, and sits in a spider's crouch beside its
+    // line: knees high and wide, the free arm flung out to the side and back with the hand open, looking down
+    swingTuckUp: { spine: [0.12, 0.25, -0.3], neck: [0.35, 0.35, 0.15], shL: [-0.35, -0.2, 0.2], elL: [-0.75, 0, 0], shR: [0, -0.5, -1.65], elR: [-0.25, 0, 0],
+      hipL: [-1.7, 0.3, 0.6], knL: [2.3, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.5, -0.3, -0.55], knR: [1.75, 0, 0], ftR: [0.5, 0, 0] },
+    // A stride: down the arc mid-step, the web-side knee forward and the other leg trailing, the free arm hanging
+    // back...
+    swingStrideDown: { spine: [-0.1, -0.35, 0.07], neck: [-0.45, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.45, 0, -0.4], elR: [-0.3, 0, 0],
+      hipL: [-0.7, 0, 0.08], knL: [1.1, 0, 0], ftL: [0.5, 0, 0], hipR: [0.55, 0, -0.08], knR: [0.7, 0, 0], ftR: [0.8, 0, 0] },
+    // ...then the far leg kicks through high ahead of him, the web-side one under it, his back arched and his chest
+    // turned to the web, the free arm still trailing down behind
+    swingStrideUp: { spine: [-0.2, 0.35, 0.12], neck: [0.2, -0.35, 0.05], shL: [-0.2, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.45], elR: [-0.25, 0, 0],
+      hipL: [-0.3, 0, 0.12], knL: [1.1, 0, 0], ftL: [0.5, 0, 0], hipR: [-1.8, 0, -0.25], knR: [0.55, 0, 0], ftR: [-0.2, 0, 0] },
+    // Both hands on the web (the second comes up to it once he's hanging): down the arc a long arched line, chest
+    // out, legs trailing, one straight and one bent at the knee...
+    swingLayoutDown: { spine: [-0.25, -0.15, 0.03], neck: [0, 0.2, 0], shL: [-0.1, 0, 3.3], elL: [-0.3, 0, 0], shR: [-0.434, 0.15, -3.45], elR: [-0.928, 0, 0],
+      hipL: [0.35, 0, 0.05], knL: [0.25, 0, 0], ftL: [0.8, 0, 0], hipR: [0.2, 0, -0.08], knR: [1.2, 0, 0], ftR: [0.8, 0, 0] },
+    // ...then one knee comes up high and out to the side, the other leg hanging straight under him, looking down
+    swingLayoutUp: { spine: [0.15, 0.25, 0.1], neck: [0.35, -0.2, 0], shL: [-0.15, 0, 3.322], elL: [-0.9, 0, 0], shR: [-0.219, 0.141, -3.5], elR: [-1.206, 0, 0],
+      hipL: [-1.35, 0.5, 0.95], knL: [1.9, 0, 0], ftL: [-0.2, 0, 0], hipR: [-0.15, 0, -0.05], knR: [0.1, 0, 0], ftR: [0.3, 0, 0] },
     // Between webs. Reaching forward & up for the next one, a knee driven up
     airReach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
       hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
