@@ -194,7 +194,7 @@ const onWall = (ent, dx, dy, side) => {
 const onWeb = (style) => (ent, u, side) => {
   ent.position.set(0, 1.2, 0); ent.state = 'swing';
   const w = ent.web, a = -u * 0.7, len = 26;
-  w.phase = 'attached'; w.style = style; w.arc = u; w.side = side; w.double = false; w.swingTime = 2;
+  w.phase = 'attached'; w.style = style; w.arc = u; w.side = side; w.double = false; w.swingTime = 2; w.shotTime = 9; w.distance = len;
   w.anchor.set(side * 1.5, 2.2 + Math.cos(a) * len, Math.sin(a) * len);
   w.aim.copy(w.anchor); w.pivot.copy(w.anchor); w.normal.set(0, -1, 0);
   ent.velocity.set(0, u * 10, 22);
@@ -445,18 +445,19 @@ function resetEnt() {
 function wholeSwing(dt) {
   seqT = (seqT + dt) % 3.1;
   const web = move.web || 'pump', air = move.air || 'reach';
+  // (he fires 0.1 s before the web catches, as in the game: he points, and the strand leaves his wrist a beat later,
+  // which may be after it has caught)
+  const fired = 0.5;
   if (seqT < 0.6) {
     inAir(air)(ent, 2 + seqT * 14, side);
-    // (the last beat before the web catches: he points, then it flies out)
-    const aim = HERO_MOVES.feel.webAim, shot = seqT - (0.6 - aim - 0.07);
-    if (shot >= 0) {
+    if (seqT >= fired) {
       const w = ent.web;
       onWeb(web)(ent, -1, side);
       inAir(air)(ent, 2 + seqT * 14, side);
-      w.phase = 'shooting'; w.shotTime = shot; w.distance = 26; w.travelled = 26 * Math.max(0, (shot - aim) / 0.07);
+      w.phase = 'shooting'; w.travelled = 26 * (seqT - fired) / 0.1;
     }
-  }
-  else if (seqT < 2.2) { onWeb(web)(ent, -Math.cos((seqT - 0.6) / 1.6 * Math.PI), side); ent.web.swingTime = seqT - 0.6; }
+  } else if (seqT < 2.2) { onWeb(web)(ent, -Math.cos((seqT - 0.6) / 1.6 * Math.PI), side); ent.web.swingTime = seqT - 0.6; }
+  if (seqT >= fired && seqT < 2.2) ent.web.shotTime = seqT - fired;
   else inAir(air)(ent, -9 + (seqT - 2.2) * 12, -side);
 }
 function pose(dt) {

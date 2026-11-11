@@ -190,8 +190,9 @@ tucked float over the top of the arc, or swept back like an arrow), opening into
 as a swan dive and draws in to a dart at speed; hanging from one hand hitches that shoulder up; he leans into turns
 and his head turns first towards where the stick points; a drop of 5 m or more with little pace lands on a knee and a
 fist; and standing, he's at ease rather than to attention. He points before he shoots: his web arm is turned onto
-the stick point in a beat (`feel.webAim`, 0.12 s) before the web leaves his wrist, and held on it while his body turns
-to the web's line; a long web makes the beat up in flight, so it sticks no later than before.
+the stick point in a beat (`feel.webAim`) before the strand is seen to leave his wrist, and held on it while his body
+turns to the web's line. The beat is only in what's drawn: the swing itself starts when it always did, so a longer
+beat costs no responsiveness (the web starts springy, so he isn't hauled round by a strand that isn't there yet).
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.

@@ -25,8 +25,8 @@ const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the groun
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
-const WEB_FLIGHT_MIN = 0.05;     // s: the least the web takes to fly out once it has left his wrist (see HERO_MOVES.feel.webAim)
-const WEB_AIM_HOLD = 0.3;        // s into a swing that his arm is still held on the stick point, while his body turns to the web's line
+const WEB_FLIGHT_MIN = 0.05;     // s: the least the strand is seen to take flying out, once it has left his wrist (see webShown)
+const WEB_AIM_HOLD = 0.3;        // s after the strand lands that his arm is still held on the stick point, while his body turns to the web's line
 const ZIP_AIM_TIME = 0.06;       // s: the same for a zip, which pulls at once: the arm points, then the strand shows
 const ARC_WEB = 60;              // m: the web length a swing prefers high up...
 const ARC_WEB_SHORT = 30;        // ...and low down
@@ -677,7 +677,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       length: 0,
       targetLength: 0,
       travelled: 0,
-      shotTime: 0, // seconds since he fired: he points first, then the web leaves
+      shotTime: 0, // seconds since he fired (see webShown)
       distance: 0,
       side: 1,
       splat: null,
@@ -1638,22 +1638,20 @@ function updateSpiderMan(controllers, ent, dt) {
   if (ent.roll < 1) ent.roll = Math.min(1, ent.roll + dt / 0.55);
 
   // --- Web lifecycle -----------------------------------------------------------------------------------------
-  if (web.phase === 'shooting') {
-    // He points first, then shoots: the web leaves his wrist a beat after he fires, his arm by then on the stick point
-    // (see aimWebArms), and makes the beat up in flight where it can, so a long web sticks no later than it used to
+  if (web.phase !== 'none') {
+    // (how long since he fired, for the look of it: he's seen to point first, and the strand to leave his wrist a
+    // beat later, see webShown; the swing itself keeps its own timing. The sound goes with the strand)
     const aim = HERO_MOVES.feel.webAim;
-    const reach = web.double ? Math.max(web.distance, web.distance2) : web.distance;
-    const flight = Math.max(reach / WEB_SPEED, aim + WEB_FLIGHT_MIN);
     const before = web.shotTime;
     web.shotTime += dt;
-    web.travelled = reach * Math.max(0, (web.shotTime - aim) / (flight - aim));
+    if (before <= aim && web.shotTime > aim && typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
+  }
+  if (web.phase === 'shooting') {
+    web.travelled += WEB_SPEED * dt;
     if (!held) web.phase = 'none';
-    else {
-      if (before <= aim && web.shotTime > aim && typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
-      if (web.shotTime >= flight) {
-        if (web.whip) attachWhip(ent);
-        else attachWeb(controllers, ent);
-      }
+    else if (web.travelled >= (web.double ? Math.max(web.distance, web.distance2) : web.distance)) {
+      if (web.whip) attachWhip(ent);
+      else attachWeb(controllers, ent);
     }
   }
   if (web.phase === 'attached' && !held) {
@@ -2615,21 +2613,21 @@ const HERO_MOVES = {
       hipL: [-0.5, 0, 0.25], knL: [0.15, 0, 0], ftL: [0.8, 0, 0], hipR: [-1.3, 0, -0.55], knR: [2.2, 0, 0], ftR: [0.1, 0, 0] },
     // On a web, the usual way: legs together, trailing a little behind him down the arc (and that shoulder hitched
     // up, his chest turned a little towards it, as in all of these)...
-    swingPumpDown: { spine: [0.0349, -0.4014, 0.0698], neck: [-0.5585, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5585, 0, -0.7156], elR: [-0.5061, 0, 0],
-      hipL: [0.4014, 0.5061, 0.06], knL: [0.9076, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
+    swingPumpDown: { spine: [0.0349, -0.4712, 0.0698], neck: [-0.5585, 0.3316, 0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5585, 0, -0.7156], elR: [-0.4887, 0, 0],
+      hipL: [0.4014, 0.5061, 0.06], knL: [0.9076, 0, 0], ftL: [0.55, 0, 0], hipR: [0.1047, -0.384, -0.06], knR: [0.6981, 0, 0], ftR: [0.55, 0, 0] },
     // ...then kicked forward from the bottom and held out ahead up the far side, the free arm reaching on
-    swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.4712, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.4363, -0.2793, -0.4189], elR: [-2.1642, 0, 0],
+    swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.4712, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.7156, -0.2793, -0.5236], elR: [-1.2392, 0, 0],
       hipL: [-1.6057, 0, 0.192], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.6232, 0, 0.1047], knR: [0.6283, 0, 0], ftR: [0.55, 0, 0] },
     // The other ways he rides a web are pairs too, each posed from pictures of him swinging. In all of them the web
     // arm starts on the stick point (see aimWebArms) and only then goes where the pose has it.
     // Crouched on the web: down the arc his knees come up and apart under him, the web arm still up the web (its
     // angles written as raised through the front, so that it comes down in front of him, not out through his side)...
-    swingTuckDown: { spine: [0.15, -0.3, 0.07], neck: [-0.5, 0.3316, -0.0873], shL: [-2.95, 0, 0.2], elL: [-0.06, 0, 0], shR: [0.35, -0.3, -0.9], elR: [-0.4, 0, 0],
-      hipL: [-1.2, 0.2, 0.4], knL: [1.8, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.0, -0.2, -0.4], knR: [1.5, 0, 0], ftR: [0.6, 0, 0] },
+    swingTuckDown: { spine: [0.15, -0.3, 0.07], neck: [-0.8727, 0.3316, -0.0873], shL: [-2.95, 0, 0.2], elL: [-0.06, 0, 0], shR: [0.35, -0.3, -0.9], elR: [-0.4, 0, 0],
+      hipL: [-1.9024, 0.2, 0.4], knL: [1.8, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.1047, -0.2, -0.4], knR: [0.6283, 0, 0], ftR: [0.6, 0, 0] },
     // ...then he draws the web down in front of him, his fist at his hips, and sits in a spider's crouch beside its
     // line: knees high and wide, the free arm flung out to the side and back with the hand open, looking down
-    swingTuckUp: { spine: [0.12, 0.25, -0.3], neck: [0.35, 0.35, 0.15], shL: [-0.35, -0.2, 0.2], elL: [-0.75, 0, 0], shR: [0, -0.5, -1.65], elR: [-0.25, 0, 0],
-      hipL: [-1.7, 0.3, 0.6], knL: [2.3, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.5, -0.3, -0.55], knR: [1.75, 0, 0], ftR: [0.5, 0, 0] },
+    swingTuckUp: { spine: [0.2443, 0.25, -0.3], neck: [0.6807, -0.3142, 0.15], shL: [-0.3316, -1.5708, 0.4014], elL: [-0.7156, 0, 0], shR: [0, -0.5, -1.65], elR: [-0.25, 0, 0],
+      hipL: [-2.1991, 0.3, 0.6], knL: [2.3, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.5, -0.3, -0.2269], knR: [0.0524, 0, 0], ftR: [0.5, 0, 0] },
     // A stride: down the arc mid-step, the web-side knee forward and the other leg trailing, the free arm hanging
     // back...
     swingStrideDown: { spine: [-0.1, -0.35, 0.07], neck: [-0.45, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.45, 0, -0.4], elR: [-0.3, 0, 0],
@@ -2688,12 +2686,12 @@ const HERO_MOVES = {
   // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
   // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
   // his arms, chest and head change gradually over most of it (flowAt, flowSpan)
-  swing: { kickAt: 0, kickSpan: 0.35, flowAt: 0, flowSpan: 1.8 },
+  swing: { kickAt: 0, kickSpan: 1.26, flowAt: 0.2, flowSpan: 1.64 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
   // point before a swing web leaves his wrist (seconds)
-  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.12 }
+  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.3 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
@@ -3060,12 +3058,19 @@ const _qArmPose = new THREE.Quaternion();
 const _qArmAim = new THREE.Quaternion();
 const _armDir = new THREE.Vector3();
 const _armRest = new THREE.Vector3();
+// How much of the strand to a web's anchor `distance` away is out: none while he's still pointing, then it flies
+// out, then 1. (Only what's seen: the web itself may have caught already. It starts springy, so in that moment he
+// isn't yet being hauled round by a web that isn't drawn)
+function webShown(web, distance) {
+  return Math.max(0, Math.min(1, (web.shotTime - HERO_MOVES.feel.webAim) / Math.max(WEB_FLIGHT_MIN, distance / WEB_SPEED)));
+}
 function aimWebArms(ent, dt, pelvis) {
   const A = ent.armAim, web = ent.web, zip = ent.zip;
   let want = 0, rate = 12;
-  if (web.phase === 'shooting' || (web.phase === 'attached' && web.swingTime < WEB_AIM_HOLD)) {
-    // (on it a little before the web leaves)
-    want = web.phase === 'shooting' ? smoothstep01(web.shotTime / Math.max(0.02, HERO_MOVES.feel.webAim * 0.85)) : 1;
+  const landed = HERO_MOVES.feel.webAim + Math.max(WEB_FLIGHT_MIN, web.distance / WEB_SPEED);
+  if (web.phase !== 'none' && web.shotTime < landed + WEB_AIM_HOLD) {
+    // (on it a little before the strand leaves)
+    want = smoothstep01(web.shotTime / Math.max(0.02, HERO_MOVES.feel.webAim * 0.85));
     if (A.side !== web.side || A.double !== web.double) A.weight = Math.min(A.weight, want);
     A.side = web.side; A.double = web.double;
     A.at[0].copy(web.anchor);
@@ -3208,17 +3213,17 @@ function updateSpiderManVisuals(ent, dt, active) {
     }
   } else if (active && web.phase !== 'none') {
     from = model.hands[web.side > 0 ? 0 : 1];
-    if (web.phase === 'attached') {
+    const t = webShown(web, web.distance);
+    if (t >= 1) {
       web.tip.copy(web.anchor);
       fray = 1;
     } else {
       // Flying out: the tip races to the anchor along a slight arc
-      const t = Math.min(1, web.travelled / Math.max(1, web.distance));
       web.tip.lerpVectors(from, web.anchor, t);
       web.tip.y += Math.sin(t * Math.PI) * 1.2;
     }
     // (nothing to see while he's still pointing)
-    to = web.phase === 'attached' || web.travelled > 0 ? web.tip : null;
+    to = t > 0 ? web.tip : null;
   } else if (active && zip.time >= ZIP_AIM_TIME && zip.time < 0.33) {
     from = model.hands[zip.side > 0 ? 0 : 1];
     zip.tip.lerpVectors(from, zip.anchor, Math.min(1, (zip.time - ZIP_AIM_TIME) / 0.07));
@@ -3234,23 +3239,21 @@ function updateSpiderManVisuals(ent, dt, active) {
   // A double web's second strand, from the other hand
   if (twin) {
     // (the slingshot's or the brake's, laid above)
-  } else if (active && web.double && (web.phase === 'attached' || web.travelled > 0)) {
+  } else if (active && web.double && web.phase !== 'none' && webShown(web, web.distance2) > 0) {
     const from2 = model.hands[web.side > 0 ? 1 : 0];
-    if (web.phase === 'attached') {
-      web.tip2.copy(web.anchor2);
-    } else {
-      const t = Math.min(1, web.travelled / Math.max(1, web.distance2));
-      web.tip2.lerpVectors(from2, web.anchor2, t);
-      web.tip2.y += Math.sin(t * Math.PI) * 1.2;
-    }
-    layStrand(webs.strand2, from2, web.tip2, web.phase === 'attached' ? 1 : 0, web.normal2);
+    const t = webShown(web, web.distance2);
+    web.tip2.lerpVectors(from2, web.anchor2, t);
+    if (t < 1) web.tip2.y += Math.sin(t * Math.PI) * 1.2;
+    layStrand(webs.strand2, from2, web.tip2, t >= 1 ? 1 : 0, web.normal2);
   } else {
     webs.strand2.position.set(0, -500, 0);
   }
 
   for (const splat of webs.splats) {
     if (!splat.held && splat.life > 0) splat.life = Math.max(0, splat.life - dt / 4);
-    splat.mesh.material.opacity = Math.min(1, splat.life * 1.5) * 0.92;
+    // (the splat of a web whose strand is still on its way isn't there yet)
+    const coming = web.phase !== 'none' && ((splat === web.splat && webShown(web, web.distance) < 1) || (splat === web.splat2 && webShown(web, web.distance2) < 1));
+    splat.mesh.material.opacity = coming ? 0 : Math.min(1, splat.life * 1.5) * 0.92;
     if (splat.life <= 0) splat.mesh.position.y = -500;
   }
   webs.group.updateMatrixWorld(true);
