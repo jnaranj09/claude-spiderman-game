@@ -2570,15 +2570,15 @@ const HERO_MOVES = {
     // and head are as he holds them for webs stuck level with his shoulders, here and in slingBrace: the game raises
     // or lowers them to where the webs really are)
     crouch: { spine: [-0.0524, -0.0873, 0], neck: [-0.087, 0, 0], shL: [-1.658, 0, 0.25], elL: [-0.1, 0, 0], shR: [-1.658, 0, -0.25], elR: [-0.1, 0, 0],
-      hipL: [-0.7156, 0.5061, 0.2618], knL: [0.2967, 0, 0], ftL: [0.2967, 0, 0], hipR: [-0.8029, -0.1396, -0.3316], knR: [0.5934, 0, 0], ftR: [0.0175, 0, 0] },
+      hipL: [-0.5411, 0.5061, 0.2618], knL: [0.2967, 0, 0], ftL: [0.0524, 0, 0], hipR: [-0.4538, -0.0698, -0.1745], knR: [0.5061, 0, 0], ftR: [-0.192, 0, 0] },
     // Perched on a roof's edge: hunched right over, both arms straight down between his knees, fingertips on the
     // roof just ahead of his feet, head lifted to look down over the edge
-    perch: { spine: [0.3491, 0.0175, 0.0175], neck: [-0.6283, -0.4014, -0.2269], shL: [-0.3316, -0.3142, 0.5236], elL: [-1.501, 0, 0], shR: [-1.0996, 0, 0.15], elR: [-0.1396, 0, 0],
+    perch: { spine: [0.3491, 0.0175, 0.0175], neck: [-0.6283, -0.4014, -0.2269], shL: [-0.3316, -0.4887, 0.5411], elL: [-1.501, 0, 0], shR: [-1.0996, 0, 0.15], elR: [-0.1396, 0, 0],
       hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [-0.7854, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [-0.7854, 0, 0] },
     // Leaning back against a drawn slingshot: sat back with his feet braced out ahead, back a little rounded
-    slingBrace: { spine: [0.3, 0, 0], neck: [0.45, 0, 0], shL: [-1.12, 0, 0.25], elL: [-0.1, 0, 0], shR: [-1.12, 0, -0.25], elR: [-0.1, 0, 0],
+    slingBrace: { spine: [0.1222, 0, 0], neck: [0.7854, 0.3665, 0], shL: [0.2967, -0.1571, 1.2566], elL: [-1.5533, 0, 0], shR: [0.1047, -0.6632, -1.6755], elR: [-1.9024, 0, 0],
       hipL: [-0.9076, 0, 0.32], knL: [1.45, 0, 0], ftL: [0.2967, 0, 0],
-      hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [0.2967, 0, 0] },
+      hipR: [-0.925, 0, -0.32], knR: [1.45, 0, 0], ftR: [0.2967, 0, 0] },
     // Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front
     // knee, both arms thrown straight back to the webs, head up
     brake: { spine: [0.6, 0, 0], neck: [-0.7, 0, 0], shL: [1.05, 0, 0.3], elL: [-0.08, 0, 0], shR: [1.05, 0, -0.3], elR: [-0.08, 0, 0],
@@ -2649,7 +2649,7 @@ const HERO_MOVES = {
   // How far the whole figure tips (rad): forward as he sets up a slingshot, perched, and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
   // far his chest turns away from the way he slides
-  tilt: { crouch: 0.1396, perch: 0.1396, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
+  tilt: { crouch: 0.1396, perch: 0.7156, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler) and how much they overshoot and
   // settle (damping 1: none), how hard he leans into turns in the air, and how far his head leads a turn
   feel: { stiffness: 19, swingStiffness: 13, damping: 0.72, bank: 0.3, headLook: 0.6 }
