@@ -267,7 +267,7 @@ const GAIT_ROWS = [
   ['walkStride', 'Walk: stride', 10, 45, 1, 'deg'], ['walkKnee', 'Walk: knee lift', 10, 90, 1, 'deg'], ['walkArms', 'Walk: arm swing', 0, 50, 1, 'deg'],
   ['runStride', 'Run: stride', 20, 70, 1, 'deg'], ['runReach', 'Run: reach forward', 0, 35, 1, 'deg'], ['runKnee', 'Run: knee lift & heel kick', 40, 125, 1, 'deg'],
   ['runArms', 'Run: arm swing', 10, 70, 1, 'deg'], ['runElbow', 'Run: elbow bend', 30, 120, 1, 'deg'], ['runLean', 'Run: lean', 0, 40, 1, 'deg'],
-  ['runTwist', 'Run: chest twist', 0, 25, 1, 'deg'], ['runBounce', 'Run: bounce', 0, 20, 0.5, 'cm']
+  ['runTwist', 'Run: chest twist', 0, 25, 1, 'deg'], ['runBounce', 'Run: bounce', 0, 100, 1, '%']
 ];
 const TILT_ROWS = {
   crouch: ['crouch', 'Tipped forward', 0, 80, 1, 'deg'], slingBack: ['slingBack', 'Lean back when drawn', 0, 60, 1, 'deg'], heroLanding: ['heroLanding', 'Tipped forward', 0, 70, 1, 'deg'],
@@ -279,7 +279,7 @@ const FEEL_ROWS = [
 ];
 const UNIT = {
   deg: { to: (v) => v * DEG, from: (v) => v / DEG, fmt: (v) => `${Math.round(v)}°` },
-  cm: { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${v.toFixed(1)} cm` },
+  '%': { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${Math.round(v)}%` },
   x: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(1) },
   x2: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(2) }
 };

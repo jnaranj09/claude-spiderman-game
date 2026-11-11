@@ -741,6 +741,11 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // (for the look: how far off the floor a running stride's flight has him, and how firmly his feet are placed)
     footLift: 0,
     footing: 0,
+    // (and how far the whole figure tips into a walk or a run, how much of his feet's rise and fall his body follows,
+    // and the level it otherwise glides at)
+    gaitPitch: 0,
+    footBob: 1,
+    plantLevel: 0,
     runPhase: 0,
     climbPhase: 0,
     bodyQuat: new THREE.Quaternion(),
@@ -2499,6 +2504,10 @@ function gaitPose(t, ent, speed, lean) {
   const stride = 0.8 + 0.2 * Math.min(1, speed / RUN_SPEED);
   const c = ent.crouch;
   const s = Math.sin(ent.runPhase);
+  // He leans from the ground up, as a runner does: most of the lean tips the whole figure about his hips (see
+  // bodyOrientation), with the legs swung back under him by as much, and only a little of it bends his back
+  const tip = lean + 0.04 * walk + G.runLean * stride * run;
+  const pitch = ent.gaitPitch = tip * 0.75;
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 'L' : 'R';
     const sign = i === 0 ? 1 : -1;
@@ -2511,7 +2520,7 @@ function gaitPose(t, ent, speed, lean) {
     const hip = -G.walkStride * sa * walk - (G.runReach + G.runStride * sa) * stride * run;
     const knee = (0.08 + G.walkKnee * Math.pow(Math.max(0, Math.cos(a + 0.5)), 1.5)) * walk + (0.3 + G.runKnee * lift + 0.3 * load) * run;
     const foot = 0.25 * Math.max(0, Math.cos(a + 0.9)) * walk + (0.55 * lift - 0.15 * load) * run;
-    setPose(t, `hip${side}`, hip - c * 1.1, 0, sign * 0.04);
+    setPose(t, `hip${side}`, hip - c * 1.1 - pitch, 0, sign * 0.04);
     setPose(t, `kn${side}`, knee + c * 1.9 + 0.05, 0, 0);
     setPose(t, `ft${side}`, foot, 0, 0);
     // (each arm swings against its own leg)
@@ -2520,8 +2529,8 @@ function gaitPose(t, ent, speed, lean) {
     setPose(t, `el${side}`, -0.2 - (0.1 + 0.12 * Math.max(0, -sa)) * walk - (G.runElbow - 0.35 * sa) * run, 0, 0);
   }
   const twist = (0.06 * walk + G.runTwist * run) * s;
-  setPose(t, 'spine', lean + 0.04 * walk + G.runLean * stride * run + c * 0.5, twist, 0);
-  setPose(t, 'neck', -0.22 * run - c * 0.3, -twist * 0.8, 0);
+  setPose(t, 'spine', tip - pitch + c * 0.5, twist, 0);
+  setPose(t, 'neck', -0.22 * run - c * 0.3 - pitch * 0.5, -twist * 0.8, 0);
   // Standing: not to attention but ready, feet apart with his weight a little more on one, knees soft, arms hanging
   // clear of his sides with the elbows bent, breathing
   const idle = (1 - move) * (1 - c);
@@ -2536,7 +2545,10 @@ function gaitPose(t, ent, speed, lean) {
     t.spine.x -= (0.05 + 0.015 * breath) * idle; t.spine.z += 0.03 * idle;
     t.neck.x += 0.04 * idle;
   }
-  ent.footLift = G.runBounce * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
+  // How much he bobs up and down running (see plantFeet): none of it glides him level, all of it follows his feet
+  // exactly, with a little flight between steps on top
+  ent.footBob = mix(1, G.runBounce, run);
+  ent.footLift = 0.08 * G.runBounce * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
 }
 
 // Everything about how he moves that can be shaped by eye (in pose-editor.html, which runs this file's own animation
@@ -2620,11 +2632,11 @@ const HERO_MOVES = {
       hipL: [0.05, 0, 0.3], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.05, 0, -0.3], knR: [0.1, 0, 0], ftR: [0.7, 0, 0] }
   },
   // His walk and run (see gaitPose): how far the legs swing, how high the knee bends coming through, how far the arms
-  // swing and how bent they are, the lean, the chest's twist against the hips, and the height of the flight
-  // between a run's steps
+  // swing and how bent they are, the lean, the chest's twist against the hips, and how much he bobs up and down
+  // running (a share: 0 glides level, 1 follows his feet's every rise and fall)
   gait: {
     walkStride: 0.42, walkKnee: 0.85, walkArms: 0.4,
-    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.07
+    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.35
   },
   // How far the whole figure tips (rad): forward in his crouch and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
@@ -2721,6 +2733,8 @@ function targetPose(ent, t) {
   const v = ent.velocity;
   const web = ent.web;
   ent.footLift = 0;
+  ent.gaitPitch = 0;
+  ent.footBob = 1;
   const P = HERO_MOVES.poses;
   if (ent.state === 'ground' && ent.brake.time >= 0) {
     addPose(t, P.brake, 1);
@@ -2845,8 +2859,8 @@ function bodyOrientation(ent, out) {
     _bz.crossVectors(_bx, _axis).multiplyScalar(r.side * Math.sin(HERO_MOVES.tilt.slideTurn)).addScaledVector(_axis, Math.cos(HERO_MOVES.tilt.slideTurn));
   } else if (ent.state === 'wallrun') {
     const r = ent.wallRun;
-    _by.set(w.nx, 0, w.nz);
     _bz.set(r.dx, r.dy, r.dz);
+    _by.set(w.nx, 0, w.nz).addScaledVector(_bz, Math.tan(ent.gaitPitch)).normalize();
   } else if (ent.diving && v.lengthSq() > 4) {
     _by.copy(v).normalize();
     _bz.set(0, -1, 0).addScaledVector(_by, _by.y);
@@ -2880,7 +2894,8 @@ function bodyOrientation(ent, out) {
     const pitch = crouched(ent) ? crouchPitch(ent) : HERO_MOVES.tilt.heroLanding;
     _by.set(0, Math.cos(pitch), 0).addScaledVector(_bz, Math.sin(pitch));
   } else {
-    _by.set(0, 1, 0);
+    // (on foot: tipped forward into a walk or a run)
+    _by.set(0, 1, 0).addScaledVector(_bz, Math.tan(ent.gaitPitch)).normalize();
   }
   _bx.crossVectors(_by, _bz);
   if (_bx.lengthSq() < 1e-6) _bx.set(Math.cos(ent.heading), 0, -Math.sin(ent.heading));
@@ -2941,14 +2956,20 @@ function lowestSole(rig, nx, ny, nz) {
 // can't do it: how far the pelvis is from the floor depends on how the legs are bent at that moment. `amount` eases it
 // in after a landing
 const WALL_GAP = 0.42; // how far out from a wall's face his simulated position is held (the collision radius)
-function plantFeet(ent, model, amount) {
+function plantFeet(ent, model, amount, dt) {
   const p = ent.position;
-  let nx = 0, ny = 1, nz = 0, surface = p.y + ent.footLift;
+  let nx = 0, ny = 1, nz = 0, surface = p.y;
   if (ent.state === 'wallrun') {
     nx = ent.wall.nx; ny = 0; nz = ent.wall.nz;
     surface = p.x * nx + p.z * nz - WALL_GAP;
   }
-  const shift = (surface - lowestSole(model.rig, nx, ny, nz)) * amount;
+  // Running, following his feet exactly makes him bob with every bend of his legs. So his body glides at a level
+  // instead (the highest his feet ask for, so that they never sink into the floor: they skim just over it in between)
+  // and follows the feet's rise and fall only by the share ent.footBob
+  const exact = surface - lowestSole(model.rig, nx, ny, nz);
+  if (ent.footBob >= 1) ent.plantLevel = exact;
+  else ent.plantLevel += (exact - ent.plantLevel) * (1 - Math.exp(-dt * (exact > ent.plantLevel ? 40 : 1.5)));
+  const shift = (mix(ent.plantLevel, exact, ent.footBob) + ent.footLift) * amount;
   const a = model.rig.pose;
   for (let b = 0; b < 15; b++) {
     a[b * 8 + 4] += nx * shift;
@@ -3013,7 +3034,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
   const planted = ent.state === 'ground' || ent.state === 'wallrun' || ent.state === 'sling';
   ent.footing = planted ? ent.footing + (1 - ent.footing) * (1 - Math.exp(-dt * 14)) : 0;
-  if (planted) plantFeet(ent, model, ent.footing);
+  if (planted) plantFeet(ent, model, ent.footing, dt);
   applyRigToBones(model);
 
   // The web wings open (and fold) over a quarter second
