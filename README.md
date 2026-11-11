@@ -176,6 +176,11 @@ back against them, sat low on his heels with his feet braced out ahead. It is al
 it, facing out, both hands down on the roof between his knees, looking down, the camera looking down over it with him. The stick, a jump or another double click
 stands him up.
 
+All of his key poses, the numbers of his walk and run, how far the whole figure tips in some moves and the feel of
+the motion are one table, `HERO_MOVES` (`js/spiderman.js`), shaped live in `pose-editor.html`: it runs this file's own
+animation code on a made-up state, so you pick a move, drag its timeline (or play it, slowed down), stop on a pose and
+bend his joints.
+
 The rest of how he moves: each joint follows its pose like a damped spring (quick, with a little overshoot and
 settle); between webs he carries himself one of three ways, picked at each take-off (reaching for the next web, a
 tucked float over the top of the arc, or swept back like an arrow), opening into a spread as he falls; a dive starts
