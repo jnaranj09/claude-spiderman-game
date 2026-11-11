@@ -123,8 +123,6 @@ const PERCH_DROP = 2;             // m: the least drop that counts as an edge
 const PERCH_DOUBLE = 0.4;         // s: two clicks within this are a double click
 const PERCH_SPEED = 9;            // m/s over to the edge
 const PERCH_INSET = 0.35;         // m: how far in from the edge his feet are (his knees and head hang out over it)
-const CROUCH_PITCH = 0.75;        // rad: how far forward the whole figure tips in his crouch (the editors' 'Crouch' pose)
-const SLING_LEAN_BACK = 0.5;       // rad: how far back he leans against a drawn slingshot's webs...
 const SLING_LEAN_DRAW = 2.5;      // ...by the time he has drawn them back this far (m); undrawn, he's tipped forward in his crouch
 const HERO_LANDING_FALL = 15;     // m/s: landing from a fall faster than this (a drop of 5 m or so), he lands on a knee and a fist
 const HERO_LANDING_HOLD = 0.5;    // s: and holds it this long (or until he's moving off)
@@ -2494,6 +2492,7 @@ function bump(x, half) {
 //   step; elbows bent square and pumping, the chest turning against the hips, and both feet off the ground between
 //   steps (ent.footLift, for the feet's placing: see plantFeet)
 function gaitPose(t, ent, speed, lean) {
+  const G = HERO_MOVES.gait;
   const move = Math.min(1, speed / 1.2);
   const run = smoothstep01((speed - WALK_SPEED - 0.4) / (JOG_SPEED + 2 - WALK_SPEED - 0.4));
   const walk = move * (1 - run);
@@ -2509,19 +2508,19 @@ function gaitPose(t, ent, speed, lean) {
     // it's as far forward as it goes; and on it, taking his weight, over the opposite part of the cycle)
     const lift = Math.pow(bump(wrapAngle(a - 0.45), 1.85), 0.75);
     const load = bump(wrapAngle(a - 0.55 - Math.PI), 1.39);
-    const hip = -0.42 * sa * walk - (0.25 + 0.8 * sa) * stride * run;
-    const knee = (0.08 + 0.85 * Math.pow(Math.max(0, Math.cos(a + 0.5)), 1.5)) * walk + (0.3 + 1.75 * lift + 0.3 * load) * run;
+    const hip = -G.walkStride * sa * walk - (G.runReach + G.runStride * sa) * stride * run;
+    const knee = (0.08 + G.walkKnee * Math.pow(Math.max(0, Math.cos(a + 0.5)), 1.5)) * walk + (0.3 + G.runKnee * lift + 0.3 * load) * run;
     const foot = 0.25 * Math.max(0, Math.cos(a + 0.9)) * walk + (0.55 * lift - 0.15 * load) * run;
     setPose(t, `hip${side}`, hip - c * 1.1, 0, sign * 0.04);
     setPose(t, `kn${side}`, knee + c * 1.9 + 0.05, 0, 0);
     setPose(t, `ft${side}`, foot, 0, 0);
     // (each arm swings against its own leg)
-    const arm = 0.4 * sa * walk + (0.75 * sa - 0.15) * run;
+    const arm = G.walkArms * sa * walk + (G.runArms * sa - 0.15) * run;
     setPose(t, `sh${side}`, arm - c * 0.6, 0, sign * (0.12 + 0.08 * run + c * 0.5));
-    setPose(t, `el${side}`, -0.2 - (0.1 + 0.12 * Math.max(0, -sa)) * walk - (1.3 - 0.35 * sa) * run, 0, 0);
+    setPose(t, `el${side}`, -0.2 - (0.1 + 0.12 * Math.max(0, -sa)) * walk - (G.runElbow - 0.35 * sa) * run, 0, 0);
   }
-  const twist = (0.06 * walk + 0.16 * run) * s;
-  setPose(t, 'spine', lean + 0.04 * walk + 0.3 * stride * run + c * 0.5, twist, 0);
+  const twist = (0.06 * walk + G.runTwist * run) * s;
+  setPose(t, 'spine', lean + 0.04 * walk + G.runLean * stride * run + c * 0.5, twist, 0);
   setPose(t, 'neck', -0.22 * run - c * 0.3, -twist * 0.8, 0);
   // Standing: not to attention but ready, feet apart with his weight a little more on one, knees soft, arms hanging
   // clear of his sides with the elbows bent, breathing
@@ -2537,40 +2536,126 @@ function gaitPose(t, ent, speed, lean) {
     t.spine.x -= (0.05 + 0.015 * breath) * idle; t.spine.z += 0.03 * idle;
     t.neck.x += 0.04 * idle;
   }
-  ent.footLift = 0.07 * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
+  ent.footLift = G.runBounce * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
 }
 
-// Whole poses as { joint: [x, y, z] }, for the ones that are blended by weight (addPose). They're written for his
-// left as the leading side; `mirror` -1 swaps the sides
-const AIR_POSES = {
-  // reaching forward & up for the next web, a knee driven up
-  reach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
-    hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
-  // the float at the top of an arc: chest open, arms wide and a little back, one knee high and the other leg folded under
-  float: { spine: [-0.15, 0.12, 0], neck: [0.1, 0, 0], shL: [0.25, 0, 1.25], elL: [-0.5, 0, 0], shR: [0.35, 0, -1.05], elR: [-0.75, 0, 0],
-    hipL: [-1.5, 0, 0.25], knL: [2.0, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.45, 0, -0.2], knR: [1.6, 0, 0], ftR: [0.6, 0, 0] },
-  // an arrow: arched, both arms swept back in a V, legs trailing together, one knee a little bent
-  arrow: { spine: [-0.3, 0, 0], neck: [-0.3, 0, 0], shL: [0.9, 0, 0.45], elL: [-0.1, 0, 0], shR: [0.9, 0, -0.45], elR: [-0.1, 0, 0],
-    hipL: [0.25, 0, 0.05], knL: [0.5, 0, 0], ftL: [0.7, 0, 0], hipR: [0.1, 0, -0.05], knR: [0.95, 0, 0], ftR: [0.7, 0, 0] },
-  // falling: the classic spread
-  spread: { spine: [-0.1, 0, 0], neck: [0.35, 0, 0], shL: [-0.35, 0, 1.35], elL: [-0.5, 0, 0], shR: [-0.35, 0, -1.35], elR: [-0.5, 0, 0],
-    hipL: [-0.45, 0, 0.3], knL: [0.9, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2, 0, -0.3], knR: [1.2, 0, 0], ftR: [0.4, 0, 0] },
-  // a dive as it begins: a swan dive, arms out wide, back arched, legs together
-  swan: { spine: [-0.2, 0, 0], neck: [-0.5, 0, 0], shL: [0.15, 0, 1.4], elL: [-0.1, 0, 0], shR: [0.15, 0, -1.4], elR: [-0.1, 0, 0],
-    hipL: [0.15, 0, 0.04], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.2, 0, -0.04], knR: [0.3, 0, 0], ftR: [0.7, 0, 0] },
-  // ...and at speed: arms swept back along his sides, legs together and straight, toes pointed
-  dart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
-    hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] }
+// Everything about how he moves that can be shaped by eye (in pose-editor.html, which runs this file's own animation
+// code): his key poses, the numbers of his walk and run, how far the whole figure tips in some of them, and the feel
+// of the motion. setHeroMoves() takes a saved set.
+// Poses are { joint: [x, y, z] } in radians (see the top of this section for what the angles mean), written with his
+// left as the leading side (the web hand, the side that reaches, the leg that leads): the game mirrors them for the
+// other. Joints a pose leaves out are left as they are (at rest, or as the pose under it has them).
+const HERO_MOVES = {
+  poses: {
+    // His crouch (drawing a slingshot, undrawn): down on the balls of his feet, knees wide, one hand down in front
+    // and the other arm out to his side, head back to look up and ahead
+    crouch: { spine: [0.2, 0, 0], neck: [-1.25, 0, 0], shL: [-0.7, 0, 0.75], elL: [-0.9, 0, 0], shR: [-0.35, 0, -1.25], elR: [-0.25, 0, 0],
+      hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [0.2, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [0.2, 0, 0] },
+    // Perched on a roof's edge: hunched right over, both arms straight down between his knees, fingertips on the
+    // roof just ahead of his feet, head lifted to look down over the edge
+    perch: { spine: [0.8, 0, 0], neck: [-0.45, 0, 0], shL: [-1.35, 0, -0.15], elL: [-0.05, 0, 0], shR: [-1.35, 0, 0.15], elR: [-0.05, 0, 0],
+      hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [0.2, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [0.2, 0, 0] },
+    // Leaning back against a drawn slingshot: sat back on his heels with his feet braced out ahead, back a little
+    // rounded (his arms and head follow the webs)
+    slingBrace: { spine: [0.3, 0, 0], neck: [-0.15, 0, 0], hipL: [-1.05, 0, 0.32], knL: [1.45, 0, 0], ftL: [-0.3, 0, 0],
+      hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [-0.3, 0, 0] },
+    // Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front
+    // knee, both arms thrown straight back to the webs, head up
+    brake: { spine: [0.6, 0, 0], neck: [-0.7, 0, 0], shL: [1.05, 0, 0.3], elL: [-0.08, 0, 0], shR: [1.05, 0, -0.3], elR: [-0.08, 0, 0],
+      hipL: [-1.55, 0, 0.18], knL: [1.75, 0, 0], ftL: [-0.2, 0, 0], hipR: [0.35, 0, -0.12], knR: [0.95, 0, 0], ftR: [0.75, 0, 0] },
+    // A hard landing: down on his right knee and right fist, the left foot planted with its knee up, the left arm
+    // thrown back and up, head lifting to look ahead
+    heroLanding: { spine: [0.65, 0, 0], neck: [-0.95, 0, 0], shR: [-1.2, 0, 0.1], elR: [-0.05, 0, 0], shL: [1.1, 0, 0.6], elL: [-0.25, 0, 0],
+      hipL: [-2.0, 0, 0.4], knL: [2.05, 0, 0], ftL: [-0.15, 0, 0], hipR: [-0.55, 0, -0.15], knR: [1.75, 0, 0], ftR: [0.9, 0, 0] },
+    // Sliding along a wall (or down it) feet first, on his feet and one hand: the leading leg stretched out ahead
+    // along the wall, the other folded under him with its knee out, the trailing hand on the wall behind him, the
+    // other arm out ahead for balance, looking where he's headed
+    slide: { spine: [0.1, 0.15, 0], neck: [0.5, 0.55, 0], shL: [-0.9, 0, 0.9], elL: [-0.6, 0, 0], shR: [0.6, 0, -0.35], elR: [-0.05, 0, 0],
+      hipL: [-0.5, 0, 0.25], knL: [0.15, 0, 0], ftL: [0.8, 0, 0], hipR: [-1.3, 0, -0.55], knR: [2.2, 0, 0], ftR: [0.1, 0, 0] },
+    // On a web, the usual way: legs together, trailing a little behind him down the arc (and that shoulder hitched
+    // up, his chest turned a little towards it, as in all of these)...
+    swingPumpDown: { spine: [-0.1, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.7], elR: [-0.3, 0, 0],
+      hipL: [0.34, 0, 0.06], knL: [0.65, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
+    // ...then kicked forward from the bottom and held out ahead up the far side, the free arm reaching on
+    swingPumpUp: { spine: [0.3, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.9, 0, -0.5], elR: [-0.6, 0, 0],
+      hipL: [-1.05, 0, 0.06], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-0.92, 0, -0.06], knR: [0.18, 0, 0], ftR: [0.55, 0, 0] },
+    // Tucked: one knee up, the other leg trailing
+    swingTuck: { spine: [0.12, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.6, 0, -1.0], elR: [-0.9, 0, 0],
+      hipL: [-0.75, 0, 0.12], knL: [1.25, 0, 0], ftL: [0.55, 0, 0], hipR: [-0.25, 0, -0.12], knR: [0.55, 0, 0], ftR: [0.55, 0, 0] },
+    // A stride through the air: one knee driven up ahead, the other leg stretched out behind, the free arm out wide
+    swingStride: { spine: [0.12, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.2, 0, -1.5], elR: [-0.3, 0, 0],
+      hipL: [0.4, 0, 0.08], knL: [0.3, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.25, 0, -0.08], knR: [1.7, 0, 0], ftR: [0.55, 0, 0] },
+    // Laid out straight as a board down the arc, the free arm swept back along his side...
+    swingLayoutDown: { spine: [0, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.45, 0, -0.25], elR: [-0.1, 0, 0],
+      hipL: [0.1, 0, 0.05], knL: [0.05, 0, 0], ftL: [0.55, 0, 0], hipR: [0.14, 0, -0.05], knR: [0.12, 0, 0], ftR: [0.55, 0, 0] },
+    // ...then knees snatched up to his chest over the far side
+    swingLayoutUp: { spine: [0.45, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-1.1, 0, -0.4], elR: [-1.3, 0, 0],
+      hipL: [-1.75, 0, 0.05], knL: [2.1, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.6, 0, -0.05], knR: [2.0, 0, 0], ftR: [0.55, 0, 0] },
+    // Between webs. Reaching forward & up for the next one, a knee driven up
+    airReach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
+      hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
+    // The float at the top of an arc: chest open, arms wide and a little back, one knee high, the other leg folded under
+    airFloat: { spine: [-0.15, 0.12, 0], neck: [0.1, 0, 0], shL: [0.25, 0, 1.25], elL: [-0.5, 0, 0], shR: [0.35, 0, -1.05], elR: [-0.75, 0, 0],
+      hipL: [-1.5, 0, 0.25], knL: [2.0, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.45, 0, -0.2], knR: [1.6, 0, 0], ftR: [0.6, 0, 0] },
+    // An arrow: arched, both arms swept back in a V, legs trailing together, one knee a little bent
+    airArrow: { spine: [-0.3, 0, 0], neck: [-0.3, 0, 0], shL: [0.9, 0, 0.45], elL: [-0.1, 0, 0], shR: [0.9, 0, -0.45], elR: [-0.1, 0, 0],
+      hipL: [0.25, 0, 0.05], knL: [0.5, 0, 0], ftL: [0.7, 0, 0], hipR: [0.1, 0, -0.05], knR: [0.95, 0, 0], ftR: [0.7, 0, 0] },
+    // Falling: the classic spread
+    airSpread: { spine: [-0.1, 0, 0], neck: [0.35, 0, 0], shL: [-0.35, 0, 1.35], elL: [-0.5, 0, 0], shR: [-0.35, 0, -1.35], elR: [-0.5, 0, 0],
+      hipL: [-0.45, 0, 0.3], knL: [0.9, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2, 0, -0.3], knR: [1.2, 0, 0], ftR: [0.4, 0, 0] },
+    // A dive as it begins: a swan dive, arms out wide, back arched, legs together...
+    diveSwan: { spine: [-0.2, 0, 0], neck: [-0.5, 0, 0], shL: [0.15, 0, 1.4], elL: [-0.1, 0, 0], shR: [0.15, 0, -1.4], elR: [-0.1, 0, 0],
+      hipL: [0.15, 0, 0.04], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.2, 0, -0.04], knR: [0.3, 0, 0], ftR: [0.7, 0, 0] },
+    // ...and at speed: arms swept back along his sides, legs together and straight, toes pointed
+    diveDart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
+      hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] },
+    // Zipping: the web arm thrown forward, the other tucked, legs trailing
+    zip: { spine: [0.2, 0, 0], neck: [0, 0, 0], shL: [-2.9, 0, 0.15], elL: [-0.05, 0, 0], shR: [-1.4, 0, -0.5], elR: [-1.6, 0, 0],
+      hipL: [0.35, 0, 0.08], knL: [0.5, 0, 0], ftL: [0.6, 0, 0], hipR: [0.15, 0, -0.08], knR: [0.9, 0, 0], ftR: [0.6, 0, 0] },
+    // The tucked somersault after a fast release
+    flip: { spine: [0.5, 0, 0], neck: [0.3, 0, 0], shL: [-1.3, 0, 0.3], elL: [-1.4, 0, 0], shR: [-1.3, 0, -0.3], elR: [-1.4, 0, 0],
+      hipL: [-1.9, 0, 0.1], knL: [2.3, 0, 0], ftL: [0.5, 0, 0], hipR: [-1.9, 0, -0.1], knR: [2.3, 0, 0], ftR: [0.5, 0, 0] },
+    // Gliding: arms spread wide and a little forward, stretching the wings to his sides, legs apart and straight
+    glide: { spine: [-0.05, 0, 0], neck: [-0.6, 0, 0], shL: [-0.25, 0, 1.45], elL: [-0.08, 0, 0], shR: [-0.25, 0, -1.45], elR: [-0.08, 0, 0],
+      hipL: [0.05, 0, 0.3], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.05, 0, -0.3], knR: [0.1, 0, 0], ftR: [0.7, 0, 0] }
+  },
+  // His walk and run (see gaitPose): how far the legs swing, how high the knee bends coming through, how far the arms
+  // swing and how bent they are, the lean, the chest's twist against the hips, and the height of the flight
+  // between a run's steps
+  gait: {
+    walkStride: 0.42, walkKnee: 0.85, walkArms: 0.4,
+    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.07
+  },
+  // How far the whole figure tips (rad): forward in his crouch and in the hard landing, back against a drawn
+  // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
+  // far his chest turns away from the way he slides
+  tilt: { crouch: 0.75, heroLanding: 0.45, slingBack: 0.5, slideLean: 0.95, slideTurn: 0.45 },
+  // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler) and how much they overshoot and
+  // settle (damping 1: none), how hard he leans into turns in the air, and how far his head leads a turn
+  feel: { stiffness: 19, swingStiffness: 13, damping: 0.72, bank: 0.3, headLook: 0.6 }
 };
-// A hard landing: down on his right knee and right fist, the left foot planted with its knee up, the left arm thrown
-// back and up, head lifting to look ahead
-const HERO_LANDING_POSE = { spine: [0.65, 0, 0], neck: [-0.95, 0, 0], shR: [-1.2, 0, 0.1], elR: [-0.05, 0, 0], shL: [1.1, 0, 0.6], elL: [-0.25, 0, 0],
-  hipL: [-2.0, 0, 0.4], knL: [2.05, 0, 0], ftL: [-0.15, 0, 0], hipR: [-0.55, 0, -0.15], knR: [1.75, 0, 0], ftR: [0.9, 0, 0] };
-const HERO_LANDING_PITCH = 0.45; // rad the whole figure tips forward in it
-// Leaning back against a drawn slingshot: sat back on his heels with his feet braced out ahead, back a little rounded
-const SLING_BRACE_POSE = { spine: [0.3, 0, 0], neck: [-0.15, 0, 0], hipL: [-1.05, 0, 0.32], knL: [1.45, 0, 0], ftL: [-0.3, 0, 0],
-  hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [-0.3, 0, 0] };
+const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
+// Takes a saved set of moves (pose-editor.html): any part of HERO_MOVES; what it leaves out stays as it is
+function setHeroMoves(saved) {
+  if (!saved) return HERO_MOVES;
+  for (const name in saved.poses || {}) {
+    const pose = HERO_MOVES.poses[name];
+    if (!pose) continue;
+    for (const joint in saved.poses[name]) {
+      const a = saved.poses[name][joint];
+      if (JOINTS.includes(joint) && Array.isArray(a) && a.length === 3 && a.every(Number.isFinite)) pose[joint] = [a[0], a[1], a[2]];
+    }
+  }
+  for (const group of ['gait', 'tilt', 'feel']) {
+    for (const key in saved[group] || {}) {
+      if (key in HERO_MOVES[group] && Number.isFinite(saved[group][key])) HERO_MOVES[group][key] = saved[group][key];
+    }
+  }
+  return HERO_MOVES;
+}
+
+// Adds `pose` into t by weight (t starts from rest: all zeros); `mirror` -1 swaps his sides
 function addPose(t, pose, w, mirror = 1) {
   for (const name in pose) {
     const a = pose[name];
@@ -2597,13 +2682,14 @@ function airPose(t, ent) {
   const rise = Math.max(0, up), fall = smoothstep01(-up), top = 1 - rise - fall;
   const side = ent.nextSide > 0 ? 1 : -1;
   const style = ent.airStyle;
-  addPose(t, style === 'arrow' ? AIR_POSES.arrow : AIR_POSES.reach, rise, side);
-  addPose(t, AIR_POSES.spread, fall, side);
+  const P = HERO_MOVES.poses;
+  addPose(t, style === 'arrow' ? P.airArrow : P.airReach, rise, side);
+  addPose(t, P.airSpread, fall, side);
   if (style === 'reach') {
-    addPose(t, AIR_POSES.reach, top * 0.5, side);
-    addPose(t, AIR_POSES.spread, top * 0.5, side);
+    addPose(t, P.airReach, top * 0.5, side);
+    addPose(t, P.airSpread, top * 0.5, side);
   } else {
-    addPose(t, AIR_POSES[style], top, side);
+    addPose(t, style === 'arrow' ? P.airArrow : P.airFloat, top, side);
   }
 }
 
@@ -2613,78 +2699,12 @@ function slingLean(ent) {
   return smoothstep01(ent.sling.draw / SLING_LEAN_DRAW);
 }
 function crouchPitch(ent) {
-  return ent.state === 'sling' ? mix(CROUCH_PITCH, -SLING_LEAN_BACK, slingLean(ent)) : CROUCH_PITCH;
-}
-
-// His crouch: the editors' 'Crouch' pose (js/hero-preview.js), down on the balls of his feet with his knees wide, one
-// hand down in front and the other arm out to his side, the whole figure tipped forward (see bodyOrientation) and
-// low (pelvisOffset), his head back, looking up and ahead. With `down`, perched on a roof's edge instead (below)
-function crouchPose(t, down) {
-  setPose(t, 'spine', 0.2, 0, 0);
-  setPose(t, 'neck', -1.25, 0, 0);
-  setPose(t, 'shL', -0.7, 0, 0.75);
-  setPose(t, 'elL', -0.9, 0, 0);
-  setPose(t, 'shR', -0.35, 0, -1.25);
-  setPose(t, 'elR', -0.25, 0, 0);
-  setPose(t, 'hipL', -2.1, 0, 0.45);
-  setPose(t, 'knL', 2.3, 0, 0);
-  setPose(t, 'ftL', 0.2, 0, 0);
-  setPose(t, 'hipR', -2.1, 0, -0.45);
-  setPose(t, 'knR', 2.3, 0, 0);
-  setPose(t, 'ftR', 0.2, 0, 0);
-  if (down) {
-    // Perched: hunched right over, both arms straight down between his knees, fingertips on the roof just ahead of
-    // his feet, head hung to look down over the edge
-    setPose(t, 'spine', 0.8, 0, 0);
-    setPose(t, 'neck', -0.45, 0, 0);
-    setPose(t, 'shL', -1.35, 0, -0.15);
-    setPose(t, 'shR', -1.35, 0, 0.15);
-    setPose(t, 'elL', -0.05, 0, 0);
-    setPose(t, 'elR', -0.05, 0, 0);
-  }
+  const T = HERO_MOVES.tilt;
+  return ent.state === 'sling' ? mix(T.crouch, -T.slingBack, slingLean(ent)) : T.crouch;
 }
 
 function crouched(ent) {
   return ent.state === 'sling' || (ent.state === 'ground' && ent.perch.on);
-}
-
-// Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front knee,
-// both arms thrown straight back to the webs, head up
-function brakePose(t) {
-  setPose(t, 'spine', 0.6, 0, 0);
-  setPose(t, 'neck', -0.7, 0, 0);
-  setPose(t, 'shL', 1.05, 0, 0.3);
-  setPose(t, 'shR', 1.05, 0, -0.3);
-  setPose(t, 'elL', -0.08, 0, 0);
-  setPose(t, 'elR', -0.08, 0, 0);
-  setPose(t, 'hipL', -1.55, 0, 0.18);
-  setPose(t, 'knL', 1.75, 0, 0);
-  setPose(t, 'ftL', -0.2, 0, 0);
-  setPose(t, 'hipR', 0.35, 0, -0.12);
-  setPose(t, 'knR', 0.95, 0, 0);
-  setPose(t, 'ftR', 0.75, 0, 0);
-}
-
-// Sliding along a wall (or down it) feet first, on his feet and one hand: leaning well back from the way he's going,
-// the leading leg stretched out ahead along the wall, the other folded under him with its knee out, the trailing hand
-// on the wall behind him, the other arm out ahead for balance, looking where he's headed (see bodyOrientation for
-// the lean and the turn). `lead`: 1 his left side leads, -1 his right
-const SLIDE_LEAN = 0.95; // rad back from square to the wall (far enough for that hand to reach it)
-const SLIDE_TURN = 0.45; // rad his chest turns away from the way he's going, opening towards the hand on the wall
-function slidePose(t, lead) {
-  const a = lead > 0 ? 'L' : 'R', b = lead > 0 ? 'R' : 'L';
-  setPose(t, 'spine', 0.1, lead * 0.15, 0);
-  setPose(t, 'neck', 0.5, lead * (SLIDE_TURN + 0.1), 0);
-  setPose(t, `hip${a}`, -0.5, 0, lead * 0.25);
-  setPose(t, `kn${a}`, 0.15, 0, 0);
-  setPose(t, `ft${a}`, 0.8, 0, 0);
-  setPose(t, `hip${b}`, -1.3, 0, -lead * 0.55);
-  setPose(t, `kn${b}`, 2.2, 0, 0);
-  setPose(t, `ft${b}`, 0.1, 0, 0);
-  setPose(t, `sh${b}`, 0.6, 0, -lead * 0.35);
-  setPose(t, `el${b}`, -0.05, 0, 0);
-  setPose(t, `sh${a}`, -0.9, 0, lead * 0.9);
-  setPose(t, `el${a}`, -0.6, 0, 0);
 }
 
 // (a run straight up a wall stays a run, a sprint on all but his hands; along it or down it he slides)
@@ -2701,16 +2721,18 @@ function targetPose(ent, t) {
   const v = ent.velocity;
   const web = ent.web;
   ent.footLift = 0;
+  const P = HERO_MOVES.poses;
   if (ent.state === 'ground' && ent.brake.time >= 0) {
-    brakePose(t);
+    addPose(t, P.brake, 1);
   } else if (ent.state === 'ground' && ent.perch.on) {
-    crouchPose(t, true);
+    addPose(t, P.perch, 1);
   } else if (ent.state === 'ground' && ent.landing >= 0) {
-    addPose(t, HERO_LANDING_POSE, 1);
+    addPose(t, P.heroLanding, 1);
   } else if (ent.state === 'ground') {
     gaitPose(t, ent, Math.hypot(v.x, v.z), 0.06 + Math.sin(performance.now() * 0.002) * 0.02);
   } else if (ent.state === 'wallrun' && wallSliding(ent)) {
-    slidePose(t, -ent.wallRun.side);
+    // (side on to the way he's going: mirrored for whichever side leads)
+    addPose(t, P.slide, 1, -ent.wallRun.side);
   } else if (ent.state === 'wallrun') {
     gaitPose(t, ent, RUN_SPEED, 0.5);
   } else if (ent.state === 'wall') {
@@ -2719,9 +2741,9 @@ function targetPose(ent, t) {
     // Drawing the slingshot. He starts in his crouch, tipped forward; as he draws the webs back he leans back against
     // them, sat back on his heels with his feet braced out ahead. Both arms are held out towards where the webs stick
     // all along (higher for webs high on a building, level for ones on the floor ahead); short shuffling steps
-    crouchPose(t, false);
+    addPose(t, P.crouch, 1);
     const lean = slingLean(ent);
-    leanPose(t, SLING_BRACE_POSE, lean);
+    leanPose(t, P.slingBrace, lean);
     const s = Math.sin(ent.runPhase);
     const [a0, a1] = ent.sling.anchors;
     const ahead = Math.hypot((a0.x + a1.x) * 0.5 - ent.position.x, (a0.z + a1.z) * 0.5 - ent.position.z);
@@ -2737,117 +2759,54 @@ function targetPose(ent, t) {
     t.hipL.x -= s * 0.12;
     t.hipR.x += s * 0.12;
   } else if (ent.gliding) {
-    // Gliding: arms spread wide and a little forward, stretching the wings to his sides, legs apart and straight
-    setPose(t, 'spine', -0.05, 0, 0);
-    setPose(t, 'neck', -0.6, 0, 0);
-    setPose(t, 'shL', -0.25, 0, 1.45);
-    setPose(t, 'shR', -0.25, 0, -1.45);
-    setPose(t, 'elL', -0.08, 0, 0);
-    setPose(t, 'elR', -0.08, 0, 0);
-    setPose(t, 'hipL', 0.05, 0, 0.3);
-    setPose(t, 'hipR', 0.05, 0, -0.3);
-    setPose(t, 'knL', 0.1, 0, 0);
-    setPose(t, 'knR', 0.1, 0, 0);
-    setPose(t, 'ftL', 0.7, 0, 0);
-    setPose(t, 'ftR', 0.7, 0, 0);
+    addPose(t, P.glide, 1);
   } else if (ent.diving) {
     // Diving head first: a swan dive as it begins, arms out wide, drawn back along his sides as he picks up speed
     const fast = smoothstep01((-v.y - 14) / 16);
-    addPose(t, AIR_POSES.swan, 1 - fast);
-    addPose(t, AIR_POSES.dart, fast);
+    addPose(t, P.diveSwan, 1 - fast);
+    addPose(t, P.diveDart, fast);
   } else if (ent.zip.time >= 0) {
-    // Zipping: the web arm thrown forward, the other tucked, legs trailing
-    const s = ent.zip.side;
-    const a = s > 0 ? 'L' : 'R', b = s > 0 ? 'R' : 'L';
-    setPose(t, 'spine', 0.2, 0, 0);
-    setPose(t, `sh${a}`, -2.9, 0, s * 0.15);
-    setPose(t, `el${a}`, -0.05, 0, 0);
-    setPose(t, `sh${b}`, -1.4, 0, -s * 0.5);
-    setPose(t, `el${b}`, -1.6, 0, 0);
-    setPose(t, 'hipL', 0.35, 0, 0.08);
-    setPose(t, 'hipR', 0.15, 0, -0.08);
-    setPose(t, 'knL', 0.5, 0, 0);
-    setPose(t, 'knR', 0.9, 0, 0);
-    setPose(t, 'ftL', 0.6, 0, 0);
-    setPose(t, 'ftR', 0.6, 0, 0);
+    addPose(t, P.zip, 1, ent.zip.side > 0 ? 1 : -1);
   } else if (web.phase !== 'none' || ent.state === 'swing') {
-    // One arm up the web (both, on a double web); the rest by how he rides this one (web.style), and by where on the
-    // arc he is: `far` goes from 0 on the way down to 1 from the bottom on
+    // One arm up the web; the rest by how he rides this one (web.style), and by where on the arc he is: `far` goes
+    // from 0 on the way down to 1 from the bottom on. The poses are mirrored for the hand the web is in
     const up = web.side > 0 ? 'L' : 'R';
     const free = web.side > 0 ? 'R' : 'L';
     const s = web.side > 0 ? 1 : -1;
     const swingLift = Math.max(-1, Math.min(1, v.y / 15));
     const far = web.phase === 'attached' ? smoothstep01((web.arc + 0.3) / 0.6) : 0;
     const style = web.style;
-    let freeX = -0.6, freeZ = 1.0, freeEl = -0.9, spine = 0.12;
     if (style === 'pump') {
-      // The usual way: legs together, trailing a little behind him down the arc, then kicked forward from the bottom
-      // and held out ahead up the far side (the push that carries a swing); the free arm back, then reaching on
-      spine = mix(-0.1, 0.3, far);
-      freeX = mix(0.5, -0.9, far); freeZ = mix(0.7, 0.5, far); freeEl = mix(-0.3, -0.6, far);
-      setPose(t, 'hipL', mix(0.34, -1.05, far), 0, 0.06);
-      setPose(t, 'hipR', mix(0.22, -0.92, far), 0, -0.06);
-      setPose(t, 'knL', mix(0.65, 0.12, far), 0, 0);
-      setPose(t, 'knR', mix(0.5, 0.18, far), 0, 0);
-    } else if (style === 'stride') {
-      // A stride through the air: one knee driven up ahead, the other leg stretched out behind, the free arm out wide
-      freeX = -0.2; freeZ = 1.5; freeEl = -0.3;
-      setPose(t, `hip${free}`, -1.25 - swingLift * 0.15, 0, -s * 0.08);
-      setPose(t, `kn${free}`, 1.7, 0, 0);
-      setPose(t, `hip${up}`, 0.4 + swingLift * 0.15, 0, s * 0.08);
-      setPose(t, `kn${up}`, 0.3, 0, 0);
+      addPose(t, P.swingPumpDown, 1 - far, s);
+      addPose(t, P.swingPumpUp, far, s);
     } else if (style === 'layout') {
-      // Laid out straight as a board down the arc, the free arm swept back along his side; then knees snatched up to
-      // his chest over the far side
-      spine = mix(0.0, 0.45, far);
-      freeX = mix(0.45, -1.1, far); freeZ = mix(0.25, 0.4, far); freeEl = mix(-0.1, -1.3, far);
-      setPose(t, 'hipL', mix(0.1, -1.75, far), 0, 0.05);
-      setPose(t, 'hipR', mix(0.14, -1.6, far), 0, -0.05);
-      setPose(t, 'knL', mix(0.05, 2.1, far), 0, 0);
-      setPose(t, 'knR', mix(0.12, 2.0, far), 0, 0);
+      addPose(t, P.swingLayoutDown, 1 - far, s);
+      addPose(t, P.swingLayoutUp, far, s);
+    } else if (style === 'stride') {
+      addPose(t, P.swingStride, 1, s);
+      // (the stride opens a little as he rises)
+      t[`hip${free}`].x -= swingLift * 0.15;
+      t[`hip${up}`].x += swingLift * 0.15;
     } else {
-      // Tucked: one knee up, the other leg trailing
-      setPose(t, 'hipL', -0.75 - swingLift * 0.25, 0, 0.12);
-      setPose(t, 'hipR', -0.25 + swingLift * 0.35, 0, -0.12);
-      setPose(t, 'knL', 1.25, 0, 0);
-      setPose(t, 'knR', 0.55 - swingLift * 0.2, 0, 0);
+      addPose(t, P.swingTuck, 1, s);
+      t[`hip${up}`].x -= swingLift * 0.25;
+      t[`hip${free}`].x += swingLift * 0.35;
+      t[`kn${free}`].x -= swingLift * 0.2;
     }
-    // (hanging from one hand, that shoulder is hitched up and his chest turned a little towards it)
-    const hang = web.double ? 0 : s;
-    setPose(t, 'spine', spine, hang * 0.2, hang * 0.16);
-    setPose(t, 'neck', 0.15, -hang * 0.15, -hang * 0.1);
-    setPose(t, `sh${up}`, -0.05, 0, s * 2.95);
-    setPose(t, `el${up}`, -0.06, 0, 0);
     if (web.double) {
-      // A double web: both arms up, one to each side of the street
-      setPose(t, `sh${free}`, -0.05, 0, -s * 2.95);
-      setPose(t, `el${free}`, -0.06, 0, 0);
-    } else {
-      setPose(t, `sh${free}`, freeX, 0, -s * freeZ);
-      setPose(t, `el${free}`, freeEl, 0, 0);
+      // A double web: both arms up, one to each side of the street, hanging square between them
+      setPose(t, `sh${free}`, t[`sh${up}`].x, 0, -t[`sh${up}`].z);
+      setPose(t, `el${free}`, t[`el${up}`].x, 0, 0);
+      t.spine.y = t.spine.z = t.neck.y = t.neck.z = 0;
     }
-    setPose(t, 'ftL', 0.55, 0, 0);
-    setPose(t, 'ftR', 0.55, 0, 0);
   } else if (ent.flip < 1) {
-    // Tucked flip after a fast release
-    setPose(t, 'spine', 0.5, 0, 0);
-    setPose(t, 'neck', 0.3, 0, 0);
-    setPose(t, 'hipL', -1.9, 0, 0.1);
-    setPose(t, 'hipR', -1.9, 0, -0.1);
-    setPose(t, 'knL', 2.3, 0, 0);
-    setPose(t, 'knR', 2.3, 0, 0);
-    setPose(t, 'shL', -1.3, 0, 0.3);
-    setPose(t, 'shR', -1.3, 0, -0.3);
-    setPose(t, 'elL', -1.4, 0, 0);
-    setPose(t, 'elR', -1.4, 0, 0);
-    setPose(t, 'ftL', 0.5, 0, 0);
-    setPose(t, 'ftR', 0.5, 0, 0);
+    addPose(t, P.flip, 1);
   } else {
     airPose(t, ent);
   }
   // His head leads a turn: towards where the stick points, on foot and in the air
   if (ent.stickYaw !== null && (ent.state === 'air' || ent.state === 'swing' || (ent.state === 'ground' && ent.brake.time < 0 && !ent.perch.on))) {
-    t.neck.y += Math.max(-0.7, Math.min(0.7, angleDiff(ent.stickYaw, ent.heading) * 0.6));
+    t.neck.y += Math.max(-0.7, Math.min(0.7, angleDiff(ent.stickYaw, ent.heading) * HERO_MOVES.feel.headLook));
   }
 }
 
@@ -2881,9 +2840,9 @@ function bodyOrientation(ent, out) {
     // from it (down the building, on a slide along it)
     const r = ent.wallRun;
     _axis.set(r.dx, r.dy, r.dz);
-    _by.set(w.nx, 0, w.nz).multiplyScalar(Math.cos(SLIDE_LEAN)).addScaledVector(_axis, -Math.sin(SLIDE_LEAN));
+    _by.set(w.nx, 0, w.nz).multiplyScalar(Math.cos(HERO_MOVES.tilt.slideLean)).addScaledVector(_axis, -Math.sin(HERO_MOVES.tilt.slideLean));
     _bx.set(w.nx, 0, w.nz);
-    _bz.crossVectors(_bx, _axis).multiplyScalar(r.side * Math.sin(SLIDE_TURN)).addScaledVector(_axis, Math.cos(SLIDE_TURN));
+    _bz.crossVectors(_bx, _axis).multiplyScalar(r.side * Math.sin(HERO_MOVES.tilt.slideTurn)).addScaledVector(_axis, Math.cos(HERO_MOVES.tilt.slideTurn));
   } else if (ent.state === 'wallrun') {
     const r = ent.wallRun;
     _by.set(w.nx, 0, w.nz);
@@ -2918,7 +2877,7 @@ function bodyOrientation(ent, out) {
     }
     _by.normalize();
   } else if (crouched(ent) || (ent.state === 'ground' && ent.landing >= 0)) {
-    const pitch = crouched(ent) ? crouchPitch(ent) : HERO_LANDING_PITCH;
+    const pitch = crouched(ent) ? crouchPitch(ent) : HERO_MOVES.tilt.heroLanding;
     _by.set(0, Math.cos(pitch), 0).addScaledVector(_bz, Math.sin(pitch));
   } else {
     _by.set(0, 1, 0);
@@ -3011,7 +2970,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   const turning = dt > 0 ? angleDiff(ent.heading, ent.animHeading) / dt : 0;
   ent.animHeading = ent.heading;
   const flying = ent.state === 'air' || ent.state === 'swing';
-  const bankWant = flying ? Math.max(-0.45, Math.min(0.45, turning * 0.3))
+  const bankWant = flying ? Math.max(-0.45, Math.min(0.45, turning * HERO_MOVES.feel.bank))
     : ent.state === 'ground' && !ent.perch.on && ent.brake.time < 0 ? Math.max(-0.2, Math.min(0.2, turning * 0.03 * Math.min(1, ent.speed / RUN_SPEED))) : 0;
   ent.bank += (bankWant - ent.bank) * (1 - Math.exp(-dt * 5));
 
@@ -3022,7 +2981,8 @@ function updateSpiderManVisuals(ent, dt, active) {
     ent.poseSpeed = {};
     for (const name of JOINTS) ent.poseSpeed[name] = { x: 0, y: 0, z: 0 };
   }
-  const stiff = ent.state === 'swing' ? 13 : 19, damp = 2 * 0.72 * stiff;
+  const F = HERO_MOVES.feel;
+  const stiff = ent.state === 'swing' ? F.swingStiffness : F.stiffness, damp = 2 * F.damping * stiff;
   for (let left = Math.min(dt, 0.1); left > 1e-6; left -= 1 / 60) {
     const h = Math.min(left, 1 / 60);
     for (const name of JOINTS) {
@@ -3138,6 +3098,7 @@ function updateSpiderManVisuals(ent, dt, active) {
 }
 
 export {
+  HERO_MOVES, HERO_MOVES_DEFAULT, setHeroMoves, JOINTS as HERO_JOINTS,
   createSpiderManEntity, createSpiderManState, updateSpiderMan, updateSpiderManVisuals, resetSpiderMan,
   perchOnRooftop, clipCameraToBuildings, findAnchor, rayBox, footprintContains
 };
