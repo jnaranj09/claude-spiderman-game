@@ -2506,7 +2506,7 @@ function gaitPose(t, ent, speed, lean) {
   const s = Math.sin(ent.runPhase);
   // He leans from the ground up, as a runner does: most of the lean tips the whole figure about his hips (see
   // bodyOrientation), with the legs swung back under him by as much, and only a little of it bends his back
-  const tip = lean + 0.04 * walk + G.runLean * stride * run;
+  const tip = lean + G.walkLean * walk + G.runLean * stride * run;
   const pitch = ent.gaitPitch = tip * 0.75;
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 'L' : 'R';
@@ -2643,7 +2643,7 @@ const HERO_MOVES = {
   // swing, how far out from his sides he carries them running and how bent they are, the lean, the chest's twist
   // against the hips, and how much he bobs up and down walking and running (a share: 0 glides level, 1 follows his feet's every rise and fall)
   gait: {
-    walkStride: 0.2443, walkKnee: 0.4189, walkArms: 0.2618, walkBounce: 0.05,
+    walkStride: 0.2443, walkKnee: 0.4189, walkArms: 0.2618, walkBounce: 0.05, walkLean: 0.1,
     runStride: 0.9599, runReach: 0.1745, runKnee: 2.0246, runArms: 0.9774, runArmsOut: 0.192, runElbow: 1.501, runLean: 0.4538, runTwist: 0.3142, runBounce: 0.2
   },
   // How far the whole figure tips (rad): forward as he sets up a slingshot, perched, and in the hard landing, back against a drawn
