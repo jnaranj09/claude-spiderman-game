@@ -2530,7 +2530,14 @@ function gaitPose(t, ent, speed, lean) {
   }
   const twist = (0.06 * walk + G.runTwist * run) * s;
   setPose(t, 'spine', tip - pitch + c * 0.5, twist, 0);
-  setPose(t, 'neck', -0.22 * run - c * 0.3 - pitch * 0.5, -twist * 0.8, 0);
+  // His head stays level and facing ahead while his chest twists under it. Turning the head back by the twist isn't
+  // enough: the chest twists about his leaning spine and the head would turn back about its own, tipped-back axis,
+  // and the difference between those two axes comes out as the head rocking from side to side with every step. So
+  // the neck undoes the chest's twist exactly (about the chest's own axis) and then nods: that turn-then-nod, written
+  // as the nod-turn-tilt angles the joints take
+  const nod = -0.22 * run - c * 0.3 - pitch * 0.5;
+  const sb = Math.sin(-twist), cb = Math.cos(-twist), sa = Math.sin(nod), ca = Math.cos(nod);
+  setPose(t, 'neck', Math.atan2(sa, cb * ca), Math.asin(sb * ca), Math.atan2(-sb * sa, cb));
   // Standing: not to attention but ready, feet apart with his weight a little more on one, knees soft, arms hanging
   // clear of his sides with the elbows bent, breathing
   const idle = (1 - move) * (1 - c);
