@@ -130,6 +130,8 @@ const AIR_STYLES = ['reach', 'float', 'arrow']; // how he carries himself betwee
 const CROUCH_PELVIS = 0.5;        // m: the pelvis above the floor in it
 const SWING_STYLES = ['tuck', 'stride', 'layout']; // the other ways he rides a web (see nextSwingStyle)
 const SWING_PUMP_SHARE = 0.5;    // the share of swings ridden the usual way: legs trailing down the arc, kicked forward up it
+const GAIT_SNAP = 19;            // how quickly his joints follow the walk and run cycle (the feel's Snap, if that's quicker): fixed, so a soft feel doesn't smooth his stride away
+const GAIT_SETTLE = 0.72;        // and the damping they follow it with
 const SPLATS = 8;
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -745,6 +747,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // and the level it otherwise glides at)
     gaitPitch: 0,
     footBob: 1,
+    gaitShare: 0,
     plantLevel: 0,
     runPhase: 0,
     climbPhase: 0,
@@ -2555,6 +2558,7 @@ function gaitPose(t, ent, speed, lean) {
   // How much he bobs up and down walking and running (see plantFeet): none of it glides him level, all of it follows his feet
   // exactly, with a little flight between steps on top
   ent.footBob = 1 - move + G.walkBounce * walk + G.runBounce * run;
+  ent.gaitShare = move;
   ent.footLift = 0.08 * G.runBounce * run * Math.max(0, Math.cos(2 * (ent.runPhase - 2.12)));
 }
 
@@ -2763,6 +2767,7 @@ function targetPose(ent, t) {
   ent.footLift = 0;
   ent.gaitPitch = 0;
   ent.footBob = 1;
+  ent.gaitShare = 0;
   const P = HERO_MOVES.poses;
   if (ent.state === 'ground' && ent.brake.time >= 0) {
     addPose(t, P.brake, 1);
@@ -3031,12 +3036,16 @@ function updateSpiderManVisuals(ent, dt, active) {
   }
   const F = HERO_MOVES.feel;
   const swinging = ent.state === 'swing';
+  // (the walk and run are a cycle, not a change of pose: a spring soft enough to flow from one pose to the next would
+  // smooth a fast cycle away, the legs barely moving at a full run. So the cycle is followed at its own fixed
+  // quickness, whatever the feel is set to)
+  const gait = ent.gaitShare || 0;
   for (let left = Math.min(dt, 0.1); left > 1e-6; left -= 1 / 60) {
     const h = Math.min(left, 1 / 60);
     for (const name of JOINTS) {
       const cur = ent.pose[name], want = _target[name], speed = ent.poseSpeed[name];
-      const stiff = !swinging ? F.stiffness : isLegJoint(name) ? F.swingLegStiffness : F.swingStiffness;
-      const damp = 2 * F.damping * stiff;
+      const stiff = swinging ? (isLegJoint(name) ? F.swingLegStiffness : F.swingStiffness) : mix(F.stiffness, Math.max(F.stiffness, GAIT_SNAP), gait);
+      const damp = 2 * (swinging ? F.damping : mix(F.damping, GAIT_SETTLE, gait)) * stiff;
       speed.x += ((want.x - cur.x) * stiff * stiff - speed.x * damp) * h;
       speed.y += ((want.y - cur.y) * stiff * stiff - speed.y * damp) * h;
       speed.z += ((want.z - cur.z) * stiff * stiff - speed.z * damp) * h;
