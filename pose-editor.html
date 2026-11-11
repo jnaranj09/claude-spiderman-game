@@ -132,6 +132,7 @@
       <button data-speed="0.2">⅕</button>
       <button id="replayBtn" title="Into this pose from standing or falling, at the game's own springiness">Replay into pose</button>
       <button id="sideBtn" aria-pressed="false" title="The same move led by his right side">Other side</button>
+      <button id="websBtn" aria-pressed="false" title="The slingshot's webs stuck to the floor ahead instead of high on a building" hidden>Webs on floor</button>
     </div>
     <div class="toolbar" role="group" aria-label="View">
       <span class="lab">View</span>
@@ -205,15 +206,16 @@ const MOVES = [
     extra: { key: 'pace', label: 'Pace', min: 0, max: 13, step: 0.1, value: 13, fmt: (v) => `${v.toFixed(1)} m/s` },
     set: (ent, u, side, m) => { ent.velocity.set(0, 0, m.pace); ent.runPhase = u * TAU; },
     note: 'Not key poses but a cycle: shape it with the walk and run settings below. Pace 0 is his standing stance; he walks up to about 3 m/s and runs from about 7.' },
-  { id: 'perch', label: 'Perch on a roof edge', poses: ['perch'], tilt: ['crouch'], set: (ent) => { ent.perch.on = true; } },
+  { id: 'perch', label: 'Perch on a roof edge', poses: ['perch'], tilt: ['perch'], set: (ent) => { ent.perch.on = true; } },
   { id: 'sling', label: 'Slingshot', poses: ['crouch', 'slingBrace'], at: [0, 7], tilt: ['crouch', 'slingBack'],
     time: { label: 'Drawn back', min: 0, max: 7, fmt: (u) => `${u.toFixed(1)} m` },
     set: (ent, u) => {
       ent.state = 'sling'; const s = ent.sling; s.phase = 'set'; s.draw = u;
-      s.anchors[0].set(5, 14, 20 + u); s.anchors[1].set(-5, 14, 20 + u);
+      if (floorWebs) { s.anchors[0].set(2.5, 0.02, 3.5 + u); s.anchors[1].set(-2.5, 0.02, 3.5 + u); }
+      else { s.anchors[0].set(5, 14, 20 + u); s.anchors[1].set(-5, 14, 20 + u); }
       s.normals[0].set(0, 0, -1); s.normals[1].set(0, 0, -1);
     },
-    note: 'He starts in the crouch and leans back into the brace as he draws. His arms and head follow the webs by themselves.' },
+    note: 'He starts in the first pose and leans back into the second as he draws. Set his arms and head as for webs stuck level with his shoulders: the game raises or lowers them to where the webs really are (here, high on a building; press Webs to try them on the floor).' },
   { id: 'brake', label: 'Landing: web brake', poses: ['brake'], from: 'fall',
     set: (ent) => { ent.brake.time = Math.max(ent.brake.time, 0.2); ent.brake.anchors[0].set(0.4, 0.02, -3); ent.brake.anchors[1].set(-0.4, 0.02, -3); } },
   { id: 'hero', label: 'Landing: knee and fist', poses: ['heroLanding'], tilt: ['heroLanding'], from: 'fall', set: (ent) => { ent.landing = 0.1; } },
@@ -244,7 +246,7 @@ const MOVES = [
   { id: 'glide', label: 'Glide', poses: ['glide'], set: (ent) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.gliding = true; ent.velocity.set(0, -3, 25); } }
 ];
 const POSE_LABEL = {
-  crouch: 'Crouch (undrawn)', slingBrace: 'Braced (drawn)', perch: 'Perch', brake: 'Brake', heroLanding: 'Knee and fist', slide: 'Slide',
+  crouch: 'Start (undrawn)', slingBrace: 'Braced (drawn)', perch: 'Perch', brake: 'Brake', heroLanding: 'Knee and fist', slide: 'Slide',
   swingPumpDown: 'Going down', swingPumpUp: 'Going up', swingTuck: 'Tucked', swingStride: 'Stride', swingLayoutDown: 'Laid out (down)', swingLayoutUp: 'Tucked (up)',
   airReach: 'Rising: reach', airFloat: 'Top: float', airArrow: 'Arrow', airSpread: 'Falling: spread', diveSwan: 'Swan (slow)', diveDart: 'Dart (fast)',
   zip: 'Zip', flip: 'Tuck', glide: 'Glide'
@@ -270,7 +272,7 @@ const GAIT_ROWS = [
   ['runTwist', 'Run: chest twist', 0, 25, 1, 'deg'], ['runBounce', 'Run: bounce', 0, 100, 1, '%']
 ];
 const TILT_ROWS = {
-  crouch: ['crouch', 'Tipped forward', 0, 80, 1, 'deg'], slingBack: ['slingBack', 'Lean back when drawn', 0, 60, 1, 'deg'], heroLanding: ['heroLanding', 'Tipped forward', 0, 70, 1, 'deg'],
+  crouch: ['crouch', 'Tipped forward at the start', -20, 80, 1, 'deg'], perch: ['perch', 'Tipped forward', -20, 80, 1, 'deg'], slingBack: ['slingBack', 'Lean back when drawn', 0, 60, 1, 'deg'], heroLanding: ['heroLanding', 'Tipped forward', 0, 70, 1, 'deg'],
   slideLean: ['slideLean', 'Slide lean back', 20, 75, 1, 'deg'], slideTurn: ['slideTurn', 'Chest turned away', 0, 70, 1, 'deg']
 };
 const FEEL_ROWS = [
@@ -285,7 +287,8 @@ const UNIT = {
 };
 
 // ---- State ----------------------------------------------------------------------------------------------------------
-const DRAFT_KEY = 'spidey-moves-draft-v1';
+const DRAFT_KEY = 'spidey-moves-draft-v2';
+let floorWebs = false;
 let move = MOVES[0], poseName = null, u = 0, playing = false, speed = 1, side = 1, replay = 0;
 const extras = { pace: 13 };
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ moves: clone(HERO_MOVES), at: Date.now() })); } catch (e) { /* storage off */ } }
@@ -369,6 +372,7 @@ function pickMove(id) {
   $('moveSel').value = move.id;
   $('scrub').disabled = $('playBtn').disabled = !move.time;
   $('sideBtn').disabled = !(move.sided || move.id === 'slide');
+  $('websBtn').hidden = move.id !== 'sling';
   $('replayBtn').disabled = Boolean(move.time && move.time.loop);
   let note = move.note || '';
   if (move.poses && move.poses.length > 1) note = `${note} This move blends ${move.poses.length} poses along its timeline: pick one to bend it.`.trim();
@@ -481,6 +485,7 @@ function wireMoves() {
   $('playBtn').addEventListener('click', () => { frame.t = 0; setPlaying(!playing); });
   $('replayBtn').addEventListener('click', () => { setPlaying(false); replay = 0.6; });
   $('sideBtn').addEventListener('click', () => { side = -side; $('sideBtn').setAttribute('aria-pressed', String(side < 0)); });
+  $('websBtn').addEventListener('click', () => { floorWebs = !floorWebs; $('websBtn').setAttribute('aria-pressed', String(floorWebs)); });
   // (the walk & run's pace sits with the timeline's controls)
   const paceRow = sliderRow('Pace', 0, 13, 0.1, extras.pace, (v) => `${v.toFixed(1)} m/s`, (v) => { extras.pace = v; });
   paceRow.id = 'paceRow'; paceRow.style.padding = '0 12px 10px';

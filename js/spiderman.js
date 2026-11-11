@@ -2566,18 +2566,19 @@ function gaitPose(t, ent, speed, lean) {
 // other. Joints a pose leaves out are left as they are (at rest, or as the pose under it has them).
 const HERO_MOVES = {
   poses: {
-    // His crouch (drawing a slingshot, undrawn): down on the balls of his feet, knees wide, one hand down in front
-    // and the other arm out to his side, head back to look up and ahead
-    crouch: { spine: [0.2, 0, 0], neck: [-1.25, 0, 0], shL: [-0.7, 0, 0.75], elL: [-0.9, 0, 0], shR: [-0.35, 0, -1.25], elR: [-0.25, 0, 0],
-      hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [0.2, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [0.2, 0, 0] },
+    // As he sets up a slingshot, the webs just stuck and not yet drawn: both arms held out ahead to them. (The arms
+    // and head are as he holds them for webs stuck level with his shoulders, here and in slingBrace: the game raises
+    // or lowers them to where the webs really are)
+    crouch: { spine: [-0.0524, -0.0873, 0], neck: [-0.087, 0, 0], shL: [-1.658, 0, 0.25], elL: [-0.1, 0, 0], shR: [-1.658, 0, -0.25], elR: [-0.1, 0, 0],
+      hipL: [-0.7156, 0.5061, 0.2618], knL: [0.2967, 0, 0], ftL: [0.2967, 0, 0], hipR: [-0.8029, -0.1396, -0.3316], knR: [0.5934, 0, 0], ftR: [0.0175, 0, 0] },
     // Perched on a roof's edge: hunched right over, both arms straight down between his knees, fingertips on the
     // roof just ahead of his feet, head lifted to look down over the edge
-    perch: { spine: [0.8, 0, 0], neck: [-0.45, 0, 0], shL: [-1.35, 0, -0.15], elL: [-0.05, 0, 0], shR: [-1.35, 0, 0.15], elR: [-0.05, 0, 0],
-      hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [0.2, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [0.2, 0, 0] },
-    // Leaning back against a drawn slingshot: sat back on his heels with his feet braced out ahead, back a little
-    // rounded (his arms and head follow the webs)
-    slingBrace: { spine: [0.3, 0, 0], neck: [-0.15, 0, 0], hipL: [-1.05, 0, 0.32], knL: [1.45, 0, 0], ftL: [-0.3, 0, 0],
-      hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [-0.3, 0, 0] },
+    perch: { spine: [0.3491, 0.0175, 0.0175], neck: [-0.6283, -0.4014, -0.2269], shL: [-0.3316, -0.3142, 0.5236], elL: [-1.501, 0, 0], shR: [-1.0996, 0, 0.15], elR: [-0.1396, 0, 0],
+      hipL: [-2.1, 0, 0.45], knL: [2.3, 0, 0], ftL: [-0.7854, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [-0.7854, 0, 0] },
+    // Leaning back against a drawn slingshot: sat back with his feet braced out ahead, back a little rounded
+    slingBrace: { spine: [0.3, 0, 0], neck: [0.45, 0, 0], shL: [-1.12, 0, 0.25], elL: [-0.1, 0, 0], shR: [-1.12, 0, -0.25], elR: [-0.1, 0, 0],
+      hipL: [-0.9076, 0, 0.32], knL: [1.45, 0, 0], ftL: [0.2967, 0, 0],
+      hipR: [-1.05, 0, -0.32], knR: [1.45, 0, 0], ftR: [0.2967, 0, 0] },
     // Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front
     // knee, both arms thrown straight back to the webs, head up
     brake: { spine: [0.6, 0, 0], neck: [-0.7, 0, 0], shL: [1.05, 0, 0.3], elL: [-0.08, 0, 0], shR: [1.05, 0, -0.3], elR: [-0.08, 0, 0],
@@ -2642,13 +2643,13 @@ const HERO_MOVES = {
   // swing, how far out from his sides he carries them running and how bent they are, the lean, the chest's twist
   // against the hips, and how much he bobs up and down walking and running (a share: 0 glides level, 1 follows his feet's every rise and fall)
   gait: {
-    walkStride: 0.42, walkKnee: 0.85, walkArms: 0.4, walkBounce: 0.5,
-    runStride: 0.8, runReach: 0.25, runKnee: 1.75, runArms: 0.75, runArmsOut: 0.16, runElbow: 1.3, runLean: 0.3, runTwist: 0.16, runBounce: 0.35
+    walkStride: 0.2443, walkKnee: 0.4189, walkArms: 0.2618, walkBounce: 0.05,
+    runStride: 0.9599, runReach: 0.1745, runKnee: 2.0246, runArms: 0.9774, runArmsOut: 0.192, runElbow: 1.501, runLean: 0.4538, runTwist: 0.3142, runBounce: 0.2
   },
-  // How far the whole figure tips (rad): forward in his crouch and in the hard landing, back against a drawn
+  // How far the whole figure tips (rad): forward as he sets up a slingshot, perched, and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
   // far his chest turns away from the way he slides
-  tilt: { crouch: 0.75, heroLanding: 0.45, slingBack: 0.5, slideLean: 0.95, slideTurn: 0.45 },
+  tilt: { crouch: 0.1396, perch: 0.1396, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler) and how much they overshoot and
   // settle (damping 1: none), how hard he leans into turns in the air, and how far his head leads a turn
   feel: { stiffness: 19, swingStiffness: 13, damping: 0.72, bank: 0.3, headLook: 0.6 }
@@ -2719,7 +2720,7 @@ function slingLean(ent) {
 }
 function crouchPitch(ent) {
   const T = HERO_MOVES.tilt;
-  return ent.state === 'sling' ? mix(T.crouch, -T.slingBack, slingLean(ent)) : T.crouch;
+  return ent.state === 'sling' ? mix(T.crouch, -T.slingBack, slingLean(ent)) : T.perch;
 }
 
 function crouched(ent) {
@@ -2759,24 +2760,19 @@ function targetPose(ent, t) {
   } else if (ent.state === 'wall') {
     crawlPose(t, ent, Math.cos(ent.wall.angle) < -0.5);
   } else if (ent.state === 'sling') {
-    // Drawing the slingshot. He starts in his crouch, tipped forward; as he draws the webs back he leans back against
-    // them, sat back on his heels with his feet braced out ahead. Both arms are held out towards where the webs stick
-    // all along (higher for webs high on a building, level for ones on the floor ahead); short shuffling steps
+    // Drawing the slingshot. He starts in the crouch pose and, as he draws the webs back, leans back against them
+    // into the brace pose (the whole figure tipping with it: crouchPitch). Both poses hold his arms and head as for
+    // webs stuck level with his shoulders; they're raised (or lowered) from there to where the webs really are:
+    // high on a building, or on the floor ahead. Short shuffling steps as he backs off
     addPose(t, P.crouch, 1);
-    const lean = slingLean(ent);
-    leanPose(t, P.slingBrace, lean);
+    leanPose(t, P.slingBrace, slingLean(ent));
     const s = Math.sin(ent.runPhase);
     const [a0, a1] = ent.sling.anchors;
     const ahead = Math.hypot((a0.x + a1.x) * 0.5 - ent.position.x, (a0.z + a1.z) * 0.5 - ent.position.z);
     const rise = Math.atan2((a0.y + a1.y) * 0.5 - ent.position.y - 0.85, Math.max(ahead, 0.5));
-    // (from however far forward his chest is tipped, a quarter turn more is level)
-    const reach = -Math.max(0.9, Math.min(3.1, crouchPitch(ent) + t.spine.x + Math.PI / 2 + rise));
-    // (and his head follows them)
-    t.neck.x = Math.max(-1.3, Math.min(0.3, -(crouchPitch(ent) + t.spine.x) - rise * 0.8));
-    setPose(t, 'shL', reach, 0, 0.25);
-    setPose(t, 'shR', reach, 0, -0.25);
-    setPose(t, 'elL', -0.1, 0, 0);
-    setPose(t, 'elR', -0.1, 0, 0);
+    t.shL.x = Math.max(-3.1, t.shL.x - rise);
+    t.shR.x = Math.max(-3.1, t.shR.x - rise);
+    t.neck.x -= rise * 0.8;
     t.hipL.x -= s * 0.12;
     t.hipR.x += s * 0.12;
   } else if (ent.gliding) {
