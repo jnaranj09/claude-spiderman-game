@@ -226,11 +226,11 @@ const MOVES = [
     note: 'The wall is behind him. Slide lean is what brings the trailing hand onto the wall.' },
   { id: 'pump', label: 'Swing: the usual way', poses: ['swingPumpDown', 'swingPumpUp'], at: [-1, 1], sided: true,
     time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('pump'), web: 'pump' },
-  { id: 'tuck', label: 'Swing: tucked', poses: ['swingTuck'], sided: true,
+  { id: 'tuck', label: 'Swing: cannonball, then spider crouch', poses: ['swingTuckDown', 'swingTuckUp'], at: [-1, 1], sided: true,
     time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('tuck'), web: 'tuck' },
-  { id: 'stride', label: 'Swing: stride', poses: ['swingStride'], sided: true,
+  { id: 'stride', label: 'Swing: stride (the legs scissor)', poses: ['swingStrideDown', 'swingStrideUp'], at: [-1, 1], sided: true,
     time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('stride'), web: 'stride' },
-  { id: 'layout', label: 'Swing: laid out, then tucked', poses: ['swingLayoutDown', 'swingLayoutUp'], at: [-1, 1], sided: true,
+  { id: 'layout', label: 'Swing: laid out (a bow, bent back then forward)', poses: ['swingLayoutDown', 'swingLayoutUp'], at: [-1, 1], sided: true,
     time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('layout'), web: 'layout' },
   { id: 'airReach', label: 'Between webs: reaching', poses: ['airReach', 'airSpread'], at: [-9, 9], sided: true,
     time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('reach'), air: 'reach' },
@@ -249,7 +249,7 @@ const MOVES = [
 ];
 const POSE_LABEL = {
   crouch: 'Start (undrawn)', slingBrace: 'Braced (drawn)', perch: 'Perch', brake: 'Brake', heroLanding: 'Knee and fist', slide: 'Slide',
-  swingPumpDown: 'Going down', swingPumpUp: 'Going up', swingTuck: 'Tucked', swingStride: 'Stride', swingLayoutDown: 'Laid out (down)', swingLayoutUp: 'Tucked (up)',
+  swingPumpDown: 'Going down', swingPumpUp: 'Going up', swingTuckDown: 'Cannonball (down)', swingTuckUp: 'Spider crouch (up)', swingStrideDown: 'Far knee up (down)', swingStrideUp: 'Scissored (up)', swingLayoutDown: 'Arched (down)', swingLayoutUp: 'Swung through (up)',
   airReach: 'Rising: reach', airFloat: 'Top: float', airArrow: 'Arrow', airSpread: 'Falling: spread', diveSwan: 'Swan (slow)', diveDart: 'Dart (fast)',
   zip: 'Zip', flip: 'Tuck', glide: 'Glide'
 };
@@ -296,7 +296,7 @@ const UNIT = {
 };
 
 // ---- State ----------------------------------------------------------------------------------------------------------
-const DRAFT_KEY = 'spidey-moves-draft-v2';
+const DRAFT_KEY = 'spidey-moves-draft-v3';
 let floorWebs = false, seq = false, seqT = 0, turning = false, turnYaw = 0;
 let move = MOVES[0], poseName = null, u = 0, playing = false, speed = 1, side = 1, replay = 0;
 const extras = { pace: 13 };
@@ -343,7 +343,7 @@ function buildControls() {
     });
   }
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));
-  if (move.id === 'pump' || move.id === 'layout') box.append(section('Timing along the arc', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, r)), true,
+  if (move.web) box.append(section('Timing along the arc', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, r)), true,
     'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it; both of the two-pose swings share these.'));
   if (move.tilt) box.append(section('Whole figure', move.tilt.map((k) => tableRow(HERO_MOVES.tilt, TILT_ROWS[k]))));
   box.append(section('Feel of the motion', FEEL_ROWS.map((r) => tableRow(HERO_MOVES.feel, r)), false,
@@ -588,7 +588,7 @@ function wireKeep() {
     if (poseName) HERO_MOVES.poses[poseName] = clone(HERO_MOVES_DEFAULT.poses[poseName]);
     if (move.group === 'gait') Object.assign(HERO_MOVES.gait, HERO_MOVES_DEFAULT.gait);
     for (const k of move.tilt || []) HERO_MOVES.tilt[k] = HERO_MOVES_DEFAULT.tilt[k];
-    if (move.id === 'pump' || move.id === 'layout') Object.assign(HERO_MOVES.swing, HERO_MOVES_DEFAULT.swing);
+    if (move.web) Object.assign(HERO_MOVES.swing, HERO_MOVES_DEFAULT.swing);
     buildControls(); changed();
   });
   $('resetAllBtn').addEventListener('click', () => { setHeroMoves(clone(HERO_MOVES_DEFAULT)); buildControls(); changed(); });

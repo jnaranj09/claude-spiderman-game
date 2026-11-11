@@ -182,7 +182,9 @@ animation code on a made-up state, so you pick a move, drag its timeline (or pla
 bend his joints.
 
 The rest of how he moves: each joint follows its pose like a damped spring (quick, with a little overshoot and
-settle); between webs he carries himself one of three ways, picked at each take-off (reaching for the next web, a
+settle); on a web he rides one of four ways, each a pair of poses (going down the arc, going up it) with the legs
+snapping through at the bottom: the usual trail-then-pike, a cannonball that opens into a spider's crouch, a stride
+whose legs scissor, and a laid-out bow that bends back then forward; between webs he carries himself one of three ways, picked at each take-off (reaching for the next web, a
 tucked float over the top of the arc, or swept back like an arrow), opening into a spread as he falls; a dive starts
 as a swan dive and draws in to a dart at speed; hanging from one hand hitches that shoulder up; he leans into turns
 and his head turns first towards where the stick points; a drop of 5 m or more with little pace lands on a knee and a
