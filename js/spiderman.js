@@ -2598,10 +2598,10 @@ const HERO_MOVES = {
       hipL: [-0.5, 0, 0.25], knL: [0.15, 0, 0], ftL: [0.8, 0, 0], hipR: [-1.3, 0, -0.55], knR: [2.2, 0, 0], ftR: [0.1, 0, 0] },
     // On a web, the usual way: legs together, trailing a little behind him down the arc (and that shoulder hitched
     // up, his chest turned a little towards it, as in all of these)...
-    swingPumpDown: { spine: [-0.2618, -0.2967, 0.16], neck: [-0.3491, 0.3316, -0.0698], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.7], elR: [-0.3, 0, 0],
-      hipL: [0.34, 0, 0.06], knL: [0.9076, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
+    swingPumpDown: { spine: [-0.2618, -0.2967, 0.16], neck: [-0.384, 0.3316, -0.0873], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.7], elR: [-0.3, 0, 0],
+      hipL: [0.34, 0.5061, 0.06], knL: [0.9076, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
     // ...then kicked forward from the bottom and held out ahead up the far side, the free arm reaching on
-    swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.3316, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5934, -0.9948, -0.8727], elR: [-0.8203, 0, 0],
+    swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.4712, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5934, -0.9948, -0.8727], elR: [-0.8203, 0, 0],
       hipL: [-1.4312, 0, 0.192], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.1868, 0, -0.06], knR: [0.18, 0, 0], ftR: [0.55, 0, 0] },
     // Tucked: one knee up, the other leg trailing
     swingTuck: { spine: [0.12, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.6, 0, -1.0], elR: [-0.9, 0, 0],
@@ -2647,8 +2647,8 @@ const HERO_MOVES = {
   // swing, how far out from his sides he carries them running and how bent they are, the lean, the chest's twist
   // against the hips, and how much he bobs up and down walking and running (a share: 0 glides level, 1 follows his feet's every rise and fall)
   gait: {
-    walkStride: 0.2443, walkKnee: 0.4189, walkArms: 0.2618, walkBounce: 0.05, walkLean: 0.1,
-    runStride: 0.9599, runReach: 0.1745, runKnee: 2.0246, runArms: 0.9774, runArmsOut: 0.192, runElbow: 1.501, runLean: 0.4538, runTwist: 0.3142, runBounce: 0.2
+    walkStride: 0.3142, walkKnee: 0.4189, walkArms: 0.5585, walkBounce: 0.49, walkLean: 0.1,
+    runStride: 1.2217, runReach: 0.192, runKnee: 2.1817, runArms: 0.9774, runArmsOut: 0.192, runElbow: 1.501, runLean: 0.4538, runTwist: 0.3142, runBounce: 0.1
   },
   // How far the whole figure tips (rad): forward as he sets up a slingshot, perched, and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
@@ -2662,7 +2662,7 @@ const HERO_MOVES = {
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, and how far his head leads a turn
-  feel: { stiffness: 10, swingStiffness: 5.5, swingLegStiffness: 14, damping: 0.72, bank: 0.3, headLook: 0.6 }
+  feel: { stiffness: 6, swingStiffness: 7.5, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
