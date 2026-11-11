@@ -134,6 +134,7 @@
       <button id="sideBtn" aria-pressed="false" title="The same move led by his right side">Other side</button>
       <button id="seqBtn" aria-pressed="false" title="At the game's own pace: falling, the web catches, down and up the arc, let go, over the top. The sudden changes are where Snap and Settle show" hidden>Play a whole swing</button>
       <button id="turnBtn" aria-pressed="false" title="As if steered left all the time: shows the lean into turns and the head leading" hidden>Turning</button>
+      <button id="sideWebBtn" aria-pressed="true" title="In the game a web sticks to a building well off to one side of him, not straight ahead. On: the web is 13 m to the side, as in the game. Off: almost straight ahead" hidden>Web off to the side</button>
       <button id="websBtn" aria-pressed="false" title="The slingshot's webs stuck to the floor ahead instead of high on a building" hidden>Webs on floor</button>
     </div>
     <div class="toolbar" role="group" aria-label="View">
@@ -195,7 +196,7 @@ const onWeb = (style) => (ent, u, side) => {
   ent.position.set(0, 1.2, 0); ent.state = 'swing';
   const w = ent.web, a = -u * 0.7, len = 26;
   w.phase = 'attached'; w.style = style; w.arc = u; w.side = side; w.double = false; w.swingTime = 2; w.shotTime = 9; w.distance = len;
-  w.anchor.set(side * 1.5, 2.2 + Math.cos(a) * len, Math.sin(a) * len);
+  w.anchor.set(side * (sideWeb ? 13 : 1.5), 2.2 + Math.cos(a) * len, Math.sin(a) * len);
   w.aim.copy(w.anchor); w.pivot.copy(w.anchor); w.normal.set(0, -1, 0);
   ent.velocity.set(0, u * 10, 22);
 };
@@ -279,7 +280,7 @@ const TILT_ROWS = {
 };
 const FEEL_ROWS = [
   ['stiffness', 'Snap', 6, 40, 0.5, 'x'], ['swingStiffness', 'Snap on a web: arms, chest, head', 3, 30, 0.5, 'x'], ['swingLegStiffness', 'Snap on a web: legs', 3, 40, 0.5, 'x'], ['damping', 'Settle (low: bouncy)', 0.3, 1, 0.01, 'x2'],
-  ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2'], ['webAim', 'Points before the web leaves', 0, 0.4, 0.01, 's']
+  ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2'], ['webAim', 'Points before the web leaves', 0, 0.4, 0.01, 's'], ['webSideLean', 'Body tips towards a web off to the side', 0, 100, 1, '%']
 ];
 // When along the arc a two-pose swing changes from one pose to the other (arc: -1 .. 1; shown as shares of it)
 const SWING_ROWS = [
@@ -297,7 +298,7 @@ const UNIT = {
 
 // ---- State ----------------------------------------------------------------------------------------------------------
 const DRAFT_KEY = 'spidey-moves-draft-v4';
-let floorWebs = false, seq = false, seqT = 0, turning = false, turnYaw = 0;
+let sideWeb = true, floorWebs = false, seq = false, seqT = 0, turning = false, turnYaw = 0;
 let move = MOVES[0], poseName = null, u = 0, playing = false, speed = 1, side = 1, replay = 0;
 const extras = { pace: 13 };
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ moves: clone(HERO_MOVES), at: Date.now() })); } catch (e) { /* storage off */ } }
@@ -387,6 +388,7 @@ function pickMove(id) {
   $('scrub').disabled = $('playBtn').disabled = !move.time;
   $('sideBtn').disabled = !(move.sided || move.id === 'slide');
   $('websBtn').hidden = move.id !== 'sling';
+  $('sideWebBtn').hidden = !move.web;
   $('seqBtn').hidden = !(move.web || move.air);
   $('turnBtn').hidden = !(move.web || move.air || move.id === 'gait');
   if ($('seqBtn').hidden) setSeq(false);
@@ -536,6 +538,7 @@ function wireMoves() {
   $('sideBtn').addEventListener('click', () => { side = -side; $('sideBtn').setAttribute('aria-pressed', String(side < 0)); });
   $('seqBtn').addEventListener('click', () => { setPlaying(false); setSeq(!seq); });
   $('turnBtn').addEventListener('click', () => setTurning(!turning));
+  $('sideWebBtn').addEventListener('click', () => { sideWeb = !sideWeb; $('sideWebBtn').setAttribute('aria-pressed', String(sideWeb)); });
   $('websBtn').addEventListener('click', () => { floorWebs = !floorWebs; $('websBtn').setAttribute('aria-pressed', String(floorWebs)); });
   // (the walk & run's pace sits with the timeline's controls)
   const paceRow = sliderRow('Pace', 0, 13, 0.1, extras.pace, (v) => `${v.toFixed(1)} m/s`, (v) => { extras.pace = v; });

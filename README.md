@@ -192,7 +192,9 @@ and his head turns first towards where the stick points; a drop of 5 m or more w
 fist; and standing, he's at ease rather than to attention. He points before he shoots: his web arm is turned onto
 the stick point in a beat (`feel.webAim`) before the strand is seen to leave his wrist, and held on it while his body
 turns to the web's line. The beat is only in what's drawn: the swing itself starts when it always did, so a longer
-beat costs no responsiveness (the web starts springy, so he isn't hauled round by a strand that isn't there yet).
+beat costs no responsiveness (the web starts springy, so he isn't hauled round by a strand that isn't there yet). On a web his body keeps to
+the line of his arc: he doesn't tip over sideways towards a web stuck to a building off to one side, his arm goes out
+to it instead (`feel.webSideLean`: 0 not at all, 1 hanging in line with it).
 
 There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.

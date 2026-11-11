@@ -134,6 +134,7 @@ const CROUCH_PELVIS = 0.5;        // m: the pelvis above the floor in it
 const SWING_STYLES = ['tuck', 'stride', 'layout']; // the other ways he rides a web (see nextSwingStyle)
 const SWING_PUMP_SHARE = 0.5;    // the share of swings ridden the usual way: legs trailing down the arc, kicked forward up it
 const SWING_POSES = { pump: ['swingPumpDown', 'swingPumpUp'], tuck: ['swingTuckDown', 'swingTuckUp'], stride: ['swingStrideDown', 'swingStrideUp'], layout: ['swingLayoutDown', 'swingLayoutUp'] };
+const SWING_BOTH_HANDS = { layout: true }; // the ways of riding a web that hold it in both hands
 const GAIT_SNAP = 19;            // how quickly his joints follow the walk and run cycle (the feel's Snap, if that's quicker): fixed, so a soft feel doesn't smooth his stride away
 const GAIT_SETTLE = 0.72;        // and the damping they follow it with
 const SPLATS = 8;
@@ -2690,8 +2691,9 @@ const HERO_MOVES = {
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
-  // point before a swing web leaves his wrist (seconds)
-  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.3 }
+  // point before a swing web leaves his wrist (seconds), and how much of the way his whole body tips over towards a
+  // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
+  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.3, webSideLean: 0 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
@@ -2885,6 +2887,16 @@ const _axis = new THREE.Vector3();
 // Orientation of the whole figure: upright on the ground, hanging along the web while swinging, leaning into the
 // flight path in the air, chest to the wall (head the way he crawls) when crawling, feet to the wall when running
 // along it
+// The way up his web from him, with only `share` of how far it runs off to his side (0: as much of the line as lies
+// along his arc, ahead of or behind him; 1: the line itself)
+function webLine(ent, out, share) {
+  const web = ent.web, p = ent.position;
+  out.set(web.aim.x - p.x, web.aim.y - p.y - 1.0, web.aim.z - p.z);
+  const lx = Math.cos(ent.heading), lz = -Math.sin(ent.heading);
+  const across = (out.x * lx + out.z * lz) * (1 - share);
+  out.x -= lx * across; out.z -= lz * across;
+  return out.normalize();
+}
 function bodyOrientation(ent, out) {
   const v = ent.velocity;
   const p = ent.position;
@@ -2933,7 +2945,9 @@ function bodyOrientation(ent, out) {
     else if (web.phase === 'shooting') toWeb = 0.3 * Math.min(1, web.travelled / Math.max(1, web.distance));
     if (toWeb > 0) {
       toWeb = toWeb * toWeb * (3 - 2 * toWeb);
-      _axis.set(web.aim.x - p.x, web.aim.y - p.y - 1.0, web.aim.z - p.z).normalize();
+      // (the line of the web as far as it runs along his arc: he doesn't tip over sideways to a web stuck to a
+      // building off to one side, his arm goes out to it instead, see aimWebArms. Whipping round a corner he does)
+      webLine(ent, _axis, ent.state === 'whip' ? 1 : HERO_MOVES.feel.webSideLean);
       _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
     }
     _by.normalize();
@@ -3056,6 +3070,8 @@ const _qChestNow = new THREE.Quaternion();
 const _qArmNow = new THREE.Quaternion();
 const _qArmPose = new THREE.Quaternion();
 const _qArmAim = new THREE.Quaternion();
+const _qChestBack = new THREE.Quaternion();
+const _qSide = new THREE.Quaternion();
 const _armDir = new THREE.Vector3();
 const _armRest = new THREE.Vector3();
 // How much of the strand to a web's anchor `distance` away is out: none while he's still pointing, then it flies
@@ -3084,24 +3100,37 @@ function aimWebArms(ent, dt, pelvis) {
     A.at[0].copy(zip.anchor);
   }
   A.weight = want >= A.weight ? want : A.weight + (want - A.weight) * (1 - Math.exp(-dt * rate));
-  if (A.weight < 0.002) { A.weight = 0; return false; }
+  if (A.weight < 0.002) A.weight = 0;
+  // Hanging on a web stuck off to one side, his body keeps to the line of his arc (see webLine) and the web arm goes
+  // out to the web: the pose's arm, turned by as far as the web runs off to the side (both arms, where both hold it)
+  const out = ent.state === 'swing' && web.phase === 'attached' && !web.double && HERO_MOVES.feel.webSideLean < 1;
+  if (!A.weight && !out) return false;
   quatOfAngles(_qChestNow, ent.pose.spine).premultiply(ent.bodyQuat);
+  _qChestBack.copy(_qChestNow).invert();
+  if (out) {
+    _qSide.setFromUnitVectors(webLine(ent, _armRest, HERO_MOVES.feel.webSideLean), webLine(ent, _armDir, 1));
+    _qSide.premultiply(_qChestBack).multiply(_qChestNow);
+  }
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 1 : -1;
     const sh = ent.pose[i === 0 ? 'shL' : 'shR'], el = ent.pose[i === 0 ? 'elL' : 'elR'];
     const keep = _armKeep[i];
     keep.x = sh.x; keep.y = sh.y; keep.z = sh.z; keep.el = el.x;
-    const at = side === A.side ? A.at[0] : A.double ? A.at[1] : null;
-    if (!at) continue;
-    // The way to it from his shoulder (near enough: it's tens of metres off), as his chest sees it
-    _armDir.set(side * 0.19, 0.48, 0).applyQuaternion(ent.bodyQuat).add(pelvis);
-    _armDir.subVectors(at, _armDir).normalize().applyQuaternion(_qArmAim.copy(_qChestNow).invert());
-    // The arm as the pose would have it (for the turn of the wrist), swung the short way onto that line
-    quatOfAngles(_qArmPose, _target[i === 0 ? 'shL' : 'shR']);
-    _armRest.set(0, -1, 0).applyQuaternion(_qArmPose);
-    _qArmAim.setFromUnitVectors(_armRest, _armDir).multiply(_qArmPose);
-    anglesOfQuat(sh, quatOfAngles(_qArmNow, sh).slerp(_qArmAim, A.weight));
-    el.x += (-0.08 - el.x) * A.weight;
+    quatOfAngles(_qArmNow, sh);
+    if (out && (side === web.side || SWING_BOTH_HANDS[web.style])) _qArmNow.premultiply(_qSide);
+    const at = !A.weight ? null : side === A.side ? A.at[0] : A.double ? A.at[1] : null;
+    if (at) {
+      // The way to it from his shoulder (near enough: it's tens of metres off), as his chest sees it
+      _armDir.set(side * 0.19, 0.48, 0).applyQuaternion(ent.bodyQuat).add(pelvis);
+      _armDir.subVectors(at, _armDir).normalize().applyQuaternion(_qChestBack);
+      // The arm as the pose would have it (for the turn of the wrist), swung the short way onto that line
+      quatOfAngles(_qArmPose, _target[i === 0 ? 'shL' : 'shR']);
+      _armRest.set(0, -1, 0).applyQuaternion(_qArmPose);
+      _qArmAim.setFromUnitVectors(_armRest, _armDir).multiply(_qArmPose);
+      _qArmNow.slerp(_qArmAim, A.weight);
+      el.x += (-0.08 - el.x) * A.weight;
+    }
+    anglesOfQuat(sh, _qArmNow);
   }
   return true;
 }
