@@ -132,6 +132,8 @@
       <button data-speed="0.2">⅕</button>
       <button id="replayBtn" title="Into this pose from standing or falling, at the game's own springiness">Replay into pose</button>
       <button id="sideBtn" aria-pressed="false" title="The same move led by his right side">Other side</button>
+      <button id="seqBtn" aria-pressed="false" title="At the game's own pace: falling, the web catches, down and up the arc, let go, over the top. The sudden changes are where Snap and Settle show" hidden>Play a whole swing</button>
+      <button id="turnBtn" aria-pressed="false" title="As if steered left all the time: shows the lean into turns and the head leading" hidden>Turning</button>
       <button id="websBtn" aria-pressed="false" title="The slingshot's webs stuck to the floor ahead instead of high on a building" hidden>Webs on floor</button>
     </div>
     <div class="toolbar" role="group" aria-label="View">
@@ -204,7 +206,7 @@ const inAir = (style) => (ent, u, side) => {
 const MOVES = [
   { id: 'gait', label: 'Walk & run', group: 'gait', time: { label: 'Stride', min: 0, max: 1, loop: true, fmt: (u) => `${Math.round(u * 100)}%`, period: (m) => TAU / (4 + m.pace * 0.75) },
     extra: { key: 'pace', label: 'Pace', min: 0, max: 13, step: 0.1, value: 13, fmt: (v) => `${v.toFixed(1)} m/s` },
-    set: (ent, u, side, m) => { ent.velocity.set(0, 0, m.pace); ent.runPhase = u * TAU; },
+    set: (ent, u, side, m) => { ent.velocity.set(0, 0, m.pace); ent.speed = m.pace; ent.runPhase = u * TAU; },
     note: 'Not key poses but a cycle: shape it with the walk and run settings below. Pace 0 is his standing stance; he walks up to about 3 m/s and runs from about 7.' },
   { id: 'perch', label: 'Perch on a roof edge', poses: ['perch'], tilt: ['perch'], set: (ent) => { ent.perch.on = true; } },
   { id: 'sling', label: 'Slingshot', poses: ['crouch', 'slingBrace'], at: [0, 7], tilt: ['crouch', 'slingBack'],
@@ -223,19 +225,19 @@ const MOVES = [
     set: (ent, u, side) => onWall(ent, -side, 0, -side),
     note: 'The wall is behind him. Slide lean is what brings the trailing hand onto the wall.' },
   { id: 'pump', label: 'Swing: the usual way', poses: ['swingPumpDown', 'swingPumpUp'], at: [-1, 1], sided: true,
-    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('pump') },
+    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('pump'), web: 'pump' },
   { id: 'tuck', label: 'Swing: tucked', poses: ['swingTuck'], sided: true,
-    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('tuck') },
+    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('tuck'), web: 'tuck' },
   { id: 'stride', label: 'Swing: stride', poses: ['swingStride'], sided: true,
-    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('stride') },
+    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('stride'), web: 'stride' },
   { id: 'layout', label: 'Swing: laid out, then tucked', poses: ['swingLayoutDown', 'swingLayoutUp'], at: [-1, 1], sided: true,
-    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('layout') },
+    time: { label: 'Along the arc', min: -1, max: 1, fmt: (u) => (u < -0.05 ? 'going down' : u > 0.05 ? 'going up' : 'bottom') }, set: onWeb('layout'), web: 'layout' },
   { id: 'airReach', label: 'Between webs: reaching', poses: ['airReach', 'airSpread'], at: [-9, 9], sided: true,
-    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('reach') },
+    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('reach'), air: 'reach' },
   { id: 'airFloat', label: 'Between webs: float', poses: ['airReach', 'airFloat', 'airSpread'], at: [-9, 0, 9], sided: true,
-    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('float') },
+    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('float'), air: 'float' },
   { id: 'airArrow', label: 'Between webs: arrow', poses: ['airArrow', 'airSpread'], at: [-9, 9], sided: true,
-    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('arrow') },
+    time: { label: 'Rising to falling', min: -9, max: 9, fmt: (u) => (u < -1 ? 'rising' : u > 1 ? 'falling' : 'top') }, set: inAir('arrow'), air: 'arrow' },
   { id: 'dive', label: 'Dive', poses: ['diveSwan', 'diveDart'], at: [8, 34],
     time: { label: 'Fall speed', min: 8, max: 34, fmt: (u) => `${Math.round(u)} m/s` },
     set: (ent, u) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.diving = true; ent.velocity.set(0, -u, 4); } },
@@ -288,7 +290,7 @@ const UNIT = {
 
 // ---- State ----------------------------------------------------------------------------------------------------------
 const DRAFT_KEY = 'spidey-moves-draft-v2';
-let floorWebs = false;
+let floorWebs = false, seq = false, seqT = 0, turning = false, turnYaw = 0;
 let move = MOVES[0], poseName = null, u = 0, playing = false, speed = 1, side = 1, replay = 0;
 const extras = { pace: 13 };
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ moves: clone(HERO_MOVES), at: Date.now() })); } catch (e) { /* storage off */ } }
@@ -336,7 +338,7 @@ function buildControls() {
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));
   if (move.tilt) box.append(section('Whole figure', move.tilt.map((k) => tableRow(HERO_MOVES.tilt, TILT_ROWS[k]))));
   box.append(section('Feel of the motion', FEEL_ROWS.map((r) => tableRow(HERO_MOVES.feel, r)), false,
-    'Applies to every move. Snap: how fast his joints get to a pose. Settle: below 1 they overshoot a little and settle, lower is bouncier. Press Replay into pose or Play to see it.'));
+    'Applies to every move. Snap: how fast his joints get to a pose. Settle: below 1 they overshoot a little and settle, lower is bouncier. Both only show when the pose changes suddenly: on a swing or between webs press Play a whole swing; on a held pose, Replay into pose. Lean into turns and Head leads turns show with Turning on.'));
 }
 function buildPoseKeys() {
   const keys = $('poseKeys'); keys.textContent = '';
@@ -349,7 +351,7 @@ function buildPoseKeys() {
       poseName = name;
       // (to where on the timeline the move is all this pose)
       if (move.at) setU(move.at[i]);
-      setPlaying(false);
+      setPlaying(false); setSeq(false);
       buildPoseKeys(); buildControls();
     });
     keys.append(b);
@@ -361,7 +363,10 @@ function setU(value) {
   $('scrub').value = T ? Math.round((u - T.min) / (T.max - T.min) * 1000) : 0;
   $('scrubOut').textContent = T ? T.fmt(u) : '';
 }
+function setSeq(on) { seq = on; seqT = 0; $('seqBtn').setAttribute('aria-pressed', String(on)); }
+function setTurning(on) { turning = on; if (!on) { turnYaw = 0; ent.animHeading = 0; } $('turnBtn').setAttribute('aria-pressed', String(on)); }
 function setPlaying(on) {
+  if (on) setSeq(false);
   playing = on && Boolean(move.time);
   $('playBtn').setAttribute('aria-pressed', String(playing));
   $('playBtn').textContent = playing ? 'Pause' : 'Play';
@@ -373,6 +378,10 @@ function pickMove(id) {
   $('scrub').disabled = $('playBtn').disabled = !move.time;
   $('sideBtn').disabled = !(move.sided || move.id === 'slide');
   $('websBtn').hidden = move.id !== 'sling';
+  $('seqBtn').hidden = !(move.web || move.air);
+  $('turnBtn').hidden = !(move.web || move.air || move.id === 'gait');
+  if ($('seqBtn').hidden) setSeq(false);
+  if ($('turnBtn').hidden) setTurning(false);
   $('replayBtn').disabled = Boolean(move.time && move.time.loop);
   let note = move.note || '';
   if (move.poses && move.poses.length > 1) note = `${note} This move blends ${move.poses.length} poses along its timeline: pick one to bend it.`.trim();
@@ -409,7 +418,8 @@ function placeCamera(dt) {
   const p = ent.position, o = ent.pelvisOffset;
   look.lerp(new THREE.Vector3(p.x + o.x, p.y + o.y * 0.9, p.z + o.z), dt ? 1 - Math.exp(-dt * 6) : 1);
   const c = Math.cos(orbit.pitch);
-  camera.position.set(look.x + Math.sin(orbit.yaw) * c * orbit.dist, look.y - Math.sin(orbit.pitch) * orbit.dist, look.z + Math.cos(orbit.yaw) * c * orbit.dist);
+  const yaw = orbit.yaw + turnYaw;
+  camera.position.set(look.x + Math.sin(yaw) * c * orbit.dist, look.y - Math.sin(orbit.pitch) * orbit.dist, look.z + Math.cos(yaw) * c * orbit.dist);
   camera.lookAt(look);
 }
 
@@ -418,7 +428,17 @@ function resetEnt() {
   ent.state = 'ground'; ent.position.set(0, 0, 0); ent.velocity.set(0, 0, 0); ent.heading = 0; ent.crouch = 0; ent.speed = 0;
   ent.web.phase = 'none'; ent.zip.time = -1; ent.flip = ent.roll = 1; ent.gliding = ent.diving = false; ent.landing = -1;
   ent.sling.phase = 'none'; ent.sling.draw = 0; ent.perch.on = ent.perch.going = false; ent.stickYaw = null;
-  ent.animState = 'air'; ent.animHeading = 0; ent.bank = 0;
+  ent.animState = 'air';
+}
+// A whole swing at the game's own pace, over and over: falling, the web catches, down the arc and up the far side,
+// let go, flung up and over the top. This move's way of riding the web (or the usual one) and of carrying himself
+// between webs (or reaching)
+function wholeSwing(dt) {
+  seqT = (seqT + dt) % 3.1;
+  const web = move.web || 'pump', air = move.air || 'reach';
+  if (seqT < 0.6) inAir(air)(ent, 2 + seqT * 14, side);
+  else if (seqT < 2.2) { onWeb(web)(ent, -Math.cos((seqT - 0.6) / 1.6 * Math.PI), side); ent.web.swingTime = seqT - 0.6; }
+  else inAir(air)(ent, -9 + (seqT - 2.2) * 12, -side);
 }
 function pose(dt) {
   const braking = ent.brake.time;
@@ -430,7 +450,16 @@ function pose(dt) {
     if (move.from === 'fall') { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.airStyle = 'reach'; ent.velocity.set(0, -14, 6); }
   } else {
     if (move.id === 'brake') ent.brake.time = braking >= 0 ? braking + dt : 0;
-    move.set(ent, u, side, extras);
+    if (seq) wholeSwing(dt);
+    else move.set(ent, u, side, extras);
+  }
+  if (turning) {
+    // (steered left all the time: he, his web and the view all turn together)
+    turnYaw += 1.1 * dt;
+    const c = Math.cos(turnYaw), sn = Math.sin(turnYaw);
+    for (const v of [ent.velocity, ent.web.anchor, ent.web.aim, ent.web.pivot]) v.set(v.x * c + v.z * sn, v.y, v.z * c - v.x * sn);
+    ent.heading = turnYaw;
+    ent.stickYaw = turnYaw + 0.9;
   }
   updateSpiderManVisuals(ent, dt, true);
 }
@@ -448,7 +477,7 @@ function frame(now) {
       setU(T.min + span * (0.5 - 0.5 * Math.cos(frame.t * Math.PI)));
     }
   }
-  pose(dt * (playing || replay > 0 ? speed : 1));
+  pose(dt * (playing || seq || replay > 0 ? speed : 1));
   placeCamera(dt);
   if (pipeline) pipeline.render();
   requestAnimationFrame(frame);
@@ -481,10 +510,12 @@ function wireMoves() {
   const sel = $('moveSel');
   MOVES.forEach((m) => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.label; sel.append(o); });
   sel.addEventListener('change', () => pickMove(sel.value));
-  $('scrub').addEventListener('input', () => { const T = move.time; if (!T) return; setPlaying(false); setU(T.min + (+$('scrub').value / 1000) * (T.max - T.min)); });
+  $('scrub').addEventListener('input', () => { const T = move.time; if (!T) return; setPlaying(false); setSeq(false); setU(T.min + (+$('scrub').value / 1000) * (T.max - T.min)); });
   $('playBtn').addEventListener('click', () => { frame.t = 0; setPlaying(!playing); });
   $('replayBtn').addEventListener('click', () => { setPlaying(false); replay = 0.6; });
   $('sideBtn').addEventListener('click', () => { side = -side; $('sideBtn').setAttribute('aria-pressed', String(side < 0)); });
+  $('seqBtn').addEventListener('click', () => { setPlaying(false); setSeq(!seq); });
+  $('turnBtn').addEventListener('click', () => setTurning(!turning));
   $('websBtn').addEventListener('click', () => { floorWebs = !floorWebs; $('websBtn').setAttribute('aria-pressed', String(floorWebs)); });
   // (the walk & run's pace sits with the timeline's controls)
   const paceRow = sliderRow('Pace', 0, 13, 0.1, extras.pace, (v) => `${v.toFixed(1)} m/s`, (v) => { extras.pace = v; });
@@ -573,6 +604,7 @@ async function start() {
   status(draft ? 'Picked up your unsaved changes' : 'Ready');
   connectStore();
   window.__movesEditorReady = true;
+  window.__movesEditor = { ent, HERO_MOVES };
 }
 start();
 </script>

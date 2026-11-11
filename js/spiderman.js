@@ -2581,12 +2581,12 @@ const HERO_MOVES = {
       hipR: [-0.925, 0, -0.32], knR: [1.45, 0, 0], ftR: [0.2967, 0, 0] },
     // Held back by the webs he stuck to the floor as he landed: a deep lunge, sliding, chest down over the front
     // knee, both arms thrown straight back to the webs, head up
-    brake: { spine: [0.6, 0, 0], neck: [-0.7, 0, 0], shL: [1.05, 0, 0.3], elL: [-0.08, 0, 0], shR: [1.05, 0, -0.3], elR: [-0.08, 0, 0],
+    brake: { spine: [0, 0, 0], neck: [0.4538, 0.7854, 0.1396], shL: [1.05, 0, 0.3], elL: [-0.08, 0, 0], shR: [1.05, 0, -0.3], elR: [-0.08, 0, 0],
       hipL: [-1.55, 0, 0.18], knL: [1.75, 0, 0], ftL: [-0.2, 0, 0], hipR: [0.35, 0, -0.12], knR: [0.95, 0, 0], ftR: [0.75, 0, 0] },
     // A hard landing: down on his right knee and right fist, the left foot planted with its knee up, the left arm
     // thrown back and up, head lifting to look ahead
     heroLanding: { spine: [0.65, 0, 0], neck: [-0.95, 0, 0], shR: [-1.2, 0, 0.1], elR: [-0.05, 0, 0], shL: [1.1, 0, 0.6], elL: [-0.25, 0, 0],
-      hipL: [-2.0, 0, 0.4], knL: [2.05, 0, 0], ftL: [-0.15, 0, 0], hipR: [-0.55, 0, -0.15], knR: [1.75, 0, 0], ftR: [0.9, 0, 0] },
+      hipL: [-2.0, 0, 0.4], knL: [2.05, 0, 0], ftL: [-0.4363, 0, 0], hipR: [-0.55, 0, -0.15], knR: [1.6755, 0, 0], ftR: [0.9, 0, 0] },
     // Sliding along a wall (or down it) feet first, on his feet and one hand: the leading leg stretched out ahead
     // along the wall, the other folded under him with its knee out, the trailing hand on the wall behind him, the
     // other arm out ahead for balance, looking where he's headed
@@ -2594,11 +2594,11 @@ const HERO_MOVES = {
       hipL: [-0.5, 0, 0.25], knL: [0.15, 0, 0], ftL: [0.8, 0, 0], hipR: [-1.3, 0, -0.55], knR: [2.2, 0, 0], ftR: [0.1, 0, 0] },
     // On a web, the usual way: legs together, trailing a little behind him down the arc (and that shoulder hitched
     // up, his chest turned a little towards it, as in all of these)...
-    swingPumpDown: { spine: [-0.1, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.7], elR: [-0.3, 0, 0],
-      hipL: [0.34, 0, 0.06], knL: [0.65, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
+    swingPumpDown: { spine: [-0.2618, -0.2967, 0.16], neck: [-0.3491, 0.3316, -0.0698], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5, 0, -0.7], elR: [-0.3, 0, 0],
+      hipL: [0.34, 0, 0.06], knL: [0.9076, 0, 0], ftL: [0.55, 0, 0], hipR: [0.22, 0, -0.06], knR: [0.5, 0, 0], ftR: [0.55, 0, 0] },
     // ...then kicked forward from the bottom and held out ahead up the far side, the free arm reaching on
-    swingPumpUp: { spine: [0.3, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.9, 0, -0.5], elR: [-0.6, 0, 0],
-      hipL: [-1.05, 0, 0.06], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-0.92, 0, -0.06], knR: [0.18, 0, 0], ftR: [0.55, 0, 0] },
+    swingPumpUp: { spine: [0.4363, 0.4538, 0.16], neck: [0.3316, -0.4712, 0.0873], shL: [-0.3142, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5934, -0.9948, -0.8727], elR: [-0.8203, 0, 0],
+      hipL: [-1.4312, 0, 0.192], knL: [0.12, 0, 0], ftL: [0.55, 0, 0], hipR: [-1.1868, 0, -0.06], knR: [0.18, 0, 0], ftR: [0.55, 0, 0] },
     // Tucked: one knee up, the other leg trailing
     swingTuck: { spine: [0.12, 0.2, 0.16], neck: [0.15, -0.15, -0.1], shL: [-0.05, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.6, 0, -1.0], elR: [-0.9, 0, 0],
       hipL: [-0.75, 0, 0.12], knL: [1.25, 0, 0], ftL: [0.55, 0, 0], hipR: [-0.25, 0, -0.12], knR: [0.55, 0, 0], ftR: [0.55, 0, 0] },
@@ -2652,7 +2652,7 @@ const HERO_MOVES = {
   tilt: { crouch: 0.1396, perch: 0.7156, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler) and how much they overshoot and
   // settle (damping 1: none), how hard he leans into turns in the air, and how far his head leads a turn
-  feel: { stiffness: 19, swingStiffness: 13, damping: 0.72, bank: 0.3, headLook: 0.6 }
+  feel: { stiffness: 10, swingStiffness: 5.5, damping: 0.72, bank: 0.3, headLook: 0.6 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
