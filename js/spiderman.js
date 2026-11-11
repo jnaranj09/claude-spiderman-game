@@ -25,6 +25,9 @@ const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the groun
 const AIR_TURN_RATE = 1.5;       // rad/s while swinging or falling
 const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
+const WEB_FLIGHT_MIN = 0.05;     // s: the least the web takes to fly out once it has left his wrist (see HERO_MOVES.feel.webAim)
+const WEB_AIM_HOLD = 0.3;        // s into a swing that his arm is still held on the stick point, while his body turns to the web's line
+const ZIP_AIM_TIME = 0.06;       // s: the same for a zip, which pulls at once: the arm points, then the strand shows
 const ARC_WEB = 60;              // m: the web length a swing prefers high up...
 const ARC_WEB_SHORT = 30;        // ...and low down
 const ARC_FLAT = 0.55;           // rad above level the web prefers high up (~32 degrees)...
@@ -673,6 +676,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       length: 0,
       targetLength: 0,
       travelled: 0,
+      shotTime: 0, // seconds since he fired: he points first, then the web leaves
       distance: 0,
       side: 1,
       splat: null,
@@ -730,6 +734,8 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // (for the look: how his joints are moving, for their springiness; how he carries himself through this flight;
     // how far he's banked into a turn; and what he was doing a frame ago)
     poseSpeed: null,
+    // (his web arm pointed at where the web sticks: how far, which arm, both for a double web, and at what)
+    armAim: { weight: 0, side: 1, double: false, at: [new THREE.Vector3(), new THREE.Vector3()] },
     airStyle: 'reach',
     bank: 0,
     animState: 'ground',
@@ -999,6 +1005,7 @@ function shootWeb(controllers, ent, request = 0) {
   ent.nextSide = -web.side; // alternate hands, like the real thing
   ent.gliding = false;
   web.travelled = 0;
+  web.shotTime = 0;
   web.swingTime = 0;
   web.style = nextSwingStyle(ent);
   web.arc = -1;
@@ -1052,7 +1059,6 @@ function shootWeb(controllers, ent, request = 0) {
     const centre = canyonCentreOffset(controllers, p.x, cy, p.z, dir.x, dir.z) * 0.6;
     web.pivot.set(anchor.x - latX * PIVOT_PULL + dir.z * centre, anchor.y, anchor.z - latZ * PIVOT_PULL - dir.x * centre);
   }
-  if (typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
 }
 
 function attachWeb(controllers, ent) {
@@ -1142,6 +1148,7 @@ function shootWhip(controllers, ent, side, yaw) {
   ent.nextSide = -side;
   ent.gliding = false;
   web.travelled = 0;
+  web.shotTime = 0;
   web.swingTime = 0;
   web.style = nextSwingStyle(ent);
   web.arc = -1;
@@ -1159,7 +1166,6 @@ function shootWhip(controllers, ent, side, yaw) {
   web.aim.copy(web.anchor);
   web.pivot.set(corner.px, corner.y, corner.pz);
   web.distance = web.anchor.distanceTo(_center.set(p.x, p.y + 1.3, p.z));
-  if (typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
   return true;
 }
 
@@ -1632,11 +1638,21 @@ function updateSpiderMan(controllers, ent, dt) {
 
   // --- Web lifecycle -----------------------------------------------------------------------------------------
   if (web.phase === 'shooting') {
-    web.travelled += WEB_SPEED * dt;
+    // He points first, then shoots: the web leaves his wrist a beat after he fires, his arm by then on the stick point
+    // (see aimWebArms), and makes the beat up in flight where it can, so a long web sticks no later than it used to
+    const aim = HERO_MOVES.feel.webAim;
+    const reach = web.double ? Math.max(web.distance, web.distance2) : web.distance;
+    const flight = Math.max(reach / WEB_SPEED, aim + WEB_FLIGHT_MIN);
+    const before = web.shotTime;
+    web.shotTime += dt;
+    web.travelled = reach * Math.max(0, (web.shotTime - aim) / (flight - aim));
     if (!held) web.phase = 'none';
-    else if (web.travelled >= (web.double ? Math.max(web.distance, web.distance2) : web.distance)) {
-      if (web.whip) attachWhip(ent);
-      else attachWeb(controllers, ent);
+    else {
+      if (before <= aim && web.shotTime > aim && typeof ent.onWebShot === 'function') ent.onWebShot(web.distance);
+      if (web.shotTime >= flight) {
+        if (web.whip) attachWhip(ent);
+        else attachWeb(controllers, ent);
+      }
     }
   }
   if (web.phase === 'attached' && !held) {
@@ -2661,8 +2677,9 @@ const HERO_MOVES = {
   swing: { kickAt: 0, kickSpan: 0.35, flowAt: 0, flowSpan: 1.8 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
-  // hard he leans into turns in the air, and how far his head leads a turn
-  feel: { stiffness: 6, swingStiffness: 7.5, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6 }
+  // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
+  // point before a swing web leaves his wrist (seconds)
+  feel: { stiffness: 6, swingStiffness: 7.5, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.12 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
@@ -3011,6 +3028,86 @@ function plantFeet(ent, model, amount, dt) {
   for (const hand of model.hands) hand.set(hand.x + nx * shift, hand.y + ny * shift, hand.z + nz * shift);
 }
 
+// Joint angles (nod, turn, tilt; applied in that order) as a rotation, and back
+function quatOfAngles(out, e) {
+  const c1 = Math.cos(e.x / 2), c2 = Math.cos(e.y / 2), c3 = Math.cos(e.z / 2);
+  const s1 = Math.sin(e.x / 2), s2 = Math.sin(e.y / 2), s3 = Math.sin(e.z / 2);
+  return out.set(s1 * c2 * c3 + c1 * s2 * s3, c1 * s2 * c3 - s1 * c2 * s3, c1 * c2 * s3 + s1 * s2 * c3, c1 * c2 * c3 - s1 * s2 * s3);
+}
+function anglesOfQuat(out, q) {
+  const { x, y, z, w } = q;
+  const m13 = 2 * (x * z + y * w);
+  out.y = Math.asin(Math.max(-1, Math.min(1, m13)));
+  if (Math.abs(m13) < 0.99999) {
+    out.x = Math.atan2(-2 * (y * z - x * w), 1 - 2 * (x * x + y * y));
+    out.z = Math.atan2(-2 * (x * y - z * w), 1 - 2 * (y * y + z * z));
+  } else {
+    out.x = Math.atan2(2 * (y * z + x * w), 1 - 2 * (x * x + z * z));
+    out.z = 0;
+  }
+  return out;
+}
+
+// He points before he shoots: his web arm is turned onto the point the web sticks at, quickly, in the beat before it
+// leaves his wrist (the springs alone would still be raising it when the web had landed), and held there over the
+// start of the swing while his body turns to the web's line; then it's let go to the pose again. Both arms for a
+// double web; and the same, briefer, for a zip. The arms' own angles are kept (see restoreArms): this is laid over
+// them for the frame, not fed back into their springs
+const _armKeep = [{ x: 0, y: 0, z: 0, el: 0 }, { x: 0, y: 0, z: 0, el: 0 }];
+const _qChestNow = new THREE.Quaternion();
+const _qArmNow = new THREE.Quaternion();
+const _qArmPose = new THREE.Quaternion();
+const _qArmAim = new THREE.Quaternion();
+const _armDir = new THREE.Vector3();
+const _armRest = new THREE.Vector3();
+function aimWebArms(ent, dt, pelvis) {
+  const A = ent.armAim, web = ent.web, zip = ent.zip;
+  let want = 0, rate = 12;
+  if (web.phase === 'shooting' || (web.phase === 'attached' && web.swingTime < WEB_AIM_HOLD)) {
+    // (on it a little before the web leaves)
+    want = web.phase === 'shooting' ? smoothstep01(web.shotTime / Math.max(0.02, HERO_MOVES.feel.webAim * 0.85)) : 1;
+    if (A.side !== web.side || A.double !== web.double) A.weight = Math.min(A.weight, want);
+    A.side = web.side; A.double = web.double;
+    A.at[0].copy(web.anchor);
+    if (web.double) A.at[1].copy(web.anchor2);
+  } else if (web.phase === 'attached') {
+    rate = 4;
+  } else if (zip.time >= 0 && zip.time < ZIP_AIM_TIME + 0.07) {
+    want = smoothstep01(zip.time / ZIP_AIM_TIME);
+    if (A.side !== zip.side || A.double) A.weight = Math.min(A.weight, want);
+    A.side = zip.side; A.double = false;
+    A.at[0].copy(zip.anchor);
+  }
+  A.weight = want >= A.weight ? want : A.weight + (want - A.weight) * (1 - Math.exp(-dt * rate));
+  if (A.weight < 0.002) { A.weight = 0; return false; }
+  quatOfAngles(_qChestNow, ent.pose.spine).premultiply(ent.bodyQuat);
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? 1 : -1;
+    const sh = ent.pose[i === 0 ? 'shL' : 'shR'], el = ent.pose[i === 0 ? 'elL' : 'elR'];
+    const keep = _armKeep[i];
+    keep.x = sh.x; keep.y = sh.y; keep.z = sh.z; keep.el = el.x;
+    const at = side === A.side ? A.at[0] : A.double ? A.at[1] : null;
+    if (!at) continue;
+    // The way to it from his shoulder (near enough: it's tens of metres off), as his chest sees it
+    _armDir.set(side * 0.19, 0.48, 0).applyQuaternion(ent.bodyQuat).add(pelvis);
+    _armDir.subVectors(at, _armDir).normalize().applyQuaternion(_qArmAim.copy(_qChestNow).invert());
+    // The arm as the pose would have it (for the turn of the wrist), swung the short way onto that line
+    quatOfAngles(_qArmPose, _target[i === 0 ? 'shL' : 'shR']);
+    _armRest.set(0, -1, 0).applyQuaternion(_qArmPose);
+    _qArmAim.setFromUnitVectors(_armRest, _armDir).multiply(_qArmPose);
+    anglesOfQuat(sh, quatOfAngles(_qArmNow, sh).slerp(_qArmAim, A.weight));
+    el.x += (-0.08 - el.x) * A.weight;
+  }
+  return true;
+}
+function restoreArms(ent) {
+  for (let i = 0; i < 2; i++) {
+    const sh = ent.pose[i === 0 ? 'shL' : 'shR'], keep = _armKeep[i];
+    sh.x = keep.x; sh.y = keep.y; sh.z = keep.z;
+    ent.pose[i === 0 ? 'elL' : 'elR'].x = keep.el;
+  }
+}
+
 function updateSpiderManVisuals(ent, dt, active) {
   const { model, webs, web, zip } = ent;
   // Taking off, he picks how he'll carry himself through this flight (not the same way twice running)
@@ -3069,7 +3166,9 @@ function updateSpiderManVisuals(ent, dt, active) {
   _pelvis.copy(ent.position).add(ent.pelvisOffset);
 
   // The skinned body, posed in world space; the hands come back for the webs
+  const aimed = aimWebArms(ent, dt, _pelvis);
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
+  if (aimed) restoreArms(ent);
   const planted = ent.state === 'ground' || ent.state === 'wallrun' || ent.state === 'sling';
   ent.footing = planted ? ent.footing + (1 - ent.footing) * (1 - Math.exp(-dt * 14)) : 0;
   if (planted) plantFeet(ent, model, ent.footing, dt);
@@ -3118,12 +3217,13 @@ function updateSpiderManVisuals(ent, dt, active) {
       web.tip.lerpVectors(from, web.anchor, t);
       web.tip.y += Math.sin(t * Math.PI) * 1.2;
     }
-    to = web.tip;
-  } else if (active && zip.time >= 0 && zip.time < 0.3) {
+    // (nothing to see while he's still pointing)
+    to = web.phase === 'attached' || web.travelled > 0 ? web.tip : null;
+  } else if (active && zip.time >= ZIP_AIM_TIME && zip.time < 0.33) {
     from = model.hands[zip.side > 0 ? 0 : 1];
-    zip.tip.lerpVectors(from, zip.anchor, Math.min(1, zip.time / 0.07));
+    zip.tip.lerpVectors(from, zip.anchor, Math.min(1, (zip.time - ZIP_AIM_TIME) / 0.07));
     to = zip.tip;
-    fray = zip.time >= 0.07 ? 1 : 0;
+    fray = zip.time >= ZIP_AIM_TIME + 0.07 ? 1 : 0;
     normal = zip.normal;
   }
   if (to) {
@@ -3134,7 +3234,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   // A double web's second strand, from the other hand
   if (twin) {
     // (the slingshot's or the brake's, laid above)
-  } else if (active && web.double && web.phase !== 'none') {
+  } else if (active && web.double && (web.phase === 'attached' || web.travelled > 0)) {
     const from2 = model.hands[web.side > 0 ? 1 : 0];
     if (web.phase === 'attached') {
       web.tip2.copy(web.anchor2);

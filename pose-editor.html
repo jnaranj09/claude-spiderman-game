@@ -279,7 +279,7 @@ const TILT_ROWS = {
 };
 const FEEL_ROWS = [
   ['stiffness', 'Snap', 6, 40, 0.5, 'x'], ['swingStiffness', 'Snap on a web: arms, chest, head', 3, 30, 0.5, 'x'], ['swingLegStiffness', 'Snap on a web: legs', 3, 40, 0.5, 'x'], ['damping', 'Settle (low: bouncy)', 0.3, 1, 0.01, 'x2'],
-  ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2']
+  ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2'], ['webAim', 'Points before the web leaves', 0, 0.4, 0.01, 's']
 ];
 // When along the arc a two-pose swing changes from one pose to the other (arc: -1 .. 1; shown as shares of it)
 const SWING_ROWS = [
@@ -291,7 +291,8 @@ const UNIT = {
   deg: { to: (v) => v * DEG, from: (v) => v / DEG, fmt: (v) => `${Math.round(v)}°` },
   '%': { to: (v) => v * 100, from: (v) => v / 100, fmt: (v) => `${Math.round(v)}%` },
   x: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(1) },
-  x2: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(2) }
+  x2: { to: (v) => v, from: (v) => v, fmt: (v) => v.toFixed(2) },
+  s: { to: (v) => v, from: (v) => v, fmt: (v) => `${v.toFixed(2)} s` }
 };
 
 // ---- State ----------------------------------------------------------------------------------------------------------
@@ -444,7 +445,17 @@ function resetEnt() {
 function wholeSwing(dt) {
   seqT = (seqT + dt) % 3.1;
   const web = move.web || 'pump', air = move.air || 'reach';
-  if (seqT < 0.6) inAir(air)(ent, 2 + seqT * 14, side);
+  if (seqT < 0.6) {
+    inAir(air)(ent, 2 + seqT * 14, side);
+    // (the last beat before the web catches: he points, then it flies out)
+    const aim = HERO_MOVES.feel.webAim, shot = seqT - (0.6 - aim - 0.07);
+    if (shot >= 0) {
+      const w = ent.web;
+      onWeb(web)(ent, -1, side);
+      inAir(air)(ent, 2 + seqT * 14, side);
+      w.phase = 'shooting'; w.shotTime = shot; w.distance = 26; w.travelled = 26 * Math.max(0, (shot - aim) / 0.07);
+    }
+  }
   else if (seqT < 2.2) { onWeb(web)(ent, -Math.cos((seqT - 0.6) / 1.6 * Math.PI), side); ent.web.swingTime = seqT - 0.6; }
   else inAir(air)(ent, -9 + (seqT - 2.2) * 12, -side);
 }

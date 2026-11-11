@@ -319,6 +319,33 @@ test('over open ground the web finds nothing to stick to', () => {
   assert.ok(ent.position.y >= 0);
 });
 
+test('he points before he shoots: the web leaves his wrist a beat after he fires, and still sticks promptly', () => {
+  const controllers = world(avenue());
+  const ent = spiderEntity(-6, 0, 0, 0);
+  const aim = spider.HERO_MOVES.feel.webAim;
+  let shots = 0;
+  ent.onWebShot = () => { shots++; };
+  controllers.keys.up = true;
+  let i = 0;
+  while (ent.web.phase !== 'shooting' && i++ < 600) spider.updateSpiderMan(controllers, ent, 1 / 60);
+  assert.equal(ent.web.phase, 'shooting');
+  let time = 0, left = -1;
+  while (ent.web.phase === 'shooting' && time < 2) {
+    spider.updateSpiderMan(controllers, ent, 1 / 60);
+    time += 1 / 60;
+    if (ent.web.phase !== 'shooting') break;
+    if (ent.web.shotTime <= aim) {
+      assert.equal(ent.web.travelled, 0, 'still pointing: no web yet');
+      assert.equal(shots, 0, 'and no sound of one');
+    } else if (left < 0) left = ent.web.shotTime;
+  }
+  assert.equal(ent.web.phase, 'attached');
+  assert.equal(shots, 1);
+  assert.ok(left > aim, 'the web flew out after the beat');
+  // (no later than the beat and the shortest flight, or its old time of flight if that was longer)
+  assert.ok(time <= Math.max(aim + 0.05, ent.web.distance / 260) + 2 / 60, `stuck after ${time.toFixed(2)} s`);
+});
+
 test('holding keeps him on one web, swinging to and fro, until the button is let go', () => {
   const controllers = world(avenue());
   const ent = spiderEntity(-6, 0, 0, 0);
