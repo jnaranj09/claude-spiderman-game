@@ -7,14 +7,17 @@
   <link rel="icon" href="data:," />
   <meta name="description" content="Web-swing through Manhattan as Spider-Man: a mobile-friendly game built on Slop New York by mrdoob. Photorealistic GTA-style 3D Slop New York simulation built with Three.js WebGPURenderer and TSL shaders featuring complete Manhattan street map (125th St to Battery Park), third-person navigation (Person, Car, Cyclist, Helicopter), and 11 cinematic cameras at 60 FPS." />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <!-- three.js dev branch (builds committed to mrdoob/three.js@dev, served by jsDelivr) -->
+  <!-- three.js from one fixed commit of its dev branch (the builds committed to mrdoob/three.js, served by jsDelivr),
+       never the moving "@dev": the branch changes daily, and jsDelivr can serve its build files from different days
+       at once, which don't fit together (17-18 November 2026: the sky's light failed to build and the city went
+       dark). To move to a newer three.js, change the commit in all four lines and check the city's lighting -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.webgpu.js",
-        "three/webgpu": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.webgpu.js",
-        "three/tsl": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/build/three.tsl.js",
-        "three/addons/": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/jsm/"
+        "three": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@4f5d6bc0c7ec777e06703b56c7b7089e99be11d5/build/three.webgpu.js",
+        "three/webgpu": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@4f5d6bc0c7ec777e06703b56c7b7089e99be11d5/build/three.webgpu.js",
+        "three/tsl": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@4f5d6bc0c7ec777e06703b56c7b7089e99be11d5/build/three.tsl.js",
+        "three/addons/": "https://cdn.jsdelivr.net/gh/mrdoob/three.js@4f5d6bc0c7ec777e06703b56c7b7089e99be11d5/examples/jsm/"
       }
     }
   </script>

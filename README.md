@@ -129,7 +129,11 @@ The strand is still drawn to the facade and the body hangs toward it, so it read
 while you swing straight down the avenue. Alternating hands put the anchors left, right, left, right, the way it
 looks in the films.
 
-**3. The pendulum is real.** Gravity (a snappy 22 m/s²) pulls you down. The web is an inextensible rope: whenever
+**3. The pendulum is real.** Gravity (a heavy 30 m/s², three times the real thing) pulls you down. It's one number,
+`GRAVITY` in `js/spiderman.js`, and his kicks are tied to it: the jump, the zip's hop, the fling off a web and the
+wall jump scale with its square root, so they reach the same heights whatever it is (only sooner), and the push
+down a swing scales with it, so a swing climbs as high as it did. Much above 30 the web's soft catch and the glide
+want retuning. The web is an inextensible rope: whenever
 you're farther from the pivot than its length, you're projected back onto the sphere and the outward part of your
 velocity is removed. That one constraint is what makes a natural arc, fast at the bottom and slow at the ends.
 The web never hangs slack (moving in towards the anchor, it's taken in), so it can't snap tight again halfway down

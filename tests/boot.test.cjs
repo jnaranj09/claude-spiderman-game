@@ -43,3 +43,16 @@ test('native module entry and imports share canonical preloaded URLs on GitHub P
     }
   }
 });
+
+test('three.js comes from one fixed commit, never a moving branch', () => {
+  // (a branch such as "@dev" changes daily, and the CDN can serve its build files from different days at once: the
+  // sky's light failed to build that way, and the city went dark)
+  const { imports } = JSON.parse(importMap[1]);
+  const commits = new Set();
+  for (const [name, url] of Object.entries(imports)) {
+    const at = url.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/mrdoob\/three\.js@([0-9a-f]{40})\//);
+    assert.ok(at, `${name} is pinned to a full commit: ${url}`);
+    commits.add(at[1]);
+  }
+  assert.equal(commits.size, 1, 'the builds and the addons come from the same commit');
+});

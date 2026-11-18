@@ -635,7 +635,7 @@ test('a head-on hit at speed runs up the wall instead of stopping dead', () => {
   step(controllers, ent, 0.4);
   assert.equal(ent.state, 'wallrun');
   assert.ok(ent.wallRun.dy > 0.7);
-  assert.ok(ent.position.y > 13, `ran up to ${ent.position.y.toFixed(1)} m`);
+  assert.ok(ent.position.y > 12.5, `ran up to ${ent.position.y.toFixed(1)} m`); // (3 m up from where he met it, in 0.2 s)
 });
 
 test('the stick steers a wall run like a crawl, and letting go of it slows him to a stop on the wall', () => {

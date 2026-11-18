@@ -18,7 +18,15 @@ import { PersonRig, buildPersonGeometry, createSpiderSuitMaterial, createInkOutl
 // A quick tap of the button zips a web straight ahead and yanks him forward (it works over open ground too); flying
 // into a wall at speed slides along it (or runs up it) instead of stopping dead, and a slow touch sticks to it to crawl.
 
-const GRAVITY = 22;              // m/s². Stronger than real gravity: a 40 m swing takes ~3 s instead of ~6 s
+// m/s². Three times real gravity: he has weight. Falls gather speed fast, a swing drops hard into its arc, and he hangs
+// only a moment at the top of a jump. (Much above 30, the web's soft catch and the glide want retuning: their tests fail)
+const GRAVITY = 30;
+// His kicks were set under a gravity of 22, and are tied to it here so that he's heavier without reaching less far.
+// HEAVY scales what works against gravity over a distance (the push down a swing): a swing climbs as high as it did.
+// KICK scales what throws him up against it (jump, zip hop, the fling off a web, wall jump): the same heights, in
+// less time. What isn't tied to it (running, top speed, how fast webs fly, the dive's pull) is as it was
+const HEAVY = GRAVITY / 22;
+const KICK = Math.sqrt(HEAVY);
 const MAX_SPEED = 48;            // m/s
 const RUN_SPEED = 13;
 const GROUND_TURN_RATE = 10;     // rad/s turning to face the stick on the ground (an about-face in ~0.3 s)
@@ -36,14 +44,15 @@ const ARC_LOW = 4;               // m above the street where he's "low"...
 const ARC_HIGH = 40;             // ...and where he's "high" (between the two, everything slides)
 const ZIG_MARGIN = 4;            // m: a chosen-hand swing ends at least this far short of the facade...
 const ZIG_REACH = 9;             // m: ...and carries him at most this far across
-const ZIG_SHARE = 0.33;          // the pivot's share of that: the swing and the flight after it carry him the rest
+const ZIG_SHARE = 0.33 / KICK;   // the pivot's share of that: the swing and the flight after it carry him the rest (less of it under a
+                                 // heavier gravity, which swings him across faster: the flight then carries him as far as it did)
 const DOUBLE_BOOST = 1.4;        // the release fling of a double web, against a single one
 const SCRAPE_PENALTY = 1.2;       // score lost per metre an anchor's arc would dip below the street
 const COURSE_RATE = 0.9;         // 1/s: how fast that smoothed line of travel follows the real one
 const COURSE_SNAP = 0.6;          // rad: a line of travel this close to the grid counts as along the street
 const NEAR_SIDE = 0.7;           // score lost per metre the anchor lies across the street
 const FACING_PENALTY = 14;       // score lost by a facade turned straight at him
-const ROD_RATE = 6;              // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
+const ROD_RATE = 6 * KICK;       // 1/s: how fast moving in towards the anchor turns into swinging, as a web catches
 const ROPE_CATCH = 0.45;         // s: the web is springy this long as it catches, then rigid
 const ROPE_SOFT = 80;            // 1/s²: its springiness as it starts to take his weight...
 const ROPE_STIFF = 600;          // ...firming up to this
@@ -51,11 +60,12 @@ const ROPE_MAX_STRETCH = 3;      // m
 const SWING_TURN_SPEED = 1.5;    // m/s back along the swing before he turns to face the other way
 const AIR_LEAN = 0.45;           // rad: how far forward he leans flying at speed
 const PIVOT_PULL = 0.95;         // share of the anchor's sideways offset the pendulum pivot moves back over the path
-const RELEASE_BOOST_UP = 5.5;
+const RELEASE_BOOST_UP = 5.5 * KICK;
 const RELEASE_BOOST_FWD = 5.0;
+const RELEASE_UP_MAX = 15 * KICK;  // m/s: the most upward speed a release leaves him with
 const RELEASE_RISE = 0.5;        // a held swing lets go once he's up past this (cosine of ~60 degrees) on the far side
 const RELEASE_LIFT_CEILING = 68; // m above the street: the release's upward fling fades out towards this height
-const DIVE_GRAVITY = 2.2;        // gravity multiplier while diving
+const DIVE_GRAVITY = 48.4 / GRAVITY; // gravity multiplier while diving (a dive pulls at 48 m/s², whatever a fall does)
 const DIVE_MAX_FALL = 60;        // m/s
 const CRAWL_UP_SPEED = 4.2;      // m/s on a wall, only while the stick is held
 const CRAWL_DOWN_SPEED = 3.2;
@@ -68,16 +78,17 @@ const WALL_ZIP_SPEED = 15;       // m/s a web pulled along the wall adds to a cr
 const WALL_ZIP_DECAY = 14;       // ...fading at this rate (m/s²)
 const WALL_ZIP_CONE = 1.75;      // rad: a stick within this of the way he's crawling zips along the wall; past it he jumps off
 const WALL_JUMP_OUT = 12;        // m/s away from the wall jumping off it...
-const WALL_JUMP_UP = 7;          // ...and upwards
+const WALL_JUMP_UP = 7 * KICK;   // ...and upwards
+const GROUND_JUMP = 12.5 * KICK; // m/s up, jumping from the ground (about 3.5 m high)
 const TAP_TIME = 0.2;            // s: a press shorter than this is a tap (web zip)
 const ZIP_PUSH = 14;             // m/s forward per zip
 const ZIP_MAX_SPEED = 44;
 const ZIP_PULL_TIME = 0.25;      // s: the zip's push builds up over this long instead of all at once
-const ZIP_LIFT = 60;             // m/s² upward during the pull (against gravity's 22): a small hop up, as if he hauled
+const ZIP_LIFT = GRAVITY + 38 * KICK; // m/s² upward during the pull (38 more than gravity, at a gravity of 22): a small hop up, as if he hauled
                                  // himself up the web; a fall is softened, never stopped dead
 const ZIP_SOFT_CAP = 32;          // m/s: the speed by which a zip's push has faded to almost nothing
-const ZIP_RISE = 9.5;            // m/s: the upward speed the pull lifts him to (about 3 m of height)...
-const ZIP_RISE_UP = 6;           // ...and up to this much more for a web aimed steeply up
+const ZIP_RISE = 9.5 * KICK;     // m/s: the upward speed the pull lifts him to (about 3 m of height)...
+const ZIP_RISE_UP = 6 * KICK;    // ...and up to this much more for a web aimed steeply up
 const ZIP_AIM_LOW = 0.7;         // how far up (rise per metre ahead) a zip aims from the street...
 const ZIP_AIM_HEIGHT = 30;       // ...levelling out by this height
 const ZIP_CHAIN = 3;             // zips in a row before he has to land, swing or touch a wall
@@ -127,7 +138,7 @@ const PERCH_DOUBLE = 0.4;         // s: two clicks within this are a double clic
 const PERCH_SPEED = 9;            // m/s over to the edge
 const PERCH_INSET = 0.35;         // m: how far in from the edge his feet are (his knees and head hang out over it)
 const SLING_LEAN_DRAW = 2.5;      // ...by the time he has drawn them back this far (m); undrawn, he's tipped forward in his crouch
-const HERO_LANDING_FALL = 15;     // m/s: landing from a fall faster than this (a drop of 5 m or so), he lands on a knee and a fist
+const HERO_LANDING_FALL = 15 * KICK; // m/s: landing from a fall faster than this (a drop of 5 m or so), he lands on a knee and a fist
 const HERO_LANDING_HOLD = 0.5;    // s: and holds it this long (or until he's moving off)
 const AIR_STYLES = ['reach', 'float', 'arrow']; // how he carries himself between webs (see airPose)
 const CROUCH_PELVIS = 0.5;        // m: the pelvis above the floor in it
@@ -1195,7 +1206,7 @@ function releaseWeb(controllers, ent, boost) {
     // high above the street so that chained swings stay among the buildings instead of climbing over them
     const height = p.y - controllers.getGroundHeight(p.x, p.z, 'person');
     const lift = Math.max(0, Math.min(1, (RELEASE_LIFT_CEILING - height) / 32));
-    v.y = Math.min(Math.max(v.y, 0) * (0.55 + 0.45 * lift) + RELEASE_BOOST_UP * lift, 15);
+    v.y = Math.min(Math.max(v.y, 0) * (0.55 + 0.45 * lift) + RELEASE_BOOST_UP * lift, RELEASE_UP_MAX);
     // (a double web flings harder)
     const fwd = RELEASE_BOOST_FWD * (web.double ? DOUBLE_BOOST : 1);
     v.x += dir.x * fwd;
@@ -1478,7 +1489,7 @@ function jumpOffWall(ent, s) {
 // A press from the ground: jump (fast enough to run on), and the held button fires a web on the way up
 function groundJump(ent) {
   const v = ent.velocity;
-  v.y = 12.5;
+  v.y = GROUND_JUMP;
   const dir = { x: Math.sin(ent.heading), z: Math.cos(ent.heading) };
   const hs = Math.hypot(v.x, v.z);
   v.x = dir.x * Math.max(hs, 6);
@@ -1920,7 +1931,7 @@ function updateSpiderMan(controllers, ent, dt) {
           // (arcade: harder on a long web, which as a plain pendulum took ~4 s over half a 45 m arc and felt floaty;
           // short ones are left as they were)
           const long = Math.max(0, Math.min(1, (web.length - 15) / 30));
-          const push = 4.5 + 6 * pump;
+          const push = (4.5 + 6 * pump) * HEAVY;
           v.x += dir.x * push * dt;
           v.z += dir.z * push * dt;
           // (the extra only along the avenue or street he's swinging down, never across it: a zigzag stays as wide
