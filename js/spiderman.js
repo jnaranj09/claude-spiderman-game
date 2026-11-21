@@ -2704,7 +2704,7 @@ const HERO_MOVES = {
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
   // point before a swing web leaves his wrist (seconds), and how much of the way his whole body tips over towards a
   // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
-  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.3, webSideLean: 0 }
+  feel: { stiffness: 6, swingStiffness: 17, swingLegStiffness: 14, damping: 0.93, bank: 0.3, headLook: 0.6, webAim: 0.3, webLean: 1 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
@@ -2956,9 +2956,10 @@ function bodyOrientation(ent, out) {
     else if (web.phase === 'shooting') toWeb = 0.3 * Math.min(1, web.travelled / Math.max(1, web.distance));
     if (toWeb > 0) {
       toWeb = toWeb * toWeb * (3 - 2 * toWeb);
-      // (the line of the web as far as it runs along his arc: he doesn't tip over sideways to a web stuck to a
-      // building off to one side, his arm goes out to it instead, see aimWebArms. Whipping round a corner he does)
-      webLine(ent, _axis, ent.state === 'whip' ? 1 : HERO_MOVES.feel.webSideLean);
+      // (the web's own line, so he leans over sideways to a web stuck to a building off to one side. The feel's
+      // webLean takes that sideways part down: at less than all of it his body keeps nearer the line of his arc
+      // and his arm goes out to the web instead, see aimWebArms. Whipping round a corner he always leans fully)
+      webLine(ent, _axis, ent.state === 'whip' ? 1 : HERO_MOVES.feel.webLean);
       _by.multiplyScalar(1 - toWeb).addScaledVector(_axis, toWeb);
     }
     _by.normalize();
@@ -3112,14 +3113,15 @@ function aimWebArms(ent, dt, pelvis) {
   }
   A.weight = want >= A.weight ? want : A.weight + (want - A.weight) * (1 - Math.exp(-dt * rate));
   if (A.weight < 0.002) A.weight = 0;
-  // Hanging on a web stuck off to one side, his body keeps to the line of his arc (see webLine) and the web arm goes
-  // out to the web: the pose's arm, turned by as far as the web runs off to the side (both arms, where both hold it)
-  const out = ent.state === 'swing' && web.phase === 'attached' && !web.double && HERO_MOVES.feel.webSideLean < 1;
+  // With the feel's webLean below 1, his body leans less than all the way over to a web stuck off to one side (see
+  // webLine) and the web arm goes out to the web by the rest: the pose's arm, turned by as far as the web runs off
+  // his body's line (both arms, where both hold it)
+  const out = ent.state === 'swing' && web.phase === 'attached' && !web.double && HERO_MOVES.feel.webLean < 1;
   if (!A.weight && !out) return false;
   quatOfAngles(_qChestNow, ent.pose.spine).premultiply(ent.bodyQuat);
   _qChestBack.copy(_qChestNow).invert();
   if (out) {
-    _qSide.setFromUnitVectors(webLine(ent, _armRest, HERO_MOVES.feel.webSideLean), webLine(ent, _armDir, 1));
+    _qSide.setFromUnitVectors(webLine(ent, _armRest, HERO_MOVES.feel.webLean), webLine(ent, _armDir, 1));
     _qSide.premultiply(_qChestBack).multiply(_qChestNow);
   }
   for (let i = 0; i < 2; i++) {
