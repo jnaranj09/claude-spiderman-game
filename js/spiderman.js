@@ -35,6 +35,7 @@ const WEB_SPEED = 260;           // m/s: how fast the web travels to its anchor
 const WEB_RANGE = 115;           // m
 const WEB_FLIGHT_MIN = 0.05;     // s: the least the strand is seen to take flying out, once it has left his wrist (see webShown)
 const WEB_AIM_HOLD = 0.3;        // s after the strand lands that his arm is still held on the stick point, while his body turns to the web's line
+                                 // (where the pose keeps the arm on the web: see aimWebArms)
 const ZIP_AIM_TIME = 0.06;       // s: the same for a zip, which pulls at once: the arm points, then the strand shows
 const ARC_WEB = 60;              // m: the web length a swing prefers high up...
 const ARC_WEB_SHORT = 30;        // ...and low down
@@ -3112,7 +3113,20 @@ function aimWebArms(ent, dt, pelvis) {
   const A = ent.armAim, web = ent.web, zip = ent.zip;
   let want = 0, rate = 12;
   const landed = HERO_MOVES.feel.webAim + Math.max(WEB_FLIGHT_MIN, web.distance / WEB_SPEED);
-  if (web.phase !== 'none' && web.shotTime < landed + WEB_AIM_HOLD) {
+  // Once the strand has landed he holds the arm on it while his body turns to the web's line (WEB_AIM_HOLD), but only
+  // where the pose keeps that arm up along his body, and so on the web. Where the pose takes the hand somewhere else
+  // (the crouched swing hauls it down low), there's nothing to wait for: the arm leaves as the web lands. Once it has
+  // let go of a web it stays let go
+  if (web.phase === 'none' || web.shotTime < landed) A.released = false;
+  let hold = 0;
+  if (web.phase !== 'none' && !A.released) {
+    let up = 1;
+    for (const name of web.double ? ['shL', 'shR'] : [web.side === 1 ? 'shL' : 'shR']) {
+      up = Math.min(up, _armRest.set(0, -1, 0).applyQuaternion(quatOfAngles(_qArmPose, _target[name])).y);
+    }
+    hold = WEB_AIM_HOLD * smoothstep01(up / 0.6);
+  }
+  if (web.phase !== 'none' && !A.released && web.shotTime < landed + hold) {
     // (on it a little before the strand leaves)
     want = smoothstep01(web.shotTime / Math.max(0.02, HERO_MOVES.feel.webAim * 0.85));
     if (A.side !== web.side || A.double !== web.double) A.weight = Math.min(A.weight, want);
@@ -3120,6 +3134,7 @@ function aimWebArms(ent, dt, pelvis) {
     A.at[0].copy(web.anchor);
     if (web.double) A.at[1].copy(web.anchor2);
   } else if (web.phase === 'attached') {
+    A.released = true;
     rate = 4;
   } else if (zip.time >= 0 && zip.time < ZIP_AIM_TIME + 0.07) {
     want = smoothstep01(zip.time / ZIP_AIM_TIME);
