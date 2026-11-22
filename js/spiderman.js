@@ -2644,18 +2644,18 @@ const HERO_MOVES = {
     // A stride: down the arc mid-step, the web-side knee forward and the other leg trailing, the free arm hanging
     // back...
     swingStrideDown: { spine: [0.4363, 0.8727, 0.0349], neck: [-1.2043, 0.7156, 0.1396], shL: [0.0175, 0, 2.95], elL: [-0.06, 0, 0], shR: [-0.1745, 0.3491, -1.2915], elR: [-0.5236, 0, 0],
-      hipL: [1.3963, 0, 0.4887], knL: [1.3439, 0, 0], ftL: [0.5, 0, 0], hipR: [0.0524, 0, 0.384], knR: [1.4835, 0, 0], ftR: [0.8, 0, 0] },
+      hipL: [1.3963, 0, 0.4887], knL: [1.3439, 0, 0], ftL: [0.5, 0, 0], hipR: [0.5236, 0, 0.384], knR: [1.4835, 0, 0], ftR: [0.8, 0, 0] },
     // ...then the far leg kicks through high ahead of him, the web-side one under it, his back arched and his chest
     // turned to the web, the free arm still trailing down behind
     swingStrideUp: { spine: [-0.2, -0.6283, 0.12], neck: [0.5585, 0.2793, 0.05], shL: [-0.2, 0, 2.95], elL: [-0.06, 0, 0], shR: [0.5585, 0, -0.8901], elR: [-0.25, 0, 0],
-      hipL: [-2.0071, 0.1396, -0.2793], knL: [0.9599, 0, 0], ftL: [0.5, 0, 0], hipR: [0.2443, -0.3142, -0.25], knR: [1.2217, 0, 0], ftR: [0.1396, 0, 0] },
+      hipL: [-2.0071, 0.1396, -0.2793], knL: [0.9599, 0, 0], ftL: [0.5, 0, 0], hipR: [-0.4538, -0.3142, -0.25], knR: [1.2217, 0, 0], ftR: [0.1396, 0, 0] },
     // Both hands on the web (the second comes up to it once he's hanging): down the arc a long arched line, chest
     // out, legs trailing, one straight and one bent at the knee...
-    swingLayoutDown: { spine: [-0.2094, 0.2443, -0.1222], neck: [0, 0.2, 0], shL: [-2.9322, 0.384, -0.1222], elL: [0, 0, 0], shR: [0.0175, 0.4712, -3.1416], elR: [-0.4363, 0, 0],
-      hipL: [0.5934, -0.8552, 0.05], knL: [0.9599, 0, 0], ftL: [0.8, 0, 0], hipR: [0.8203, -0.4712, 0.2967], knR: [1.3963, 0, 0], ftR: [0.8, 0, 0] },
+    swingLayoutDown: { spine: [0.0349, 0.2443, 0.1222], neck: [-0.4538, -0.3316, -0.192], shL: [-3.194, -1.0996, -0.2793], elL: [-0.2269, 0, 0], shR: [-0.0349, 1.117, -3.0194], elR: [-0.3316, 0, 0],
+      hipL: [0.7679, 0.6109, -0.1571], knL: [0.9599, 0, 0], ftL: [0.8, 0, 0], hipR: [0.6458, 0.2269, -0.5061], knR: [1.3963, 0, 0], ftR: [0.8, 0, 0] },
     // ...then one knee comes up high and out to the side, the other leg hanging straight under him, looking down
-    swingLayoutUp: { spine: [0.15, 0.25, 0.1], neck: [0.35, -0.2, 0], shL: [-0.15, 0, 3.322], elL: [0, 0, 0], shR: [-0.3142, 0.2269, -3.1416], elR: [0, 0, 0],
-      hipL: [-1.6406, 0.5, 0.95], knL: [1.9, 0, 0], ftL: [-0.2, 0, 0], hipR: [0.2094, 0, -0.05], knR: [0.6632, 0, 0], ftR: [0.3, 0, 0] },
+    swingLayoutUp: { spine: [-0.0698, 0.25, 0.1], neck: [0.35, -0.2, 0], shL: [-3.2987, -0.2443, -0.1745], elL: [-0.4887, 0, 0], shR: [-0.3142, 1.5708, -3.1416], elR: [-0.2094, 0, 0],
+      hipL: [-1.5184, 0.2793, -0.0524], knL: [0, 0, 0], ftL: [-0.2, 0, 0], hipR: [-1.5882, 0, -0.2094], knR: [0.6632, 0, 0], ftR: [0.3, 0, 0] },
     // Between webs. Reaching forward & up for the next one, a knee driven up
     airReach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
       hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
@@ -2699,7 +2699,7 @@ const HERO_MOVES = {
   // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
   // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
   // his arms, chest and head change gradually over most of it (flowAt, flowSpan)
-  swing: { kickAt: -0.22, kickSpan: 0.4, flowAt: 0, flowSpan: 1.6 },
+  swing: { kickAt: 0, kickSpan: 1.18, flowAt: 0, flowSpan: 1 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
