@@ -2651,7 +2651,7 @@ const HERO_MOVES = {
       hipL: [-2.0071, 0.1396, -0.2793], knL: [0.9599, 0, 0], ftL: [0.5, 0, 0], hipR: [-0.4538, -0.3142, -0.25], knR: [1.2217, 0, 0], ftR: [0.1396, 0, 0] },
     // Both hands on the web (the second comes up to it once he's hanging): down the arc a long arched line, chest
     // out, legs trailing, one straight and one bent at the knee...
-    swingLayoutDown: { spine: [0.0349, 0.2443, 0.1222], neck: [-0.4538, -0.3316, -0.192], shL: [-3.194, -1.0996, -0.2793], elL: [-0.2269, 0, 0], shR: [-0.0349, 1.117, -3.0194], elR: [-0.3316, 0, 0],
+    swingLayoutDown: { spine: [0.0873, 0.2443, 0.1222], neck: [-0.4538, -0.3316, -0.192], shL: [-3.0892, -1.0996, -0.0349], elL: [-0.384, 0, 0], shR: [-0.4712, 1.5708, -2.6529], elR: [-0.6458, 0, 0],
       hipL: [0.7679, 0.6109, -0.1571], knL: [0.9599, 0, 0], ftL: [0.8, 0, 0], hipR: [0.6458, 0.2269, -0.5061], knR: [1.3963, 0, 0], ftR: [0.8, 0, 0] },
     // ...then one knee comes up high and out to the side, the other leg hanging straight under him, looking down
     swingLayoutUp: { spine: [-0.0698, 0.25, 0.1], neck: [0.35, -0.2, 0], shL: [-3.2987, -0.2443, -0.1745], elL: [-0.4887, 0, 0], shR: [-0.3142, 1.5708, -3.1416], elR: [-0.2094, 0, 0],
@@ -2699,13 +2699,13 @@ const HERO_MOVES = {
   // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
   // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
   // his arms, chest and head change gradually over most of it (flowAt, flowSpan)
-  swing: { kickAt: -1, kickSpan: 0.3, flowAt: -0.8, flowSpan: 0.8 },
+  swing: { kickAt: 0.4, kickSpan: 0.6, flowAt: -0.2, flowSpan: 0.8 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
   // point before a swing web leaves his wrist (seconds), and how much of the way his whole body tips over towards a
   // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
-  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.79, bank: 0.14, headLook: 0.6, webAim: 0.2, webLean: 0.31 }
+  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.79, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
