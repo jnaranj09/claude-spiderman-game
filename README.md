@@ -196,7 +196,10 @@ and his head turns first towards where the stick points; a drop of 5 m or more w
 fist; and standing, he's at ease rather than to attention. He points before he shoots: his web arm is turned onto
 the stick point in a beat (`feel.webAim`) before the strand is seen to leave his wrist, and held on it while his body
 turns to the web's line. The beat is only in what's drawn: the swing itself starts when it always did, so a longer
-beat costs no responsiveness (the web starts springy, so he isn't hauled round by a strand that isn't there yet). On a web his body
+beat costs no responsiveness (the web starts springy, so he isn't hauled round by a strand that isn't there yet). The arm
+goes onto that line and comes off it again through the front (raised or lowered about the shoulder, and out to the
+side as far as the web is), never the short way round: so in the crouched swing, where the pose holds the web hand
+low, he hauls the web down in front of his body instead of swinging the arm out sideways. On a web his body
 hangs in line with it, so he leans over sideways to a web stuck to a building off to one side (`feel.webLean`: 1 all
 the way, as it is; less and his body keeps nearer the line of his arc, his arm going out to the web instead).
 

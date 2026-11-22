@@ -3086,6 +3086,22 @@ const _qChestBack = new THREE.Quaternion();
 const _qSide = new THREE.Quaternion();
 const _armDir = new THREE.Vector3();
 const _armRest = new THREE.Vector3();
+const _armWant = new THREE.Vector3();
+const _webLineChest = new THREE.Vector3();
+const _qNone = new THREE.Quaternion();
+const _qPart = new THREE.Quaternion();
+const _chartNow = { x: 0, y: 0, z: 0 }, _chartAim = { x: 0, y: 0, z: 0 }, _chartMix = { x: 0, y: 0, z: 0 };
+
+// Which way an arm points (in his chest's frame), as two of its shoulder's angles: x, how far round it's raised
+// through the front (0 hanging down, -90 degrees straight ahead, -180 straight up, on past that behind his head;
+// positive, back behind him), and z, how far out to the side. The pair is cut behind him at shoulder height, where
+// an arm doesn't go: so a line drawn between two such pairs always passes in front of his body, never behind it
+function armChart(out, d) {
+  out.z = Math.asin(Math.max(-1, Math.min(1, d.x)));
+  out.x = Math.atan2(-d.z, -d.y);
+  if (out.x > Math.PI / 2) out.x -= Math.PI * 2;
+  return out;
+}
 // How much of the strand to a web's anchor `distance` away is out: none while he's still pointing, then it flies
 // out, then 1. (Only what's seen: the web itself may have caught already. It starts springy, so in that moment he
 // isn't yet being hauled round by a web that isn't drawn)
@@ -3121,8 +3137,9 @@ function aimWebArms(ent, dt, pelvis) {
   quatOfAngles(_qChestNow, ent.pose.spine).premultiply(ent.bodyQuat);
   _qChestBack.copy(_qChestNow).invert();
   if (out) {
-    _qSide.setFromUnitVectors(webLine(ent, _armRest, HERO_MOVES.feel.webLean), webLine(ent, _armDir, 1));
+    _qSide.setFromUnitVectors(webLine(ent, _webLineChest, HERO_MOVES.feel.webLean), webLine(ent, _armDir, 1));
     _qSide.premultiply(_qChestBack).multiply(_qChestNow);
+    _webLineChest.applyQuaternion(_qChestBack);
   }
   for (let i = 0; i < 2; i++) {
     const side = i === 0 ? 1 : -1;
@@ -3130,17 +3147,32 @@ function aimWebArms(ent, dt, pelvis) {
     const keep = _armKeep[i];
     keep.x = sh.x; keep.y = sh.y; keep.z = sh.z; keep.el = el.x;
     quatOfAngles(_qArmNow, sh);
-    if (out && (side === web.side || SWING_BOTH_HANDS[web.style])) _qArmNow.premultiply(_qSide);
+    if (out && (side === web.side || SWING_BOTH_HANDS[web.style])) {
+      // (only as far as the arm is up along the web: a hand drawn down in front of him stays in front of him)
+      const along = smoothstep01(_armRest.set(0, -1, 0).applyQuaternion(_qArmNow).dot(_webLineChest) / 0.7);
+      _qArmNow.premultiply(_qPart.copy(_qNone).slerp(_qSide, along));
+    }
     const at = !A.weight ? null : side === A.side ? A.at[0] : A.double ? A.at[1] : null;
     if (at) {
       // The way to it from his shoulder (near enough: it's tens of metres off), as his chest sees it
       _armDir.set(side * 0.19, 0.48, 0).applyQuaternion(ent.bodyQuat).add(pelvis);
       _armDir.subVectors(at, _armDir).normalize().applyQuaternion(_qChestBack);
-      // The arm as the pose would have it (for the turn of the wrist), swung the short way onto that line
-      quatOfAngles(_qArmPose, _target[i === 0 ? 'shL' : 'shR']);
-      _armRest.set(0, -1, 0).applyQuaternion(_qArmPose);
-      _qArmAim.setFromUnitVectors(_armRest, _armDir).multiply(_qArmPose);
-      _qArmNow.slerp(_qArmAim, A.weight);
+      // The arm as the pose has it, raised or lowered through the front onto that line, and out to the side as far
+      // as the line is: the two angles of where it points (see armChart) each go their share of the way. Coming off
+      // the web again to a hand held low, it's brought down in front of his body, as if hauling the web down. (The
+      // short way round from pointing up to pointing down swung the arm out sideways, through a T)
+      armChart(_chartNow, _armRest.set(0, -1, 0).applyQuaternion(_qArmNow));
+      armChart(_chartAim, _armDir);
+      // (an arm straight out to the side has no first angle to speak of: there it takes the line's)
+      _chartNow.x = _chartAim.x + (_chartNow.x - _chartAim.x) * smoothstep01(Math.cos(_chartNow.z) / 0.4);
+      _chartMix.x = _chartNow.x + (_chartAim.x - _chartNow.x) * A.weight;
+      _chartMix.z = _chartNow.z + (_chartAim.z - _chartNow.z) * A.weight;
+      quatOfAngles(_qArmAim, _chartMix).multiply(quatOfAngles(_qArmPose, _chartNow).invert());
+      _qArmNow.premultiply(_qArmAim);
+      // (and exactly onto it, whatever that left over)
+      _armWant.set(Math.sin(_chartMix.z), -Math.cos(_chartMix.z) * Math.cos(_chartMix.x), -Math.cos(_chartMix.z) * Math.sin(_chartMix.x));
+      if (A.weight > 0.999) _armWant.copy(_armDir);
+      _qArmNow.premultiply(_qPart.setFromUnitVectors(_armRest.set(0, -1, 0).applyQuaternion(_qArmNow), _armWant));
       el.x += (-0.08 - el.x) * A.weight;
     }
     anglesOfQuat(sh, _qArmNow);
