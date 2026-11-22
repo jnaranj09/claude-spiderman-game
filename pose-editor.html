@@ -344,8 +344,8 @@ function buildControls() {
     });
   }
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));
-  if (move.web) box.append(section('Timing along the arc', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, r)), true,
-    'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it; both of the two-pose swings share these.'));
+  if (move.web) box.append(section('Timing along the arc (this swing only)', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, [move.web + r[0][0].toUpperCase() + r[0].slice(1), ...r.slice(1)])), true,
+    'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it. Each swing keeps its own timing: changing it here leaves the other swings as they are.'));
   if (move.tilt) box.append(section('Whole figure', move.tilt.map((k) => tableRow(HERO_MOVES.tilt, TILT_ROWS[k]))));
   box.append(section('Feel of the motion', FEEL_ROWS.map((r) => tableRow(HERO_MOVES.feel, r)), false,
     'Applies to every move. Snap: how fast his joints get to a pose. Settle: below 1 they overshoot a little and settle, lower is bouncier. Both only show when the pose changes suddenly: on a swing or between webs press Play a whole swing; on a held pose, Replay into pose. Lean into turns and Head leads turns show with Turning on.'));
@@ -592,7 +592,7 @@ function wireKeep() {
     if (poseName) HERO_MOVES.poses[poseName] = clone(HERO_MOVES_DEFAULT.poses[poseName]);
     if (move.group === 'gait') Object.assign(HERO_MOVES.gait, HERO_MOVES_DEFAULT.gait);
     for (const k of move.tilt || []) HERO_MOVES.tilt[k] = HERO_MOVES_DEFAULT.tilt[k];
-    if (move.web) Object.assign(HERO_MOVES.swing, HERO_MOVES_DEFAULT.swing);
+    if (move.web) for (const k in HERO_MOVES_DEFAULT.swing) if (k.startsWith(move.web)) HERO_MOVES.swing[k] = HERO_MOVES_DEFAULT.swing[k];
     buildControls(); changed();
   });
   $('resetAllBtn').addEventListener('click', () => { setHeroMoves(clone(HERO_MOVES_DEFAULT)); buildControls(); changed(); });

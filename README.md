@@ -173,7 +173,10 @@ angles that each move (swing, walk, run, wall slide, crawl up, crawl down, zip, 
 placed on the floor (or the wall) by moving the whole posed body. On foot he sets off at a walk and breaks into a run.
 **Landing fast** (over 18 m/s across the ground), he sticks a web from each hand to the floor behind him and they stop
 him within a few metres (with the stick held, down to a pace he runs on from). Each swing is ridden one of four ways,
-picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on.
+picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on. Each way is two
+poses (going down, going up) and its own timing for the change between them (`HERO_MOVES.swing`: where along the arc
+the legs kick and the rest of him follows, and over how much of it), so the crouch can haul its web down at once while
+the others take the whole arc.
 His crouch (the editors' 'Crouch' pose) is how he starts drawing the slingshot, both arms held out ahead along the webs
 (forward and down for webs stuck to the floor ahead, up for ones high on a building); as he draws them back he leans
 back against them, sat low on his heels with his feet braced out ahead. It is also how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on

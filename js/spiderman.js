@@ -2698,8 +2698,14 @@ const HERO_MOVES = {
   // When, along a swing's arc (-1 well before the bottom, 0 the bottom, 1 well up the far side), he goes from the
   // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
   // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
-  // his arms, chest and head change gradually over most of it (flowAt, flowSpan)
-  swing: { kickAt: 0.4, kickSpan: 0.6, flowAt: -0.2, flowSpan: 0.8 },
+  // his arms, chest and head change gradually over most of it (flowAt, flowSpan). Each way of riding a web keeps its
+  // own four (named after it: tuckKickAt, ...): the crouch hauls its web down at once, the others take their time
+  swing: {
+    pumpKickAt: 0.4, pumpKickSpan: 0.6, pumpFlowAt: -0.2, pumpFlowSpan: 0.8,
+    tuckKickAt: -1, tuckKickSpan: 0.04, tuckFlowAt: -1, tuckFlowSpan: 0.8,
+    strideKickAt: 0.4, strideKickSpan: 0.6, strideFlowAt: -0.2, strideFlowSpan: 0.8,
+    layoutKickAt: 0.4, layoutKickSpan: 0.6, layoutFlowAt: -0.2, layoutFlowSpan: 0.8
+  },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
@@ -2861,9 +2867,9 @@ function targetPose(ent, t) {
     // (how far from the going-down pose to the going-up one: his legs kick through near the bottom, the rest of him
     // changes gradually along the arc)
     const W = HERO_MOVES.swing;
+    const style = SWING_POSES[web.style] ? web.style : 'pump';
     const along = (at, span) => (web.phase === 'attached' ? smoothstep01((web.arc - at) / Math.max(span, 0.02) + 0.5) : 0);
-    const kick = along(W.kickAt, W.kickSpan), flow = along(W.flowAt, W.flowSpan);
-    const style = web.style;
+    const kick = along(W[`${style}KickAt`], W[`${style}KickSpan`]), flow = along(W[`${style}FlowAt`], W[`${style}FlowSpan`]);
     // (every way he rides a web is a pair of poses: going down, going up)
     const pair = SWING_POSES[style] || SWING_POSES.pump;
     addPoseParts(t, P[pair[0]], 1 - kick, 1 - flow, s);
