@@ -56,3 +56,25 @@ test('three.js comes from one fixed commit, never a moving branch', () => {
   }
   assert.equal(commits.size, 1, 'the builds and the addons come from the same commit');
 });
+
+test('the game is an installable app: a manifest with its icons, and a service worker registered by the entry module', () => {
+  const { existsSync } = require('node:fs');
+  const root = join(__dirname, '..');
+  const link = html.match(/<link rel="manifest" href="([^"]+)"\s*\/>/);
+  assert.ok(link, 'index.html links the manifest');
+  const manifest = JSON.parse(readFileSync(join(root, link[1]), 'utf8'));
+  // (relative, so it works from a folder of a site, as on GitHub Pages)
+  assert.equal(manifest.start_url, './');
+  assert.equal(manifest.scope, './');
+  assert.ok(['fullscreen', 'standalone'].includes(manifest.display));
+  const sizes = manifest.icons.map((icon) => `${icon.sizes} ${icon.purpose}`);
+  for (const need of ['192x192 any', '512x512 any', '512x512 maskable']) assert.ok(sizes.includes(need), `icon ${need}`);
+  for (const icon of manifest.icons) assert.ok(existsSync(join(root, icon.src)), `${icon.src} exists`);
+  const touch = html.match(/<link rel="apple-touch-icon" href="([^"]+)"\s*\/>/);
+  assert.ok(touch && existsSync(join(root, touch[1])), 'and the home screen icon for iOS');
+  assert.ok(existsSync(join(root, 'sw.js')));
+  assert.match(readFileSync(join(root, 'js/main.js'), 'utf8'), /serviceWorker\.register\('\.\/sw\.js'\)/);
+  // The worker never serves the game's own files from its copy while the network answers: a new version is never held back
+  const worker = readFileSync(join(root, 'sw.js'), 'utf8');
+  assert.match(worker, /async function siteFile\(request\) \{\s*try \{\s*const response = await fetch\(request\);/);
+});

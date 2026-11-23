@@ -4,7 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Spider-Man · Slop New York</title>
-  <link rel="icon" href="data:," />
+  <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+  <!-- An app: it can be installed to the home screen, opens full screen, and plays with no connection once it has
+       loaded once (manifest.webmanifest, sw.js) -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#0a0b0d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Spidey NYC" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
   <meta name="description" content="Web-swing through Manhattan as Spider-Man: a mobile-friendly game built on Slop New York by mrdoob. Photorealistic GTA-style 3D Slop New York simulation built with Three.js WebGPURenderer and TSL shaders featuring complete Manhattan street map (125th St to Battery Park), third-person navigation (Person, Car, Cyclist, Helicopter), and 11 cinematic cameras at 60 FPS." />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <!-- three.js from one fixed commit of its dev branch (the builds committed to mrdoob/three.js, served by jsDelivr),

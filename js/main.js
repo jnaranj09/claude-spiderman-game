@@ -817,4 +817,14 @@ async function initApp() {
   });
 }
 
-initApp();
+// The game as an app (see sw.js): the service worker makes it installable and keeps a copy of everything for playing
+// with no connection. Once the game is up it's told what the page loaded, so that copy is whole after a first visit
+function keepForOffline() {
+  if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then((registration) => {
+    const urls = [location.href.split('#')[0], ...performance.getEntriesByType('resource').map((entry) => entry.name)];
+    registration.active.postMessage({ type: 'keep', urls });
+  }).catch(() => { /* no service workers here (private window, old browser): the game plays as a page */ });
+}
+
+initApp().finally(keepForOffline);

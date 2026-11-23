@@ -7,6 +7,13 @@ web-swinging controller built for one thumb.
 It's a static site with no build step: serve the folder over HTTP (for example `python3 -m http.server`) and open
 `index.html`, or publish it with GitHub Pages.
 
+It's also an installable app (a PWA). Served over HTTPS, the browser offers to install it (Android: "Install app"
+or "Add to Home screen"; iPhone: Share, then "Add to Home Screen"); it then opens full screen from its own icon, and
+plays with no connection once it has loaded once. `manifest.webmanifest` names it and its icons (`icons/`), and
+`sw.js` keeps the copy for offline. Online that worker changes nothing: the game's own files always come from the
+network first, so a new version is never held back, and only three.js (pinned to one commit, so it can't change) and
+the fonts are served from the copy.
+
 ## Controls
 
 | | Touch | Keyboard | Gamepad |
