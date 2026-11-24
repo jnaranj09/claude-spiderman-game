@@ -2610,7 +2610,7 @@ const HERO_MOVES = {
     // Perched on a roof's edge: hunched right over, both arms straight down between his knees, fingertips on the
     // roof just ahead of his feet, head lifted to look down over the edge
     perch: { spine: [0.576, 0.0175, 0.2443], neck: [-0.3665, -0.4014, -0.2269], shL: [-0.3316, -0.4887, 0.5411], elL: [-1.501, 0, 0], shR: [-1.0996, 0, 0.15], elR: [-0.1396, 0, 0],
-      hipL: [-2.3213, 0, 0.45], knL: [2.3, 0, 0], ftL: [-0.7854, 0, 0], hipR: [-2.1, 0, -0.45], knR: [2.3, 0, 0], ftR: [-0.7854, 0, 0] },
+      hipL: [-2.618, 0, 0.45], knL: [2.2689, 0, 0], ftL: [-0.5061, 0, 0], hipR: [-2.5307, 0, -0.45], knR: [2.3, 0, 0], ftR: [-0.6458, 0, 0], lean: [-0.4014, 0, 0] },
     // Leaning back against a drawn slingshot: sat back with his feet braced out ahead, back a little rounded
     slingBrace: { spine: [0.1222, 0, 0], neck: [0.7854, 0.3665, 0], shL: [0.2967, -0.1571, 1.2566], elL: [-1.5533, 0, 0], shR: [0.1047, -0.6632, -1.6755], elR: [-1.9024, 0, 0],
       hipL: [-0.9076, 0, 0.32], knL: [1.45, 0, 0], ftL: [0.2967, 0, 0],
@@ -2679,12 +2679,12 @@ const HERO_MOVES = {
     diveDart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
       hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] },
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
-    zip: { spine: [0.2, 0, 0], neck: [0, 0, 0], shL: [-2.9, 0, 0.15], elL: [-0.05, 0, 0], shR: [-1.4, 0, -0.5], elR: [-1.6, 0, 0],
-      hipL: [0.35, 0, 0.08], knL: [0.5, 0, 0], ftL: [0.6, 0, 0], hipR: [0.15, 0, -0.08], knR: [0.9, 0, 0], ftR: [0.6, 0, 0] },
+    zip: { spine: [0.0873, -0.4363, 0], neck: [-1.0297, 0.384, 0], shL: [-2.9147, 0, 0.4712], elL: [-0.05, 0, 0], shR: [-0.576, -0.2967, -1.0821], elR: [-1.7977, 0, 0],
+      hipL: [-0.4363, 0.0524, 0.3665], knL: [1.3265, 0, 0], ftL: [0.6, 0, 0], hipR: [0.4538, -0.192, -0.3142], knR: [0.9, 0, 0], ftR: [0.6, 0, 0], lean: [0.4014, 0, 0] },
     // ...and what the zip ends in, the web hauled in past his hip: that arm drawn back along his side, the other
     // thrown forward, chest through and legs trailing
-    zipPull: { spine: [0.1, -0.35, 0], neck: [-0.5, 0.2, 0], shL: [0.75, 0, 0.3], elL: [-0.5, 0, 0], shR: [-2.5, 0, -0.3], elR: [-0.3, 0, 0],
-      hipL: [0.1, 0, 0.08], knL: [1.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.45, 0, -0.08], knR: [0.35, 0, 0], ftR: [0.7, 0, 0] },
+    zipPull: { spine: [0.4189, -0.35, -0.192], neck: [-0.7156, 0.4712, 0.2269], shL: [-0.7679, 0, -0.0698], elL: [-0.0175, 0, 0], shR: [0.1222, 0.1745, -1.2043], elR: [-0.5411, 0, 0],
+      hipL: [-2.618, 0, 1.4137], knL: [1.9548, 0, 0], ftL: [0.7, 0, 0], hipR: [-2.1118, 0, -0.6807], knR: [2.2166, 0, 0], ftR: [0.7, 0, 0], lean: [-0.6632, 0, 0] },
     // The tucked somersault after a fast release
     flip: { spine: [0.5, 0, 0], neck: [0.3, 0, 0], shL: [-1.3, 0, 0.3], elL: [-1.4, 0, 0], shR: [-1.3, 0, -0.3], elR: [-1.4, 0, 0],
       hipL: [-1.9, 0, 0.1], knL: [2.3, 0, 0], ftL: [0.5, 0, 0], hipR: [-1.9, 0, -0.1], knR: [2.3, 0, 0], ftR: [0.5, 0, 0] },
@@ -2702,7 +2702,7 @@ const HERO_MOVES = {
   // How far the whole figure tips (rad): forward as he sets up a slingshot, perched, and in the hard landing, back against a drawn
   // slingshot, back from square to the wall sliding along it (far enough for the trailing hand to reach it), and how
   // far his chest turns away from the way he slides
-  tilt: { crouch: 0.1396, perch: 0.7156, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
+  tilt: { crouch: 0.1396, perch: 0.8552, heroLanding: 0.45, slingBack: 0.7505, slideLean: 0.95, slideTurn: 0.45 },
   // When, along a swing's arc (-1 well before the bottom, 0 the bottom, 1 well up the far side), he goes from the
   // going-down pose to the going-up one. His legs and the rest of him keep their own time, as a person on a swing
   // does: the legs kick through quickly near the bottom (kickAt: where; kickSpan: over how much of the arc), while
