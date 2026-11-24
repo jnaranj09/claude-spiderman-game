@@ -2657,17 +2657,17 @@ const HERO_MOVES = {
     swingLayoutUp: { spine: [-0.0698, 0.25, 0.1], neck: [0.35, -0.2, 0], shL: [-3.2987, -0.2443, -0.1745], elL: [-0.4887, 0, 0], shR: [-0.3142, 1.5708, -3.1416], elR: [-0.2094, 0, 0],
       hipL: [-1.5184, 0.2793, -0.0524], knL: [0, 0, 0], ftL: [-0.2, 0, 0], hipR: [-1.5882, 0, -0.2094], knR: [0.6632, 0, 0], ftR: [0.3, 0, 0] },
     // Between webs. Reaching forward & up for the next one, a knee driven up
-    airReach: { spine: [0.1, 0, 0], neck: [-0.1, 0, 0], shL: [-2.2, 0, 0.35], elL: [-0.2, 0, 0], shR: [-0.4, 0, -0.9], elR: [-0.8, 0, 0],
-      hipL: [-0.9, 0, 0.1], knL: [1.4, 0, 0], ftL: [0.4, 0, 0], hipR: [-0.15, 0, -0.1], knR: [0.6, 0, 0], ftR: [0.5, 0, 0] },
+    airReach: { spine: [0.2967, -0.5934, 0.192], neck: [0.0698, 0.2269, 0.1222], shL: [-0.4363, -0.8378, 1.1519], elL: [-0.8727, 0, 0], shR: [0.3491, -0.1745, -0.8901], elR: [-1.1519, 0, 0],
+      hipL: [-0.7156, 0.2793, 0.3316], knL: [1.3265, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2618, -0.2094, -0.4189], knR: [0.5585, 0, 0], ftR: [0.5, 0, 0] },
     // The float at the top of an arc: chest open, arms wide and a little back, one knee high, the other leg folded under
-    airFloat: { spine: [-0.15, 0.12, 0], neck: [0.1, 0, 0], shL: [0.25, 0, 1.25], elL: [-0.5, 0, 0], shR: [0.35, 0, -1.05], elR: [-0.75, 0, 0],
-      hipL: [-1.5, 0, 0.25], knL: [2.0, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.45, 0, -0.2], knR: [1.6, 0, 0], ftR: [0.6, 0, 0] },
+    airFloat: { spine: [0.1745, 0.12, 0], neck: [0.1, 0, 0], shL: [0.4887, 0.2618, 1.2217], elL: [-0.6283, 0, 0], shR: [0.35, 0, -1.05], elR: [-0.75, 0, 0],
+      hipL: [-0.6283, 0.0698, 0.4887], knL: [1.0123, 0, 0], ftL: [0.6, 0, 0], hipR: [-1.693, 0, -0.3316], knR: [1.5882, 0, 0], ftR: [0.6, 0, 0] },
     // An arrow: arched, both arms swept back in a V, legs trailing together, one knee a little bent
     airArrow: { spine: [-0.3, 0, 0], neck: [-0.3, 0, 0], shL: [0.9, 0, 0.45], elL: [-0.1, 0, 0], shR: [0.9, 0, -0.45], elR: [-0.1, 0, 0],
       hipL: [0.25, 0, 0.05], knL: [0.5, 0, 0], ftL: [0.7, 0, 0], hipR: [0.1, 0, -0.05], knR: [0.95, 0, 0], ftR: [0.7, 0, 0] },
     // Falling: the classic spread
     airSpread: { spine: [-0.1, 0, 0], neck: [0.35, 0, 0], shL: [-0.35, 0, 1.35], elL: [-0.5, 0, 0], shR: [-0.35, 0, -1.35], elR: [-0.5, 0, 0],
-      hipL: [-0.45, 0, 0.3], knL: [0.9, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2, 0, -0.3], knR: [1.2, 0, 0], ftR: [0.4, 0, 0] },
+      hipL: [0.3665, 0, 0.3], knL: [1.7453, 0, 0], ftL: [0.4, 0, 0], hipR: [0.2, 0, -0.3], knR: [1.2, 0, 0], ftR: [0.4, 0, 0] },
     // A dive as it begins: a swan dive, arms out wide, back arched, legs together...
     diveSwan: { spine: [-0.2, 0, 0], neck: [-0.5, 0, 0], shL: [0.15, 0, 1.4], elL: [-0.1, 0, 0], shR: [0.15, 0, -1.4], elR: [-0.1, 0, 0],
       hipL: [0.15, 0, 0.04], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.2, 0, -0.04], knR: [0.3, 0, 0], ftR: [0.7, 0, 0] },
@@ -2711,7 +2711,7 @@ const HERO_MOVES = {
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
   // point before a swing web leaves his wrist (seconds), and how much of the way his whole body tips over towards a
   // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
-  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.79, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
+  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.52, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
 };
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
