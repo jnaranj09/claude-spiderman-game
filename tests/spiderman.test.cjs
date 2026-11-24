@@ -1454,7 +1454,32 @@ test('a zip is seen through for as long as the moves give it, with no spin, and 
   assert.equal(spider.HERO_MOVES.zip.nonsense, undefined);
   assert.deepEqual([...spider.HERO_MOVES.poses.zipPull.lean], [0.4, 0, 0]);
   assert.equal(spider.HERO_MOVES.poses.zip.tail, undefined);
-  assert.deepEqual([...spider.HERO_MOVES_DEFAULT.poses.zip.lean], [0, 0, 0], 'every pose has a lean, none by default');
+  for (const [name, pose] of Object.entries(spider.HERO_MOVES_DEFAULT.poses)) assert.equal(pose.lean.length, 3, `${name} has a lean (none, until it's given one)`);
   spider.setHeroMoves(before);
   assert.equal(spider.HERO_MOVES.zip.time, before.zip.time);
+});
+
+test('two zips are never from the same hand, whichever button is tapped and whatever is thrown in between', () => {
+  const controllers = world(avenue(140));
+  const ent = spiderEntity(0, 60, 0);
+  ent.state = 'air'; ent.velocity.set(0, 0, 15);
+  const sides = [];
+  const tap = (key) => {
+    step(controllers, ent, 3 / 60, { [key]: true });
+    step(controllers, ent, 1 / 60, { [key]: false });
+    assert.ok(ent.zip.time >= 0 && ent.zip.time < 0.1, `tap ${sides.length + 1} zipped`);
+    sides.push(ent.zip.side);
+    step(controllers, ent, 0.4);
+  };
+  // The left hand's button three times running
+  tap('webLeft'); tap('webLeft'); tap('webLeft');
+  assert.equal(sides[0], 1, 'the first is from the hand tapped (left is +1)');
+  assert.deepEqual(sides, [1, -1, 1]);
+  // A swing in between (which takes its own hand, and would have left the same one next), then a zip
+  step(controllers, ent, 1.2, { up: true });
+  assert.equal(ent.state, 'swing');
+  step(controllers, ent, 0.3, { up: false });
+  ent.nextSide = sides[2]; // (whatever the swing left as next: say, the hand that zipped last)
+  tap('up');
+  assert.equal(sides[3], -sides[2], 'the other hand from the zip before it');
 });

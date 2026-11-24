@@ -714,7 +714,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, anim: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0, rise: ZIP_RISE,
+    zip: { time: -1, anim: -1, side: 1, last: 0, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0, rise: ZIP_RISE,
       targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
@@ -1390,7 +1390,11 @@ function webZip(controllers, ent, aimYaw = null) {
   // A splat on a wall or roof (a street light just takes the strand round its head)
   if (ent.webs && !target.lamp) stickSplat(ent, zip.anchor, _seg.set(target.nx, target.ny, target.nz), false);
   zip.time = 0;
-  zip.side = ent.nextSide;
+  // His hands take turns: a zip is never from the hand the zip before it was from, whichever button was tapped and
+  // whatever webs were thrown in between (the pose is one-sided, and the same one twice running reads as a stutter).
+  // The first is from the hand tapped, or the one whose turn it is
+  zip.side = zip.last ? -zip.last : ent.nextSide;
+  zip.last = zip.side;
   ent.nextSide = -zip.side;
   zip.cooldown = 0.28;
   zip.chain++;
