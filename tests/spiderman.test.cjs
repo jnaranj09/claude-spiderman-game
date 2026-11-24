@@ -1419,3 +1419,42 @@ test('a long drop with little pace lands on a knee and a fist, held a moment; a 
   assert.equal(fast.landing, -1);
   assert.ok(fast.brake.time >= 0);
 });
+
+test('a zip is seen through for as long as the moves give it, with no spin, and a web or the ground cuts it short', () => {
+  const Z = spider.HERO_MOVES.zip;
+  const zipFrom = (height) => {
+    const controllers = world(avenue(140)); // (towers well above him: something to web after)
+    const ent = spiderEntity(0, height, 0);
+    ent.state = 'air'; ent.velocity.set(0, 0, 15);
+    step(controllers, ent, 3 / 60, { up: true });
+    step(controllers, ent, 1 / 60, { up: false });
+    return { controllers, ent };
+  };
+  // High up, left alone: its two poses play over Z.time, which outlasts the pull itself (0.35 s)
+  const { controllers, ent } = zipFrom(60);
+  assert.ok(ent.zip.anim >= 0, 'the zip has begun');
+  assert.equal(ent.roll, undefined, 'no corkscrew');
+  assert.equal(ent.flip, 1, 'and no somersault');
+  let seen = 0;
+  for (let i = 0; i < 120 && ent.zip.anim >= 0; i++) { spider.updateSpiderMan(controllers, ent, 1 / 60); seen += 1 / 60; }
+  assert.ok(Math.abs(seen - Z.time) < 0.06, `seen for ${seen.toFixed(2)} s of ${Z.time}`);
+  // A web thrown once the pull is over takes over at once
+  const b = zipFrom(60);
+  const long = Z.time; Z.time = 1.2; // (long enough to throw a web into)
+  step(b.controllers, b.ent, 0.4, { up: false });
+  assert.ok(b.ent.zip.anim >= 0 && b.ent.zip.time < 0, 'still seen zipping after the pull');
+  step(b.controllers, b.ent, 0.3, { up: true }); // (held past a tap)
+  assert.notEqual(b.ent.web.phase, 'none', 'a web is out');
+  assert.equal(b.ent.zip.anim, -1, 'and the zip is over');
+  Z.time = long;
+  // The saved moves carry the zip's settings and a pose's lean from the hips
+  const before = JSON.parse(JSON.stringify(spider.HERO_MOVES));
+  spider.setHeroMoves({ zip: { time: 0.9, nonsense: 3 }, poses: { zipPull: { lean: [0.4, 0, 0] }, zip: { tail: [1, 1, 1] } } });
+  assert.equal(spider.HERO_MOVES.zip.time, 0.9);
+  assert.equal(spider.HERO_MOVES.zip.nonsense, undefined);
+  assert.deepEqual([...spider.HERO_MOVES.poses.zipPull.lean], [0.4, 0, 0]);
+  assert.equal(spider.HERO_MOVES.poses.zip.tail, undefined);
+  assert.deepEqual([...spider.HERO_MOVES_DEFAULT.poses.zip.lean], [0, 0, 0], 'every pose has a lean, none by default');
+  spider.setHeroMoves(before);
+  assert.equal(spider.HERO_MOVES.zip.time, before.zip.time);
+});

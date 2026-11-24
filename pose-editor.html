@@ -242,8 +242,18 @@ const MOVES = [
   { id: 'dive', label: 'Dive', poses: ['diveSwan', 'diveDart'], at: [8, 34],
     time: { label: 'Fall speed', min: 8, max: 34, fmt: (u) => `${Math.round(u)} m/s` },
     set: (ent, u) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.diving = true; ent.velocity.set(0, -u, 4); } },
-  { id: 'zip', label: 'Web zip', poses: ['zip'], sided: true,
-    set: (ent, u, side) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.zip.time = 1; ent.zip.side = side; ent.velocity.set(0, 2, 28); } },
+  // (the timeline is in seconds: the zip itself, then what follows it, carrying himself between webs again. Played, it
+  // runs at the game's pace with the web thrown and his arm on it; dragged, it shows the two poses alone)
+  { id: 'zip', label: 'Web zip', poses: ['zip', 'zipPull'], sided: true, zip: true, get at() { return [0, HERO_MOVES.zip.time * 0.999]; },
+    time: { label: 'Through the zip', min: 0, max: 1.5, loop: true, period: () => 1.5,
+      fmt: (u) => (u <= HERO_MOVES.zip.time ? `${u.toFixed(2)} s` : 'after it') },
+    set: (ent, u, side) => {
+      ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.airStyle = 'reach'; ent.velocity.set(0, 2, 28);
+      ent.zip.side = side; ent.zip.anim = u <= HERO_MOVES.zip.time ? u : -1;
+      ent.zip.time = !playing ? (ent.zip.anim >= 0 ? 1 : -1) : u < 0.35 ? u : -1;
+      ent.zip.anchor.set(side * 3, 9, 18); ent.zip.normal.set(0, 0, -1);
+    },
+    note: 'Two poses: reaching for the web, then hauled through on it. Play runs it at the game’s pace (use ⅕ to slow it down), then lets him go back to how he carries himself between webs.' },
   { id: 'flip', label: 'Release somersault', poses: ['flip'], time: { label: 'Through the flip', min: 0, max: 0.99, loop: true, fmt: (u) => `${Math.round(u * 100)}%`, period: () => 0.7 },
     set: (ent, u) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.flip = u; ent.velocity.set(0, 6, 22); } },
   { id: 'glide', label: 'Glide', poses: ['glide'], set: (ent) => { ent.position.set(0, 1.2, 0); ent.state = 'air'; ent.gliding = true; ent.velocity.set(0, -3, 25); } }
@@ -252,7 +262,7 @@ const POSE_LABEL = {
   crouch: 'Start (undrawn)', slingBrace: 'Braced (drawn)', perch: 'Perch', brake: 'Brake', heroLanding: 'Knee and fist', slide: 'Slide',
   swingPumpDown: 'Going down', swingPumpUp: 'Going up', swingTuckDown: 'Knees coming up (down)', swingTuckUp: 'Crouch, web hand low (up)', swingStrideDown: 'Mid-step (down)', swingStrideUp: 'High kick (up)', swingLayoutDown: 'Arched, legs trailing (down)', swingLayoutUp: 'One knee up (up)',
   airReach: 'Rising: reach', airFloat: 'Top: float', airArrow: 'Arrow', airSpread: 'Falling: spread', diveSwan: 'Swan (slow)', diveDart: 'Dart (fast)',
-  zip: 'Zip', flip: 'Tuck', glide: 'Glide'
+  zip: 'Reaching (start)', zipPull: 'Hauled through (end)', flip: 'Tuck', glide: 'Glide'
 };
 // The joints as sliders: [joint, axis, label, min, max, sign] in degrees shown (sign turns the stored angle so that
 // more always means what the label says, on both sides)
@@ -261,7 +271,7 @@ const limb = (S, sign) => ({
   leg: [[`hip${S}`, 'x', 'Thigh back (−forward)', -150, 80, 1], [`hip${S}`, 'z', 'Thigh out sideways', -30, 90, sign], [`hip${S}`, 'y', 'Thigh twist', -60, 60, sign], [`kn${S}`, 'x', 'Knee bend', 0, 150, 1], [`ft${S}`, 'x', 'Toes pointed (−pulled up)', -45, 60, 1]]
 });
 const JOINT_GROUPS = [
-  { title: 'Chest & head', rows: [['spine', 'x', 'Bend forward (−arch)', -45, 80, 1], ['spine', 'y', 'Twist to his left', -50, 50, 1], ['spine', 'z', 'Left shoulder up', -30, 30, 1],
+  { title: 'Chest & head', rows: [['lean', 'x', 'Lean forward from the hips (back straight)', -40, 100, 1], ['spine', 'x', 'Bend the back forward (−arch)', -45, 80, 1], ['spine', 'y', 'Twist to his left', -50, 50, 1], ['spine', 'z', 'Left shoulder up', -30, 30, 1],
     ['neck', 'x', 'Chin down (−head back)', -90, 45, 1], ['neck', 'y', 'Head turned left', -80, 80, 1], ['neck', 'z', 'Head tilted', -30, 30, 1]] },
   { title: 'Leading arm (his left)', rows: limb('L', 1).arm },
   { title: 'Other arm', rows: limb('R', -1).arm },
@@ -278,6 +288,15 @@ const TILT_ROWS = {
   crouch: ['crouch', 'Tipped forward at the start', -20, 80, 1, 'deg'], perch: ['perch', 'Tipped forward', -20, 80, 1, 'deg'], slingBack: ['slingBack', 'Lean back when drawn', 0, 60, 1, 'deg'], heroLanding: ['heroLanding', 'Tipped forward', 0, 70, 1, 'deg'],
   slideLean: ['slideLean', 'Slide lean back', 20, 75, 1, 'deg'], slideTurn: ['slideTurn', 'Chest turned away', 0, 70, 1, 'deg']
 };
+// The zip: how long it lasts, when along it (0 its start, 1 its end) his legs and the rest of him change pose, how
+// far the whole figure is tipped forward at each end, and how quickly his joints follow
+const ZIP_ROWS = [
+  ['time', 'The zip lasts', 0.2, 1.2, 0.01, 's'],
+  ['kickSpan', 'Legs: the change takes', 2, 100, 1, '%'], ['kickAt', 'Legs: change centred at', 0, 100, 1, '%'],
+  ['flowSpan', 'Arms, chest, head: change takes', 2, 100, 1, '%'], ['flowAt', 'Arms, chest, head: change centred at', 0, 100, 1, '%'],
+  ['snap', 'Snap during the zip', 6, 40, 0.5, 'x']
+];
+const ZIP_TILT_ROWS = [['leanStart', 'Whole figure tipped forward at the start', -20, 100, 1, 'deg'], ['leanEnd', 'Whole figure tipped forward at the end', -20, 100, 1, 'deg']];
 const FEEL_ROWS = [
   ['stiffness', 'Snap', 6, 40, 0.5, 'x'], ['swingStiffness', 'Snap on a web: arms, chest, head', 3, 30, 0.5, 'x'], ['swingLegStiffness', 'Snap on a web: legs', 3, 40, 0.5, 'x'], ['damping', 'Settle (low: bouncy)', 0.3, 1, 0.01, 'x2'],
   ['bank', 'Lean into turns', 0, 0.6, 0.01, 'x2'], ['headLook', 'Head leads turns', 0, 1, 0.01, 'x2'], ['webAim', 'Points before the web leaves', 0, 0.4, 0.01, 's'], ['webLean', 'Body leans over to a web off to the side', 0, 100, 1, '%']
@@ -346,6 +365,12 @@ function buildControls() {
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));
   if (move.web) box.append(section('Timing along the arc (this swing only)', SWING_ROWS.map((r) => tableRow(HERO_MOVES.swing, [move.web + r[0][0].toUpperCase() + r[0].slice(1), ...r.slice(1)])), true,
     'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it. Each swing keeps its own timing: changing it here leaves the other swings as they are.'));
+  if (move.zip) {
+    box.append(section('Timing through the zip', ZIP_ROWS.map((r) => tableRow(HERO_MOVES.zip, r)), true,
+      'He goes from the first pose to the second during the zip: his legs and the rest of him each at their own time, as on a swing. 0% is the moment he fires, 100% the end of the zip.'));
+    box.append(section('Whole figure', ZIP_TILT_ROWS.map((r) => tableRow(HERO_MOVES.zip, r)), true,
+      'How far his whole body is tipped forward (90° is flat out). It moves from the first value to the second along with his arms, chest and head.'));
+  }
   if (move.tilt) box.append(section('Whole figure', move.tilt.map((k) => tableRow(HERO_MOVES.tilt, TILT_ROWS[k]))));
   box.append(section('Feel of the motion', FEEL_ROWS.map((r) => tableRow(HERO_MOVES.feel, r)), false,
     'Applies to every move. Snap: how fast his joints get to a pose. Settle: below 1 they overshoot a little and settle, lower is bouncier. Both only show when the pose changes suddenly: on a swing or between webs press Play a whole swing; on a held pose, Replay into pose. Lean into turns and Head leads turns show with Turning on.'));
@@ -437,7 +462,7 @@ function placeCamera(dt) {
 // Sets the game's Spider-Man up for the move at `u` (from a clean slate each frame) and lets the game animate him
 function resetEnt() {
   ent.state = 'ground'; ent.position.set(0, 0, 0); ent.velocity.set(0, 0, 0); ent.heading = 0; ent.crouch = 0; ent.speed = 0;
-  ent.web.phase = 'none'; ent.zip.time = -1; ent.flip = ent.roll = 1; ent.gliding = ent.diving = false; ent.landing = -1;
+  ent.web.phase = 'none'; ent.zip.time = ent.zip.anim = -1; ent.flip = 1; ent.gliding = ent.diving = false; ent.landing = -1;
   ent.sling.phase = 'none'; ent.sling.draw = 0; ent.perch.on = ent.perch.going = false; ent.stickYaw = null;
   ent.animState = 'air';
 }
@@ -551,7 +576,7 @@ const r4 = (v) => Math.round(v * 10000) / 10000;
 function rounded(moves) {
   const out = clone(moves);
   for (const name in out.poses) for (const joint in out.poses[name]) out.poses[name][joint] = out.poses[name][joint].map(r4);
-  for (const g of ['gait', 'tilt', 'swing', 'feel']) for (const k in out[g]) out[g][k] = r4(out[g][k]);
+  for (const g of ['gait', 'tilt', 'swing', 'zip', 'feel']) for (const k in out[g]) out[g][k] = r4(out[g][k]);
   return out;
 }
 let db = null;
@@ -592,6 +617,7 @@ function wireKeep() {
     if (poseName) HERO_MOVES.poses[poseName] = clone(HERO_MOVES_DEFAULT.poses[poseName]);
     if (move.group === 'gait') Object.assign(HERO_MOVES.gait, HERO_MOVES_DEFAULT.gait);
     for (const k of move.tilt || []) HERO_MOVES.tilt[k] = HERO_MOVES_DEFAULT.tilt[k];
+    if (move.zip) Object.assign(HERO_MOVES.zip, HERO_MOVES_DEFAULT.zip);
     if (move.web) for (const k in HERO_MOVES_DEFAULT.swing) if (k.startsWith(move.web)) HERO_MOVES.swing[k] = HERO_MOVES_DEFAULT.swing[k];
     buildControls(); changed();
   });

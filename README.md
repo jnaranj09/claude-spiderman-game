@@ -183,7 +183,9 @@ him within a few metres (with the stick held, down to a pace he runs on from). E
 picked as the web is thrown: usually legs trailing down the arc and kicked forward from the bottom on. Each way is two
 poses (going down, going up) and its own timing for the change between them (`HERO_MOVES.swing`: where along the arc
 the legs kick and the rest of him follows, and over how much of it), so the crouch can haul its web down at once while
-the others take the whole arc.
+the others take the whole arc. Any pose can also lean him forward from the hips (`lean`): his pelvis and everything
+above it tip about the hip joints with his back straight and his legs staying put, where bending the spine folds
+him at the waist.
 His crouch (the editors' 'Crouch' pose) is how he starts drawing the slingshot, both arms held out ahead along the webs
 (forward and down for webs stuck to the floor ahead, up for ones high on a building); as he draws them back he leans
 back against them, sat low on his heels with his feet braced out ahead. It is also how he **perches**: a double click of the stick within 6 m of a roof's edge sends him over to crouch on
@@ -213,7 +215,8 @@ low, he hauls the web down in front of his body instead of swinging the arm out 
 hangs in line with it, so he leans over sideways to a web stuck to a building off to one side (`feel.webLean`: 1 all
 the way, as it is; less and his body keeps nearer the line of his arc, his arm going out to the web instead).
 
-There's also rooftop landings, release flips and zip corkscrews, a camera that orbits around him and won't pass
+There's also rooftop landings, release flips, a zip that goes from a reaching pose to a hauled-through one (two
+poses with their own timing and a tip of the whole figure, `HERO_MOVES.zip`; no spin), a camera that orbits around him and won't pass
 through buildings, a speed-based field-of-view kick, and a synthesized *thwip*.
 
 Add `?debug` to the URL to expose the simulation as `window.spiderDebug` (the play tests use it).

@@ -197,7 +197,9 @@ function createWebSplatTexture() {
 // take the world-space transforms PersonRig.poseFK works out
 // ---------------------------------------------------------------------------------------------------------------
 
-const JOINTS = ['spine', 'neck', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'ftL', 'hipR', 'knR', 'ftR'];
+// (lean is not a joint of its own: its x is how far the pose tips his whole upper body forward from the hips, back
+// straight, his legs staying where they are. See leanFromHips)
+const JOINTS = ['spine', 'neck', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'ftL', 'hipR', 'knR', 'ftR', 'lean'];
 const BONES = HERO_BONE_COUNT; // the city's 15 and his two shoulder helpers
 
 function buildSpiderManModel(scene) {
@@ -712,7 +714,7 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
       dirZ: 1
     },
     // The quick forward web of a tap (drawn for a moment, while it yanks)
-    zip: { time: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0, rise: ZIP_RISE,
+    zip: { time: -1, anim: -1, side: 1, anchor: new THREE.Vector3(), tip: new THREE.Vector3(), normal: new THREE.Vector3(), cooldown: 0, pull: 0, rise: ZIP_RISE,
       targetSpeed: 0, chain: 0 },
     nextSide: 1,
     webHeld: false,
@@ -758,7 +760,6 @@ function createSpiderManState(x = 0, y = 0, z = 0, heading = 0) {
     // looking down (on), where, and the time left for a second click to make a double
     perch: { going: false, on: false, x: 0, z: 0, heading: 0, click: 0, time: 0 },
     flip: 1,
-    roll: 1,
     crouch: 0,
     // (for the look: how far off the floor a running stride's flight has him, and how firmly his feet are placed)
     footLift: 0,
@@ -838,7 +839,7 @@ function resetSpiderMan(ent) {
   ent.speed = 0;
   ent.state = 'ground';
   ent.web.phase = 'none';
-  ent.zip.time = -1;
+  ent.zip.time = ent.zip.anim = -1;
   ent.zip.pull = 0;
   releaseSplat(ent);
   dropSling(ent);
@@ -847,7 +848,7 @@ function resetSpiderMan(ent) {
   ent.gliding = ent.diving = false;
   ent.webCooldown = 0;
   ent.crouch = 0;
-  ent.flip = ent.roll = 1;
+  ent.flip = 1;
   ent.bodyQuat.setFromAxisAngle(UP, ent.heading);
 }
 
@@ -1410,7 +1411,8 @@ function webZip(controllers, ent, aimYaw = null) {
     v.z = dir.z * 3;
   }
   ent.state = 'air';
-  ent.roll = 0;
+  // (how it looks: two poses and a tip of the whole figure, over the zip's own time. See HERO_MOVES.zip)
+  zip.anim = 0;
   ent.flip = 1;
   if (typeof ent.onWebShot === 'function') ent.onWebShot(Math.hypot(target.x - p.x, target.z - p.z));
   return true;
@@ -1646,9 +1648,11 @@ function updateSpiderMan(controllers, ent, dt) {
   ent.webRetry = Math.max(0, ent.webRetry - dt);
   zip.cooldown = Math.max(0, zip.cooldown - dt);
   if (zip.time >= 0) zip.time = zip.time + dt > 0.35 ? -1 : zip.time + dt;
+  // (the zip as he's seen doing it goes on for as long as the moves give it, unless he lands, sticks to a wall or
+  // throws a web first)
+  if (zip.anim >= 0) zip.anim = ent.state !== 'air' || (zip.time < 0 && web.phase !== 'none') || zip.anim + dt > HERO_MOVES.zip.time ? -1 : zip.anim + dt;
   ent.crouch = Math.max(0, ent.crouch - dt * 3);
   if (ent.flip < 1) ent.flip = Math.min(1, ent.flip + dt / 0.7);
-  if (ent.roll < 1) ent.roll = Math.min(1, ent.roll + dt / 0.55);
 
   // --- Web lifecycle -----------------------------------------------------------------------------------------
   if (web.phase !== 'none') {
@@ -2080,7 +2084,7 @@ function updateSpiderMan(controllers, ent, dt) {
         ent.crouch = Math.min(1, -v.y / 22);
         ent.state = 'ground';
         v.y = 0;
-        ent.flip = ent.roll = 1;
+        ent.flip = 1;
         const landed = Math.hypot(v.x, v.z);
         if (landed > BRAKE_MIN_SPEED) startBrake(ent, landed);
         // (a long drop without that much pace: down on a knee and a fist)
@@ -2677,6 +2681,10 @@ const HERO_MOVES = {
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
     zip: { spine: [0.2, 0, 0], neck: [0, 0, 0], shL: [-2.9, 0, 0.15], elL: [-0.05, 0, 0], shR: [-1.4, 0, -0.5], elR: [-1.6, 0, 0],
       hipL: [0.35, 0, 0.08], knL: [0.5, 0, 0], ftL: [0.6, 0, 0], hipR: [0.15, 0, -0.08], knR: [0.9, 0, 0], ftR: [0.6, 0, 0] },
+    // ...and what the zip ends in, the web hauled in past his hip: that arm drawn back along his side, the other
+    // thrown forward, chest through and legs trailing
+    zipPull: { spine: [0.1, -0.35, 0], neck: [-0.5, 0.2, 0], shL: [0.75, 0, 0.3], elL: [-0.5, 0, 0], shR: [-2.5, 0, -0.3], elR: [-0.3, 0, 0],
+      hipL: [0.1, 0, 0.08], knL: [1.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.45, 0, -0.08], knR: [0.35, 0, 0], ftR: [0.7, 0, 0] },
     // The tucked somersault after a fast release
     flip: { spine: [0.5, 0, 0], neck: [0.3, 0, 0], shL: [-1.3, 0, 0.3], elL: [-1.4, 0, 0], shR: [-1.3, 0, -0.3], elR: [-1.4, 0, 0],
       hipL: [-1.9, 0, 0.1], knL: [2.3, 0, 0], ftL: [0.5, 0, 0], hipR: [-1.9, 0, -0.1], knR: [2.3, 0, 0], ftR: [0.5, 0, 0] },
@@ -2706,6 +2714,12 @@ const HERO_MOVES = {
     strideKickAt: 0.4, strideKickSpan: 0.6, strideFlowAt: -0.2, strideFlowSpan: 0.8,
     layoutKickAt: 0.4, layoutKickSpan: 0.6, layoutFlowAt: -0.2, layoutFlowSpan: 0.8
   },
+  // The zip, as he's seen doing it: from the reaching pose (poses.zip) to the hauled-through one (poses.zipPull) over
+  // `time` seconds. As on a swing his legs and the rest of him change at their own times (kickAt, flowAt: where
+  // along the zip, 0 its start and 1 its end; kickSpan, flowSpan: over how much of it), and the whole figure tips
+  // forward from leanStart to leanEnd (rad; 1.57 would be flat out) with his arms, chest and head. `snap` is how
+  // fast his joints follow through it (1/s), whatever the feel's own is
+  zip: { time: 0.6, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.95, snap: 14 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
@@ -2713,6 +2727,8 @@ const HERO_MOVES = {
   // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
   feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.52, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
 };
+// (every pose can lean him from the hips: none does until it's given one)
+for (const name in HERO_MOVES.poses) HERO_MOVES.poses[name].lean ||= [0, 0, 0];
 const HERO_MOVES_DEFAULT = JSON.parse(JSON.stringify(HERO_MOVES));
 
 // Takes a saved set of moves (pose-editor.html): any part of HERO_MOVES; what it leaves out stays as it is
@@ -2726,7 +2742,7 @@ function setHeroMoves(saved) {
       if (JOINTS.includes(joint) && Array.isArray(a) && a.length === 3 && a.every(Number.isFinite)) pose[joint] = [a[0], a[1], a[2]];
     }
   }
-  for (const group of ['gait', 'tilt', 'swing', 'feel']) {
+  for (const group of ['gait', 'tilt', 'swing', 'zip', 'feel']) {
     for (const key in saved[group] || {}) {
       if (key in HERO_MOVES[group] && Number.isFinite(saved[group][key])) HERO_MOVES[group][key] = saved[group][key];
     }
@@ -2809,6 +2825,17 @@ function mix(a, b, t) {
   return a + (b - a) * t;
 }
 
+// Whether he's seen zipping (see zip.anim in the controller), and how far through its two poses his legs (`part`
+// 'kick') or the rest of him ('flow') are
+function zipping(ent) {
+  return ent.zip.anim >= 0 && ent.state === 'air';
+}
+function zipAlong(ent, part) {
+  const Z = HERO_MOVES.zip;
+  const u = Math.min(1, ent.zip.anim / Math.max(Z.time, 0.05));
+  return smoothstep01((u - Z[`${part}At`]) / Math.max(Z[`${part}Span`], 0.02) + 0.5);
+}
+
 function targetPose(ent, t) {
   for (const name of JOINTS) setPose(t, name, 0, 0, 0);
   const v = ent.velocity;
@@ -2856,8 +2883,12 @@ function targetPose(ent, t) {
     const fast = smoothstep01((-v.y - 14) / 16);
     addPose(t, P.diveSwan, 1 - fast);
     addPose(t, P.diveDart, fast);
-  } else if (ent.zip.time >= 0) {
-    addPose(t, P.zip, 1, ent.zip.side > 0 ? 1 : -1);
+  } else if (zipping(ent)) {
+    // Reaching for the web, then hauled through on it: mirrored for the hand the web is in
+    const s = ent.zip.side > 0 ? 1 : -1;
+    const kick = zipAlong(ent, 'kick'), flow = zipAlong(ent, 'flow');
+    addPoseParts(t, P.zip, 1 - kick, 1 - flow, s);
+    addPoseParts(t, P.zipPull, kick, flow, s);
   } else if (web.phase !== 'none' || ent.state === 'swing') {
     // One arm up the web; the rest by how he rides this one (web.style), and by where on the arc he is. The poses
     // are mirrored for the hand the web is in
@@ -2950,9 +2981,9 @@ function bodyOrientation(ent, out) {
     _bz.set(0, -1, 0);
   } else if (ent.state === 'air' || ent.state === 'swing' || ent.state === 'whip') {
     // In flight he leans into the way he's going: head first and body stretched out at speed (more so falling,
-    // less on the way up, when he tips back a little); zipping, flat out along the web
+    // less on the way up, when he tips back a little); zipping, as far as the zip's own settings tip him
     const pitch = Math.max(-0.9, Math.min(0.5, Math.atan2(v.y, Math.max(h, 1)) * 0.55));
-    const lean = ent.zip.time >= 0 ? 0.9
+    const lean = zipping(ent) ? mix(HERO_MOVES.zip.leanStart, HERO_MOVES.zip.leanEnd, zipAlong(ent, 'flow'))
       : Math.max(-0.35, Math.min(0.95, AIR_LEAN * Math.min(1, h / 25) - Math.sin(pitch) * 0.8));
     _by.set(0, Math.cos(lean), 0).addScaledVector(_bz, Math.sin(lean));
     // On a web his up turns to the line of the web (facing his heading, square to it, so always along the arc),
@@ -2987,10 +3018,6 @@ function bodyOrientation(ent, out) {
     // a forward somersault after a fast release
     const e = ent.flip * ent.flip * (3 - 2 * ent.flip);
     out.multiply(_qSpin.setFromAxisAngle(_axis.set(1, 0, 0), e * Math.PI * 2));
-  } else if (ent.roll < 1) {
-    // a corkscrew with each zip
-    const e = ent.roll * ent.roll * (3 - 2 * ent.roll);
-    out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 0, 1), e * Math.PI * 2 * (ent.zip.side || 1)));
   } else if (ent.gliding) {
     // banked into a turn, the inside wing down
     out.multiply(_qSpin.setFromAxisAngle(_axis.set(0, 1, 0), -ent.glideBank * 0.5));
@@ -3200,6 +3227,30 @@ function aimWebArms(ent, dt, pelvis) {
   }
   return true;
 }
+// A pose's lean from the hips: his pelvis and everything above it tipped forward about the hip joints, back straight,
+// and his thighs turned back by as much, so his legs stay where the pose has them. (Bending him forward at the
+// spine instead folds him at the waist: a little of that reads as a hunch.) It's put on for the posing only, like
+// the aimed arms, and taken off again after (standFromHips)
+const _qBodyKeep = new THREE.Quaternion();
+const _qLean = new THREE.Quaternion();
+const _leanAxis = new THREE.Vector3(1, 0, 0);
+let _leanBy = 0;
+function leanFromHips(ent) {
+  _leanBy = ent.pose.lean.x;
+  if (Math.abs(_leanBy) < 1e-4) return false;
+  _qBodyKeep.copy(ent.bodyQuat);
+  ent.bodyQuat.multiply(_qLean.setFromAxisAngle(_leanAxis, _leanBy));
+  // (a thigh's first turn is this same one, about the line through his hips: so taking it off there is exact)
+  ent.pose.hipL.x -= _leanBy;
+  ent.pose.hipR.x -= _leanBy;
+  return true;
+}
+function standFromHips(ent) {
+  ent.bodyQuat.copy(_qBodyKeep);
+  ent.pose.hipL.x += _leanBy;
+  ent.pose.hipR.x += _leanBy;
+}
+
 function restoreArms(ent) {
   for (let i = 0; i < 2; i++) {
     const sh = ent.pose[i === 0 ? 'shL' : 'shR'], keep = _armKeep[i];
@@ -3237,11 +3288,13 @@ function updateSpiderManVisuals(ent, dt, active) {
   // smooth a fast cycle away, the legs barely moving at a full run. So the cycle is followed at its own fixed
   // quickness, whatever the feel is set to)
   const gait = ent.gaitShare || 0;
+  const zipSnap = zipping(ent) ? HERO_MOVES.zip.snap : 0;
   for (let left = Math.min(dt, 0.1); left > 1e-6; left -= 1 / 60) {
     const h = Math.min(left, 1 / 60);
     for (const name of JOINTS) {
       const cur = ent.pose[name], want = _target[name], speed = ent.poseSpeed[name];
-      const stiff = swinging ? (isLegJoint(name) ? F.swingLegStiffness : F.swingStiffness) : mix(F.stiffness, Math.max(F.stiffness, GAIT_SNAP), gait);
+      const stiff = swinging ? (isLegJoint(name) ? F.swingLegStiffness : F.swingStiffness)
+        : zipSnap ? Math.max(F.stiffness, zipSnap) : mix(F.stiffness, Math.max(F.stiffness, GAIT_SNAP), gait);
       const damp = 2 * (swinging ? F.damping : mix(F.damping, GAIT_SETTLE, gait)) * stiff;
       speed.x += ((want.x - cur.x) * stiff * stiff - speed.x * damp) * h;
       speed.y += ((want.y - cur.y) * stiff * stiff - speed.y * damp) * h;
@@ -3253,7 +3306,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   bodyOrientation(ent, _qWant);
   // (gentler in the air and on the web, where the body flows from one attitude to the next)
   const turnRate = ent.state === 'whip' ? 14 : ent.state === 'air' || ent.state === 'swing' ? 6 : 10;
-  ent.bodyQuat.slerp(_qWant, ent.flip < 1 || ent.roll < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
+  ent.bodyQuat.slerp(_qWant, ent.flip < 1 ? 1 : 1 - Math.exp(-dt * turnRate));
   // For the swing camera: his up along the web (only while swinging; it settles back to level otherwise)
   if (ent.state === 'swing' && web.phase === 'attached') {
     _axis.set(web.aim.x - ent.position.x, web.aim.y - ent.position.y - 1, web.aim.z - ent.position.z).normalize();
@@ -3266,6 +3319,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   _pelvis.copy(ent.position).add(ent.pelvisOffset);
 
   // The skinned body, posed in world space; the hands come back for the webs
+  const leaned = leanFromHips(ent);
   const aimed = aimWebArms(ent, dt, _pelvis);
   model.rig.poseFK(ent.bodyQuat, _pelvis, ent.pose, model.hands);
   if (aimed) restoreArms(ent);
@@ -3273,6 +3327,7 @@ function updateSpiderManVisuals(ent, dt, active) {
   ent.footing = planted ? ent.footing + (1 - ent.footing) * (1 - Math.exp(-dt * 14)) : 0;
   if (planted) plantFeet(ent, model, ent.footing, dt);
   applyRigToBones(model);
+  if (leaned) standFromHips(ent);
 
   // The web wings open (and fold) over a quarter second
   ent.glide += ((ent.gliding ? 1 : 0) - ent.glide) * Math.min(1, dt * 8);
