@@ -292,6 +292,7 @@ const TILT_ROWS = {
 // far the whole figure is tipped forward at each end, and how quickly his joints follow
 const ZIP_ROWS = [
   ['time', 'The zip lasts', 0.2, 1.2, 0.01, 's'],
+  ['webUntil', 'He lets the web go at', 10, 100, 1, '%'],
   ['kickSpan', 'Legs: the change takes', 2, 100, 1, '%'], ['kickAt', 'Legs: change centred at', 0, 100, 1, '%'],
   ['flowSpan', 'Arms, chest, head: change takes', 2, 100, 1, '%'], ['flowAt', 'Arms, chest, head: change centred at', 0, 100, 1, '%'],
   ['snap', 'Snap during the zip', 6, 40, 0.5, 'x']
@@ -367,7 +368,7 @@ function buildControls() {
     'His legs and the rest of him go from the first pose to the second at their own times. A short kick near the bottom with a long change for the arms, chest and head is how a person rides a swing. Drag the timeline to see it. Each swing keeps its own timing: changing it here leaves the other swings as they are.'));
   if (move.zip) {
     box.append(section('Timing through the zip', ZIP_ROWS.map((r) => tableRow(HERO_MOVES.zip, r)), true,
-      'He goes from the first pose to the second during the zip: his legs and the rest of him each at their own time, as on a swing. 0% is the moment he fires, 100% the end of the zip.'));
+      'He goes from the first pose to the second during the zip: his legs and the rest of him each at their own time, as on a swing. 0% is the moment he fires, 100% the end of the zip. The web is seen until he lets it go, so it follows the zip’s length.'));
     box.append(section('Whole figure', ZIP_TILT_ROWS.map((r) => tableRow(HERO_MOVES.zip, r)), true,
       'How far his whole body is tipped forward (90° is flat out). It moves from the first value to the second along with his arms, chest and head.'));
   }

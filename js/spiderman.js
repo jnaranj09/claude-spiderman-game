@@ -2722,8 +2722,9 @@ const HERO_MOVES = {
   // `time` seconds. As on a swing his legs and the rest of him change at their own times (kickAt, flowAt: where
   // along the zip, 0 its start and 1 its end; kickSpan, flowSpan: over how much of it), and the whole figure tips
   // forward from leanStart to leanEnd (rad; 1.57 would be flat out) with his arms, chest and head. `snap` is how
-  // fast his joints follow through it (1/s), whatever the feel's own is
-  zip: { time: 0.61, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.0698, snap: 14 },
+  // fast his joints follow through it (1/s), whatever the feel's own is, and webUntil how far through the zip he
+  // lets the web go (the strand is seen until then)
+  zip: { time: 0.61, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.0698, snap: 14, webUntil: 0.55 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
@@ -3255,6 +3256,16 @@ function standFromHips(ent) {
   ent.pose.hipR.x += _leanBy;
 }
 
+// Whether a zip's strand is to be seen: from the moment his arm is on the stick point until he lets the web go. Zipping
+// through the air that's a share of the zip as the moves time it (HERO_MOVES.zip.webUntil of its `time`), so a longer
+// or shorter zip keeps its web for as much of it; a zip along a wall, which has no such timing, keeps it a third of a
+// second
+function zipWebOut(ent) {
+  const zip = ent.zip;
+  if (zip.anim >= 0) return zip.anim >= ZIP_AIM_TIME && zip.anim < HERO_MOVES.zip.time * HERO_MOVES.zip.webUntil;
+  return zip.time >= ZIP_AIM_TIME && zip.time < 0.33;
+}
+
 function restoreArms(ent) {
   for (let i = 0; i < 2; i++) {
     const sh = ent.pose[i === 0 ? 'shL' : 'shR'], keep = _armKeep[i];
@@ -3378,11 +3389,12 @@ function updateSpiderManVisuals(ent, dt, active) {
     }
     // (nothing to see while he's still pointing)
     to = t > 0 ? web.tip : null;
-  } else if (active && zip.time >= ZIP_AIM_TIME && zip.time < 0.33) {
+  } else if (active && zipWebOut(ent)) {
+    const since = zip.anim >= 0 ? zip.anim : zip.time;
     from = model.hands[zip.side > 0 ? 0 : 1];
-    zip.tip.lerpVectors(from, zip.anchor, Math.min(1, (zip.time - ZIP_AIM_TIME) / 0.07));
+    zip.tip.lerpVectors(from, zip.anchor, Math.min(1, (since - ZIP_AIM_TIME) / 0.07));
     to = zip.tip;
-    fray = zip.time >= ZIP_AIM_TIME + 0.07 ? 1 : 0;
+    fray = since >= ZIP_AIM_TIME + 0.07 ? 1 : 0;
     normal = zip.normal;
   }
   if (to) {
