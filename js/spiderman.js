@@ -2683,12 +2683,12 @@ const HERO_MOVES = {
     diveDart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
       hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] },
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
-    zip: { spine: [0.0873, -0.4363, 0], neck: [-1.0297, 0.384, 0], shL: [-2.9147, 0, 0.4712], elL: [-0.05, 0, 0], shR: [-0.576, -0.2967, -1.0821], elR: [-1.7977, 0, 0],
-      hipL: [-0.4363, 0.0524, 0.3665], knL: [1.3265, 0, 0], ftL: [0.6, 0, 0], hipR: [0.4538, -0.192, -0.3142], knR: [0.9, 0, 0], ftR: [0.6, 0, 0], lean: [0.4014, 0, 0] },
+    zip: { spine: [0.1396, -0.4363, 0], neck: [-1.0297, 0.384, 0], shL: [-2.9147, 0, 0.4712], elL: [-0.05, 0, 0], shR: [-0.576, -0.2967, -1.0821], elR: [-1.7977, 0, 0],
+      hipL: [-1.309, 0.0524, 0.6458], knL: [1.9373, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.1047, -0.3316, -0.4887], knR: [0.9, 0, 0], ftR: [0.6, 0, 0], lean: [0.5585, 0, 0] },
     // ...and what the zip ends in, the web hauled in past his hip: that arm drawn back along his side, the other
     // thrown forward, chest through and legs trailing
-    zipPull: { spine: [0.4189, -0.35, -0.192], neck: [-0.7156, 0.4712, 0.2269], shL: [-0.7679, 0, -0.0698], elL: [-0.0175, 0, 0], shR: [0.1222, 0.1745, -1.2043], elR: [-0.5411, 0, 0],
-      hipL: [-2.618, 0, 1.4137], knL: [1.9548, 0, 0], ftL: [0.7, 0, 0], hipR: [-2.1118, 0, -0.6807], knR: [2.2166, 0, 0], ftR: [0.7, 0, 0], lean: [-0.6632, 0, 0] },
+    zipPull: { spine: [0.8552, -0.35, -0.3491], neck: [-1.0647, -0.0175, 0.384], shL: [-0.7679, 0, -0.0698], elL: [-0.0175, 0, 0], shR: [0.1222, 0.1745, -1.2043], elR: [-0.5411, 0, 0],
+      hipL: [-2.618, 0, 1.4137], knL: [1.9548, 0, 0], ftL: [0.7, 0, 0], hipR: [-2.1118, 0, -0.6807], knR: [2.2166, 0, 0], ftR: [0.7, 0, 0], lean: [0.1396, 0, 0] },
     // The tucked somersault after a fast release
     flip: { spine: [0.5, 0, 0], neck: [0.3, 0, 0], shL: [-1.3, 0, 0.3], elL: [-1.4, 0, 0], shR: [-1.3, 0, -0.3], elR: [-1.4, 0, 0],
       hipL: [-1.9, 0, 0.1], knL: [2.3, 0, 0], ftL: [0.5, 0, 0], hipR: [-1.9, 0, -0.1], knR: [2.3, 0, 0], ftR: [0.5, 0, 0] },
@@ -2723,7 +2723,7 @@ const HERO_MOVES = {
   // along the zip, 0 its start and 1 its end; kickSpan, flowSpan: over how much of it), and the whole figure tips
   // forward from leanStart to leanEnd (rad; 1.57 would be flat out) with his arms, chest and head. `snap` is how
   // fast his joints follow through it (1/s), whatever the feel's own is
-  zip: { time: 0.6, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.95, snap: 14 },
+  zip: { time: 0.61, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.0698, snap: 14 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
