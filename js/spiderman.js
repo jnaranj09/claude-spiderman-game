@@ -2683,8 +2683,8 @@ const HERO_MOVES = {
     diveDart: { spine: [0.05, 0, 0], neck: [-0.6, 0, 0], shL: [0.35, 0, 0.3], elL: [-0.15, 0, 0], shR: [0.35, 0, -0.3], elR: [-0.15, 0, 0],
       hipL: [0.08, 0, 0.03], knL: [0.1, 0, 0], ftL: [0.7, 0, 0], hipR: [0.12, 0, -0.03], knR: [0.25, 0, 0], ftR: [0.7, 0, 0] },
     // Zipping: the web arm thrown forward, the other tucked, legs trailing
-    zip: { spine: [0.1396, -0.4363, 0], neck: [-1.0297, 0.384, 0], shL: [-2.9147, 0, 0.4712], elL: [-0.05, 0, 0], shR: [-0.576, -0.2967, -1.0821], elR: [-1.7977, 0, 0],
-      hipL: [-1.309, 0.0524, 0.6458], knL: [1.9373, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.1047, -0.3316, -0.4887], knR: [0.9, 0, 0], ftR: [0.6, 0, 0], lean: [0.5585, 0, 0] },
+    zip: { spine: [0.1396, -0.4363, 0], neck: [-1.0297, 0.384, 0], shL: [-2.2689, -0.8552, 0.8727], elL: [-0.3491, 0, 0], shR: [-0.576, -0.2967, -1.0821], elR: [-1.7977, 0, 0],
+      hipL: [-0.4887, 0.0524, 0.6458], knL: [1.9373, 0, 0], ftL: [0.6, 0, 0], hipR: [-0.1047, -0.3316, -0.4887], knR: [0.9, 0, 0], ftR: [0.6, 0, 0], lean: [0.2269, 0, 0] },
     // ...and what the zip ends in, the web hauled in past his hip: that arm drawn back along his side, the other
     // thrown forward, chest through and legs trailing
     zipPull: { spine: [0.8552, -0.35, -0.3491], neck: [-1.0647, -0.0175, 0.384], shL: [-0.7679, 0, -0.0698], elL: [-0.0175, 0, 0], shR: [0.1222, 0.1745, -1.2043], elR: [-0.5411, 0, 0],
@@ -2724,13 +2724,13 @@ const HERO_MOVES = {
   // forward from leanStart to leanEnd (rad; 1.57 would be flat out) with his arms, chest and head. `snap` is how
   // fast his joints follow through it (1/s), whatever the feel's own is, and webUntil how far through the zip he
   // lets the web go (the strand is seen until then)
-  zip: { time: 0.61, kickAt: 0.45, kickSpan: 0.4, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.5, leanEnd: 0.0698, snap: 14, webUntil: 0.55 },
+  zip: { time: 0.8, kickAt: 0.3, kickSpan: 0.3, flowAt: 0.4, flowSpan: 0.5, leanStart: 0.7156, leanEnd: 0.2269, snap: 17, webUntil: 0.69 },
   // The feel of it: how fast his joints follow their poses (1/s; on a web, gentler for his arms, chest and head and
   // quicker for his legs, so that a kick stays a kick) and how much they overshoot and settle (damping 1: none), how
   // hard he leans into turns in the air, how far his head leads a turn, and how long he points his arm at the stick
   // point before a swing web leaves his wrist (seconds), and how much of the way his whole body tips over towards a
   // web stuck off to one side (0: not at all, only his arm goes out to it; 1: he hangs in line with it)
-  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.52, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
+  feel: { stiffness: 6, swingStiffness: 10, swingLegStiffness: 12.5, damping: 0.45, bank: 0.18, headLook: 0.78, webAim: 0.1, webLean: 0.5 }
 };
 // (every pose can lean him from the hips: none does until it's given one)
 for (const name in HERO_MOVES.poses) HERO_MOVES.poses[name].lean ||= [0, 0, 0];
