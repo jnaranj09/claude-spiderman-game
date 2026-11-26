@@ -271,7 +271,8 @@ const limb = (S, sign) => ({
   leg: [[`hip${S}`, 'x', 'Thigh back (−forward)', -150, 80, 1], [`hip${S}`, 'z', 'Thigh out sideways', -30, 90, sign], [`hip${S}`, 'y', 'Thigh twist', -60, 60, sign], [`kn${S}`, 'x', 'Knee bend', 0, 150, 1], [`ft${S}`, 'x', 'Toes pointed (−pulled up)', -45, 60, 1]]
 });
 const JOINT_GROUPS = [
-  { title: 'Chest & head', rows: [['lean', 'x', 'Lean forward from the hips (back straight)', -40, 100, 1], ['spine', 'x', 'Bend the back forward (−arch)', -45, 80, 1], ['spine', 'y', 'Twist to his left', -50, 50, 1], ['spine', 'z', 'Left shoulder up', -30, 30, 1],
+  { title: 'Whole body', rows: [['lean', 'y', 'Whole body turned to his left (−right)', -180, 180, 1], ['lean', 'x', 'Lean forward from the hips (back straight)', -40, 100, 1]] },
+  { title: 'Chest & head', rows: [['spine', 'x', 'Bend the back forward (−arch)', -45, 80, 1], ['spine', 'y', 'Twist to his left', -50, 50, 1], ['spine', 'z', 'Left shoulder up', -30, 30, 1],
     ['neck', 'x', 'Chin down (−head back)', -90, 45, 1], ['neck', 'y', 'Head turned left', -80, 80, 1], ['neck', 'z', 'Head tilted', -30, 30, 1]] },
   { title: 'Leading arm (his left)', rows: limb('L', 1).arm },
   { title: 'Other arm', rows: limb('R', -1).arm },
@@ -360,7 +361,7 @@ function buildControls() {
         const k = 'xyz'.indexOf(axis);
         return sliderRow(label, min, max, 1, pose[joint][k] * DEG * sign, (v) => `${Math.round(v)}°`, (v) => { pose[joint][k] = v / DEG * sign; changed(); });
       });
-      if (rows.length) box.append(section(g.title, rows, i < 3));
+      if (rows.length) box.append(section(g.title, rows, i < 4));
     });
   }
   if (move.group === 'gait') box.append(section('Walk & run', GAIT_ROWS.map((r) => tableRow(HERO_MOVES.gait, r))));

@@ -198,7 +198,8 @@ function createWebSplatTexture() {
 // ---------------------------------------------------------------------------------------------------------------
 
 // (lean is not a joint of its own: its x is how far the pose tips his whole upper body forward from the hips, back
-// straight, his legs staying where they are. See leanFromHips)
+// straight, his legs staying where they are, and its y how far it turns the whole of him, legs and all, to his left.
+// See leanFromHips)
 const JOINTS = ['spine', 'neck', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'ftL', 'hipR', 'knR', 'ftR', 'lean'];
 const BONES = HERO_BONE_COUNT; // the city's 15 and his two shoulder helpers
 
@@ -3232,18 +3233,23 @@ function aimWebArms(ent, dt, pelvis) {
   }
   return true;
 }
-// A pose's lean from the hips: his pelvis and everything above it tipped forward about the hip joints, back straight,
+// A pose's turn of his whole body and its lean from the hips. The lean: his pelvis and everything above it tipped forward about the hip joints, back straight,
 // and his thighs turned back by as much, so his legs stay where the pose has them. (Bending him forward at the
 // spine instead folds him at the waist: a little of that reads as a hunch.) It's put on for the posing only, like
 // the aimed arms, and taken off again after (standFromHips)
 const _qBodyKeep = new THREE.Quaternion();
 const _qLean = new THREE.Quaternion();
 const _leanAxis = new THREE.Vector3(1, 0, 0);
+const _turnAxis = new THREE.Vector3(0, 1, 0);
 let _leanBy = 0;
 function leanFromHips(ent) {
   _leanBy = ent.pose.lean.x;
-  if (Math.abs(_leanBy) < 1e-4) return false;
+  const turn = ent.pose.lean.y;
+  if (Math.abs(_leanBy) < 1e-4 && Math.abs(turn) < 1e-4) return false;
   _qBodyKeep.copy(ent.bodyQuat);
+  // (the pose's turn of the whole of him about his own upright, to his left: where twisting the spine turns only his
+  // chest, this takes his hips and legs round too. First, so that he then leans the way he's turned)
+  ent.bodyQuat.multiply(_qLean.setFromAxisAngle(_turnAxis, turn));
   ent.bodyQuat.multiply(_qLean.setFromAxisAngle(_leanAxis, _leanBy));
   // (a thigh's first turn is this same one, about the line through his hips: so taking it off there is exact)
   ent.pose.hipL.x -= _leanBy;
